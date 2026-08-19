@@ -4,7 +4,7 @@ import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
 import { toast } from "sonner";
 import {
   LayoutDashboard, TrendingUp, Utensils, ShoppingBag, Store,
-  Sparkles, Loader2, Receipt, Percent,
+  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 
@@ -31,6 +31,7 @@ export default function Dashboard() {
     { key: "retail", icon: Store, cls: "ot-retail" },
   ];
   const chartData = data.top_products.map((p) => ({ name: p.name.length > 12 ? p.name.slice(0, 12) + "…" : p.name, total: p.total }));
+  const lowStock = data.low_stock || [];
 
   return (
     <div className="h-full overflow-y-auto p-8">
@@ -45,6 +46,12 @@ export default function Dashboard() {
         <Stat icon={Percent} label="Total Diskon" value={rupiah(data.total_discount)} />
         <Stat icon={Store} label="F&B vs Retail" value={`${rupiah(data.fnb_total)} / ${rupiah(data.retail_total)}`} small />
       </div>
+
+      {lowStock.length > 0 && (
+        <div data-testid="low-stock-banner" className="flex items-center gap-3 bg-[#FEF3C7] border border-[#F59E0B] text-[#B45309] rounded-xl px-4 py-3 mb-4 font-bold text-sm">
+          <AlertTriangle size={18} /> {lowStock.length} produk retail stoknya menipis (≤ {data.low_stock_threshold}). Segera restock.
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-4 mb-4">
         {typeCards.map((t) => (
@@ -99,6 +106,30 @@ export default function Dashboard() {
               </div>
             ))}
         </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border p-5 mt-4" data-testid="low-stock-panel">
+        <h3 className="font-extrabold mb-3 flex items-center gap-2">
+          <AlertTriangle size={18} className="text-[#B45309]" /> Stok Retail Menipis
+          <span className="text-xs font-bold text-[#52525B]">(ambang ≤ {data.low_stock_threshold})</span>
+        </h3>
+        {lowStock.length === 0 ? (
+          <p className="text-sm text-[#047857] font-bold">Semua stok retail aman.</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {lowStock.map((p) => (
+              <div key={p.sku} data-testid={`low-stock-${p.sku}`} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${p.stock <= 0 ? "bg-[#FEE2E2] border-[#EF4444]" : "bg-[#FEF9C3] border-[#F59E0B]"}`}>
+                <div className="overflow-hidden">
+                  <div className="font-bold text-sm truncate">{p.name}</div>
+                  <div className="font-num text-xs text-[#52525B]">{p.sku}</div>
+                </div>
+                <div className={`font-num font-extrabold flex items-center gap-1 ${p.stock <= 0 ? "text-[#EF4444]" : "text-[#B45309]"}`}>
+                  {p.stock <= 0 && <PackageX size={15} />}{p.stock}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -34,6 +34,21 @@ ORDER_TYPES = ["dine_in", "take_away", "retail"]
 def now_utc():
     return datetime.now(timezone.utc)
 
+WIB = timezone(timedelta(hours=7))
+LOW_STOCK_THRESHOLD = 10
+
+def wib_today():
+    return now_utc().astimezone(WIB).strftime("%Y-%m-%d")
+
+def wib_day_range(date_str):
+    """Given a WIB calendar date 'YYYY-MM-DD', return (start_utc_iso, end_utc_iso)."""
+    start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=WIB)
+    end = start + timedelta(days=1)
+    return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
+
+def wib_day_of(iso_str):
+    return datetime.fromisoformat(iso_str).astimezone(WIB).strftime("%Y-%m-%d")
+
 def new_id():
     return str(uuid.uuid4())
 
@@ -176,7 +191,7 @@ def compute_totals(items, discount_type, discount_value):
     return round(subtotal, 2), round(discount, 2), total
 
 async def gen_order_number():
-    today = now_utc().strftime("%Y%m%d")
+    today = wib_today().replace("-", "")
     count = await db.orders.count_documents({"order_number": {"$regex": f"^GAK-{today}"}})
     return f"GAK-{today}-{count + 1:04d}"
 
@@ -476,7 +491,8 @@ async def list_orders(status: Optional[str] = None, order_type: Optional[str] = 
     if order_type:
         q["order_type"] = order_type
     if date_str:
-        q["created_at"] = {"$gte": date_str + "T00:00:00", "$lte": date_str + "T23:59:59.999999+00:00"}
+        start, end = wib_day_range(date_str)
+        q["created_at"] = {"$gte": start, "$lt": end}
     return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 @api.get("/orders/{oid}")
@@ -591,8 +607,9 @@ async def list_shifts(admin: dict = Depends(require_admin)):
 @api.get("/reports/summary")
 async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
                          admin: dict = Depends(require_admin)):
-    d = date_str or now_utc().strftime("%Y-%m-%d")
-    q = {"status": "paid", "created_at": {"$gte": d + "T00:00:00", "$lte": d + "T23:59:59.999999+00:00"}}
+    d = date_str or wib_today()
+    start, end = wib_day_range(d)
+    q = {"status": "paid", "created_at": {"$gte": start, "$lt": end}}
     orders = await db.orders.find(q, {"_id": 0}).to_list(5000)
     by_type = {"dine_in": {"count": 0, "total": 0}, "take_away": {"count": 0, "total": 0}, "retail": {"count": 0, "total": 0}}
     by_pm = {}
@@ -612,18 +629,24 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
             ps["total"] += it["price"] * it["qty"]
     top = sorted([{"name": k, **v} for k, v in product_sales.items()], key=lambda x: x["total"], reverse=True)[:8]
     fnb_total = by_type["dine_in"]["total"] + by_type["take_away"]["total"]
+    low_stock = await db.products.find(
+        {"track_stock": True, "active": True, "stock": {"$lte": LOW_STOCK_THRESHOLD}},
+        {"_id": 0, "name": 1, "sku": 1, "stock": 1}
+    ).sort("stock", 1).to_list(100)
     return {"date": d, "total_sales": round(total, 2), "order_count": len(orders),
             "total_discount": round(total_discount, 2), "by_type": by_type, "by_payment": by_pm,
             "fnb_total": round(fnb_total, 2), "retail_total": round(by_type["retail"]["total"], 2),
-            "top_products": top}
+            "top_products": top, "low_stock": low_stock, "low_stock_threshold": LOW_STOCK_THRESHOLD}
 
 @api.get("/reports/range")
 async def report_range(start: str, end: str, admin: dict = Depends(require_admin)):
-    q = {"status": "paid", "created_at": {"$gte": start + "T00:00:00", "$lte": end + "T23:59:59.999999+00:00"}}
+    s_utc, _ = wib_day_range(start)
+    _, e_utc = wib_day_range(end)
+    q = {"status": "paid", "created_at": {"$gte": s_utc, "$lt": e_utc}}
     orders = await db.orders.find(q, {"_id": 0}).to_list(20000)
     daily = {}
     for o in orders:
-        day = o["created_at"][:10]
+        day = wib_day_of(o["created_at"])
         daily.setdefault(day, {"date": day, "total": 0, "count": 0})
         daily[day]["total"] += o["total"]
         daily[day]["count"] += 1

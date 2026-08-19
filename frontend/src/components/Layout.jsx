@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
-  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck,
+  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
 } from "lucide-react";
 
 const NAV = [
@@ -21,6 +21,16 @@ export default function Layout({ children }) {
   const nav = useNavigate();
   return (
     <div className="flex h-screen overflow-hidden bg-[#F4F5F7]">
+      <div className="rotate-guard" data-testid="rotate-guard">
+        <div className="h-16 w-16 rounded-2xl bg-[#E63946] grid place-items-center mb-5">
+          <RotateCw size={30} className="animate-pulse" />
+        </div>
+        <div className="font-heading font-extrabold text-2xl">Putar Perangkat</div>
+        <p className="text-white/60 mt-2 max-w-xs text-sm">
+          POS Grand Aceh dirancang untuk mode landscape. Putar tablet Anda ke posisi mendatar
+          untuk pengalaman kasir terbaik.
+        </p>
+      </div>
       <aside className="w-[240px] shrink-0 bg-[#0A0A0A] text-white flex flex-col">
         <div className="px-5 py-5 border-b border-white/10">
           <div className="flex items-center gap-2">
