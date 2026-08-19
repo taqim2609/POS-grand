@@ -1,0 +1,863 @@
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Query
+from fastapi.responses import StreamingResponse
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Optional, Literal
+from datetime import datetime, timezone, date, timedelta
+import logging, uuid, io, bcrypt, jwt
+
+# ------------------------------------------------------------------ DB
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
+
+JWT_SECRET = os.environ['JWT_SECRET']
+JWT_ALG = "HS256"
+EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+
+app = FastAPI(title="Grand Aceh Kuliner POS")
+api = APIRouter(prefix="/api")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("gak-pos")
+
+PRODUCT_TYPES = ["makanan", "minuman", "retail"]
+ORDER_TYPES = ["dine_in", "take_away", "retail"]
+
+def now_utc():
+    return datetime.now(timezone.utc)
+
+def new_id():
+    return str(uuid.uuid4())
+
+# ------------------------------------------------------------------ Security
+def hash_password(p: str) -> str:
+    return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(p: str, h: str) -> bool:
+    try:
+        return bcrypt.checkpw(p.encode(), h.encode())
+    except Exception:
+        return False
+
+def create_token(user: dict) -> str:
+    payload = {"sub": user["id"], "role": user["role"], "email": user["email"],
+               "exp": now_utc() + timedelta(hours=12), "type": "access"}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+async def get_current_user(request: Request) -> dict:
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
+    user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+    if not user or not user.get("active", True):
+        raise HTTPException(401, "User not found or inactive")
+    return user
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user["role"] != "admin":
+        raise HTTPException(403, "Admin access required")
+    return user
+
+# ------------------------------------------------------------------ Models
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: Literal["admin", "kasir"] = "kasir"
+
+class CategoryIn(BaseModel):
+    name: str
+    type: Literal["makanan", "minuman", "retail"]
+    sort_order: int = 0
+    active: bool = True
+
+class ProductIn(BaseModel):
+    name: str
+    sku: str
+    category_id: str
+    type: Literal["makanan", "minuman", "retail"]
+    price: float
+    description: Optional[str] = ""
+    image: Optional[str] = ""
+    active: bool = True
+    sold_out: bool = False
+    stock: Optional[int] = 0
+
+class TableIn(BaseModel):
+    name: str
+    area: str = "Umum"
+    capacity: int = 4
+    active: bool = True
+
+class PaymentMethodIn(BaseModel):
+    name: str
+    type: Literal["cash", "qris", "card"]
+    active: bool = True
+
+class OrderItem(BaseModel):
+    product_id: str
+    name: Optional[str] = ""
+    price: Optional[float] = 0
+    qty: int = Field(gt=0)
+    type: Optional[str] = ""
+
+class OrderIn(BaseModel):
+    order_type: Literal["dine_in", "take_away", "retail"]
+    table_id: Optional[str] = None
+    items: List[OrderItem]
+    discount_type: Literal["none", "percent", "amount"] = "none"
+    discount_value: float = Field(0, ge=0)
+    note: Optional[str] = ""
+    pay_now: bool = False
+    payment_method: Optional[str] = None
+
+class ItemsUpdate(BaseModel):
+    items: List[OrderItem]
+
+class PayIn(BaseModel):
+    payment_method: str
+    discount_type: Literal["none", "percent", "amount"] = "none"
+    discount_value: float = Field(0, ge=0)
+    amount_paid: Optional[float] = None
+
+class VoidIn(BaseModel):
+    reason: str
+    action: Literal["void", "refund"] = "void"
+
+class ShiftOpenIn(BaseModel):
+    opening_cash: float = 0
+
+class ShiftCloseIn(BaseModel):
+    closing_cash: float = 0
+
+class AIDescIn(BaseModel):
+    name: str
+    type: str
+    category: Optional[str] = ""
+    keywords: Optional[str] = ""
+
+class AIImageIn(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+class AISummaryIn(BaseModel):
+    date: Optional[str] = None
+
+# ------------------------------------------------------------------ helpers
+def compute_totals(items, discount_type, discount_value):
+    subtotal = sum(i["price"] * i["qty"] for i in items)
+    discount_value = max(0, discount_value)
+    if discount_type == "percent":
+        discount = round(subtotal * (min(discount_value, 100) / 100.0), 2)
+    elif discount_type == "amount":
+        discount = min(discount_value, subtotal)
+    else:
+        discount = 0
+    total = max(0, round(subtotal - discount, 2))
+    return round(subtotal, 2), round(discount, 2), total
+
+async def gen_order_number():
+    today = now_utc().strftime("%Y%m%d")
+    count = await db.orders.count_documents({"order_number": {"$regex": f"^GAK-{today}"}})
+    return f"GAK-{today}-{count + 1:04d}"
+
+# ================================================================== AUTH
+@api.post("/auth/login")
+async def login(body: LoginIn):
+    email = body.email.lower()
+    user = await db.users.find_one({"email": email})
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(401, "Email atau password salah")
+    if not user.get("active", True):
+        raise HTTPException(403, "Akun dinonaktifkan")
+    safe = {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"]}
+    return {"token": create_token(safe), "user": safe}
+
+@api.get("/auth/me")
+async def me(user: dict = Depends(get_current_user)):
+    return user
+
+@api.get("/users")
+async def list_users(admin: dict = Depends(require_admin)):
+    return await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", 1).to_list(500)
+
+@api.post("/users")
+async def create_user(body: UserCreate, admin: dict = Depends(require_admin)):
+    if await db.users.find_one({"email": body.email.lower()}):
+        raise HTTPException(400, "Email sudah dipakai")
+    doc = {"id": new_id(), "name": body.name, "email": body.email.lower(),
+           "password_hash": hash_password(body.password), "role": body.role,
+           "active": True, "created_at": now_utc().isoformat()}
+    await db.users.insert_one(doc)
+    return {"id": doc["id"], "name": doc["name"], "email": doc["email"], "role": doc["role"]}
+
+@api.patch("/users/{uid}/toggle")
+async def toggle_user(uid: str, admin: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": uid})
+    if not u:
+        raise HTTPException(404, "User tidak ditemukan")
+    await db.users.update_one({"id": uid}, {"$set": {"active": not u.get("active", True)}})
+    return {"active": not u.get("active", True)}
+
+# ================================================================== CATEGORIES
+@api.get("/categories")
+async def list_categories(include_inactive: bool = True, user: dict = Depends(get_current_user)):
+    q = {} if include_inactive else {"active": True}
+    return await db.categories.find(q, {"_id": 0}).sort("sort_order", 1).to_list(500)
+
+@api.post("/categories")
+async def create_category(body: CategoryIn, admin: dict = Depends(require_admin)):
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
+    await db.categories.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/categories/{cid}")
+async def update_category(cid: str, body: CategoryIn, admin: dict = Depends(require_admin)):
+    if not await db.categories.find_one({"id": cid}):
+        raise HTTPException(404, "Kategori tidak ditemukan")
+    await db.categories.update_one({"id": cid}, {"$set": body.model_dump()})
+    return await db.categories.find_one({"id": cid}, {"_id": 0})
+
+@api.delete("/categories/{cid}")
+async def delete_category(cid: str, admin: dict = Depends(require_admin)):
+    used = await db.products.count_documents({"category_id": cid})
+    if used:
+        # soft deactivate instead of hard delete
+        await db.categories.update_one({"id": cid}, {"$set": {"active": False}})
+        return {"soft_deleted": True, "reason": f"Kategori dipakai {used} produk, dinonaktifkan (tidak dihapus)."}
+    await db.categories.delete_one({"id": cid})
+    return {"deleted": True}
+
+# ================================================================== PRODUCTS
+@api.get("/products")
+async def list_products(type: Optional[str] = None, category_id: Optional[str] = None,
+                        active_only: bool = False, user: dict = Depends(get_current_user)):
+    q = {}
+    if type:
+        q["type"] = type
+    if category_id:
+        q["category_id"] = category_id
+    if active_only:
+        q["active"] = True
+    return await db.products.find(q, {"_id": 0}).sort("name", 1).to_list(2000)
+
+@api.post("/products")
+async def create_product(body: ProductIn, admin: dict = Depends(require_admin)):
+    if body.price < 0:
+        raise HTTPException(400, "Harga tidak boleh negatif")
+    if await db.products.find_one({"sku": body.sku}):
+        raise HTTPException(400, f"SKU '{body.sku}' sudah dipakai")
+    if not await db.categories.find_one({"id": body.category_id}):
+        raise HTTPException(400, "Kategori tidak valid")
+    doc = body.model_dump()
+    doc["track_stock"] = body.type == "retail"
+    doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
+    await db.products.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/products/{pid}")
+async def update_product(pid: str, body: ProductIn, admin: dict = Depends(require_admin)):
+    if body.price < 0:
+        raise HTTPException(400, "Harga tidak boleh negatif")
+    existing = await db.products.find_one({"id": pid})
+    if not existing:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    dup = await db.products.find_one({"sku": body.sku, "id": {"$ne": pid}})
+    if dup:
+        raise HTTPException(400, f"SKU '{body.sku}' sudah dipakai produk lain")
+    doc = body.model_dump()
+    doc["track_stock"] = body.type == "retail"
+    await db.products.update_one({"id": pid}, {"$set": doc})
+    return await db.products.find_one({"id": pid}, {"_id": 0})
+
+@api.patch("/products/{pid}/sold-out")
+async def toggle_sold_out(pid: str, user: dict = Depends(get_current_user)):
+    p = await db.products.find_one({"id": pid})
+    if not p:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    val = not p.get("sold_out", False)
+    await db.products.update_one({"id": pid}, {"$set": {"sold_out": val}})
+    return {"sold_out": val}
+
+@api.delete("/products/{pid}")
+async def delete_product(pid: str, admin: dict = Depends(require_admin)):
+    used = await db.orders.count_documents({"items.product_id": pid})
+    if used:
+        await db.products.update_one({"id": pid}, {"$set": {"active": False}})
+        return {"soft_deleted": True, "reason": "Produk pernah dipakai transaksi, dinonaktifkan."}
+    await db.products.delete_one({"id": pid})
+    return {"deleted": True}
+
+# ================================================================== TABLES
+@api.get("/tables")
+async def list_tables(user: dict = Depends(get_current_user)):
+    tables = await db.tables.find({"deleted": {"$ne": True}}, {"_id": 0}).sort("area", 1).to_list(500)
+    open_orders = await db.orders.find({"order_type": "dine_in", "status": "open"}, {"_id": 0, "table_id": 1, "id": 1, "total": 1}).to_list(1000)
+    open_map = {}
+    for o in open_orders:
+        open_map[o["table_id"]] = o
+    for t in tables:
+        oo = open_map.get(t["id"])
+        t["status"] = "open_bill" if oo else "empty"
+        t["open_order_id"] = oo["id"] if oo else None
+    return tables
+
+@api.post("/tables")
+async def create_table(body: TableIn, admin: dict = Depends(require_admin)):
+    if await db.tables.find_one({"name": body.name, "deleted": {"$ne": True}}):
+        raise HTTPException(400, f"Nama/kode meja '{body.name}' sudah ada")
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "deleted": False, "created_at": now_utc().isoformat()})
+    await db.tables.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/tables/{tid}")
+async def update_table(tid: str, body: TableIn, admin: dict = Depends(require_admin)):
+    t = await db.tables.find_one({"id": tid})
+    if not t:
+        raise HTTPException(404, "Meja tidak ditemukan")
+    dup = await db.tables.find_one({"name": body.name, "id": {"$ne": tid}, "deleted": {"$ne": True}})
+    if dup:
+        raise HTTPException(400, f"Nama/kode meja '{body.name}' sudah ada")
+    if t.get("active") and not body.active:
+        open_bill = await db.orders.find_one({"table_id": tid, "status": "open"})
+        if open_bill:
+            raise HTTPException(400, "Meja punya open bill aktif, tidak bisa dinonaktifkan")
+    await db.tables.update_one({"id": tid}, {"$set": body.model_dump()})
+    return await db.tables.find_one({"id": tid}, {"_id": 0})
+
+@api.delete("/tables/{tid}")
+async def delete_table(tid: str, admin: dict = Depends(require_admin)):
+    open_bill = await db.orders.find_one({"table_id": tid, "status": "open"})
+    if open_bill:
+        raise HTTPException(400, "Meja punya open bill aktif, tidak bisa dihapus")
+    used = await db.orders.count_documents({"table_id": tid})
+    if used:
+        await db.tables.update_one({"id": tid}, {"$set": {"active": False}})
+        return {"soft_deleted": True, "reason": "Meja pernah dipakai transaksi, dinonaktifkan (tidak dihapus)."}
+    await db.tables.update_one({"id": tid}, {"$set": {"deleted": True, "active": False}})
+    return {"deleted": True}
+
+# ================================================================== PAYMENT METHODS
+@api.get("/payment-methods")
+async def list_payment_methods(user: dict = Depends(get_current_user)):
+    return await db.payment_methods.find({}, {"_id": 0}).sort("name", 1).to_list(100)
+
+@api.post("/payment-methods")
+async def create_pm(body: PaymentMethodIn, admin: dict = Depends(require_admin)):
+    doc = body.model_dump()
+    doc.update({"id": new_id()})
+    await db.payment_methods.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.patch("/payment-methods/{pmid}/toggle")
+async def toggle_pm(pmid: str, admin: dict = Depends(require_admin)):
+    pm = await db.payment_methods.find_one({"id": pmid})
+    if not pm:
+        raise HTTPException(404, "Metode tidak ditemukan")
+    await db.payment_methods.update_one({"id": pmid}, {"$set": {"active": not pm.get("active", True)}})
+    return {"active": not pm.get("active", True)}
+
+# ================================================================== ORDERS
+async def _resolve_items(raw_items):
+    """Rebuild every line item from the products collection (server-authoritative)."""
+    resolved = []
+    for it in raw_items:
+        p = await db.products.find_one({"id": it.product_id}, {"_id": 0})
+        if not p:
+            raise HTTPException(400, f"Produk tidak ditemukan: {it.product_id}")
+        if not p.get("active", True):
+            raise HTTPException(400, f"Produk nonaktif tidak bisa dijual: {p['name']}")
+        if p.get("sold_out"):
+            raise HTTPException(400, f"Produk sold out: {p['name']}")
+        resolved.append({"product_id": p["id"], "name": p["name"], "price": p["price"],
+                         "qty": it.qty, "type": p["type"], "track_stock": p.get("track_stock", False)})
+    return resolved
+
+async def _validate_order_rules(order_type, table_id, items):
+    types = {i["type"] for i in items}
+    if order_type == "retail":
+        if any(t != "retail" for t in types):
+            raise HTTPException(400, "Alur retail hanya boleh berisi item retail")
+    else:  # dine_in / take_away
+        if "retail" in types:
+            raise HTTPException(400, "Item retail tidak boleh masuk alur F&B (dine-in/take away)")
+    if order_type == "dine_in":
+        if not table_id:
+            raise HTTPException(400, "Dine-in wajib memilih meja")
+        t = await db.tables.find_one({"id": table_id, "deleted": {"$ne": True}})
+        if not t or not t.get("active", True):
+            raise HTTPException(400, "Meja tidak valid atau nonaktif")
+    elif table_id:
+        raise HTTPException(400, "Take away/retail tidak boleh memakai meja")
+
+async def _current_shift(user):
+    return await db.shifts.find_one({"cashier_id": user["id"], "status": "open"}, {"_id": 0})
+
+async def _finalize_payment(order, payment_method, amount_paid, user):
+    pm = await db.payment_methods.find_one({"id": payment_method, "active": True})
+    if not pm:
+        raise HTTPException(400, "Metode pembayaran tidak valid/aktif")
+    paid = amount_paid if amount_paid is not None else order["total"]
+    if pm["type"] == "cash" and paid < order["total"]:
+        raise HTTPException(400, "Jumlah bayar kurang dari total")
+    shift = await _current_shift(user)
+    # validate & decrement retail stock atomically
+    for it in order["items"]:
+        if it.get("type") == "retail":
+            p = await db.products.find_one({"id": it["product_id"]}, {"_id": 0})
+            if p and p.get("track_stock") and p.get("stock", 0) < it["qty"]:
+                raise HTTPException(400, f"Stok '{it['name']}' tidak cukup (sisa {p.get('stock', 0)})")
+    for it in order["items"]:
+        if it.get("type") == "retail":
+            await db.products.update_one({"id": it["product_id"], "track_stock": True},
+                                         {"$inc": {"stock": -it["qty"]}})
+    upd = {"status": "paid", "payment_method_id": payment_method, "payment_method_name": pm["name"],
+           "payment_method_type": pm["type"], "amount_paid": paid,
+           "change": round(paid - order["total"], 2),
+           "paid_at": now_utc().isoformat(), "shift_id": shift["id"] if shift else None}
+    await db.orders.update_one({"id": order["id"]}, {"$set": upd})
+    return {**order, **upd}
+
+@api.post("/orders")
+async def create_order(body: OrderIn, user: dict = Depends(get_current_user)):
+    if not body.items:
+        raise HTTPException(400, "Keranjang kosong")
+    items = await _resolve_items(body.items)
+    await _validate_order_rules(body.order_type, body.table_id, items)
+    subtotal, discount, total = compute_totals(items, body.discount_type, body.discount_value)
+    doc = {
+        "id": new_id(), "order_number": await gen_order_number(),
+        "order_type": body.order_type, "table_id": body.table_id, "items": items,
+        "subtotal": subtotal, "discount_type": body.discount_type, "discount_value": body.discount_value,
+        "discount": discount, "total": total, "note": body.note,
+        "status": "open", "cashier_id": user["id"], "cashier_name": user["name"],
+        "created_at": now_utc().isoformat(),
+    }
+    await db.orders.insert_one(doc)
+    doc.pop("_id", None)
+    if body.pay_now:
+        if not body.payment_method:
+            raise HTTPException(400, "Pilih metode pembayaran")
+        doc = await _finalize_payment(doc, body.payment_method, total, user)
+    return doc
+
+@api.get("/orders")
+async def list_orders(status: Optional[str] = None, order_type: Optional[str] = None,
+                      date_str: Optional[str] = Query(None, alias="date"),
+                      user: dict = Depends(get_current_user)):
+    q = {}
+    if status:
+        q["status"] = status
+    if order_type:
+        q["order_type"] = order_type
+    if date_str:
+        q["created_at"] = {"$gte": date_str + "T00:00:00", "$lte": date_str + "T23:59:59.999999+00:00"}
+    return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+@api.get("/orders/{oid}")
+async def get_order(oid: str, user: dict = Depends(get_current_user)):
+    o = await db.orders.find_one({"id": oid}, {"_id": 0})
+    if not o:
+        raise HTTPException(404, "Order tidak ditemukan")
+    return o
+
+@api.patch("/orders/{oid}/items")
+async def update_order_items(oid: str, body: ItemsUpdate, user: dict = Depends(get_current_user)):
+    o = await db.orders.find_one({"id": oid})
+    if not o:
+        raise HTTPException(404, "Order tidak ditemukan")
+    if o["status"] != "open":
+        raise HTTPException(400, "Hanya open bill yang bisa ditambah item")
+    items = await _resolve_items(body.items)
+    await _validate_order_rules(o["order_type"], o.get("table_id"), items)
+    subtotal, discount, total = compute_totals(items, o["discount_type"], o["discount_value"])
+    await db.orders.update_one({"id": oid}, {"$set": {"items": items, "subtotal": subtotal,
+                                                       "discount": discount, "total": total}})
+    return await db.orders.find_one({"id": oid}, {"_id": 0})
+
+@api.post("/orders/{oid}/pay")
+async def pay_order(oid: str, body: PayIn, user: dict = Depends(get_current_user)):
+    o = await db.orders.find_one({"id": oid}, {"_id": 0})
+    if not o:
+        raise HTTPException(404, "Order tidak ditemukan")
+    if o["status"] != "open":
+        raise HTTPException(400, "Order sudah lunas / tidak bisa dibayar")
+    subtotal, discount, total = compute_totals(o["items"], body.discount_type, body.discount_value)
+    await db.orders.update_one({"id": oid}, {"$set": {"discount_type": body.discount_type,
+                                                      "discount_value": body.discount_value,
+                                                      "discount": discount, "total": total, "subtotal": subtotal}})
+    o.update({"discount": discount, "total": total, "subtotal": subtotal})
+    return await _finalize_payment(o, body.payment_method, body.amount_paid, user)
+
+@api.post("/orders/{oid}/void")
+async def void_order(oid: str, body: VoidIn, admin: dict = Depends(require_admin)):
+    o = await db.orders.find_one({"id": oid})
+    if not o:
+        raise HTTPException(404, "Order tidak ditemukan")
+    if o["status"] in ("void", "refunded"):
+        raise HTTPException(400, "Order sudah dibatalkan/refund")
+    new_status = "refunded" if body.action == "refund" else "void"
+    # restore retail stock if it was paid
+    if o["status"] == "paid":
+        for it in o["items"]:
+            if it["type"] == "retail":
+                await db.products.update_one({"id": it["product_id"], "track_stock": True},
+                                             {"$inc": {"stock": it["qty"]}})
+    audit = {"id": new_id(), "order_id": oid, "order_number": o["order_number"],
+             "action": body.action, "reason": body.reason, "prev_status": o["status"],
+             "by": admin["name"], "by_id": admin["id"], "amount": o["total"],
+             "at": now_utc().isoformat()}
+    await db.audit_logs.insert_one(audit)
+    await db.orders.update_one({"id": oid}, {"$set": {"status": new_status,
+                                                      "voided_at": now_utc().isoformat(),
+                                                      "void_reason": body.reason, "voided_by": admin["name"]}})
+    audit.pop("_id", None)
+    return {"status": new_status, "audit": audit}
+
+@api.get("/audit-logs")
+async def audit_logs(admin: dict = Depends(require_admin)):
+    return await db.audit_logs.find({}, {"_id": 0}).sort("at", -1).to_list(500)
+
+# ================================================================== SHIFTS
+@api.get("/shifts/current")
+async def current_shift(user: dict = Depends(get_current_user)):
+    return await _current_shift(user)
+
+@api.post("/shifts/open")
+async def open_shift(body: ShiftOpenIn, user: dict = Depends(get_current_user)):
+    if await _current_shift(user):
+        raise HTTPException(400, "Sudah ada shift terbuka")
+    doc = {"id": new_id(), "cashier_id": user["id"], "cashier_name": user["name"],
+           "opening_cash": body.opening_cash, "status": "open",
+           "opened_at": now_utc().isoformat(), "closed_at": None}
+    await db.shifts.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.post("/shifts/close")
+async def close_shift(body: ShiftCloseIn, user: dict = Depends(get_current_user)):
+    shift = await _current_shift(user)
+    if not shift:
+        raise HTTPException(400, "Tidak ada shift terbuka")
+    report = await _shift_report(shift)
+    await db.shifts.update_one({"id": shift["id"]}, {"$set": {
+        "status": "closed", "closed_at": now_utc().isoformat(),
+        "closing_cash": body.closing_cash, "report": report}})
+    return {**shift, "closing_cash": body.closing_cash, "report": report, "status": "closed"}
+
+async def _shift_report(shift):
+    orders = await db.orders.find({"shift_id": shift["id"], "status": "paid"}, {"_id": 0}).to_list(5000)
+    by_type = {"dine_in": 0, "take_away": 0, "retail": 0}
+    by_pm = {}
+    total = 0
+    for o in orders:
+        by_type[o["order_type"]] = by_type.get(o["order_type"], 0) + o["total"]
+        by_pm[o.get("payment_method_name", "?")] = by_pm.get(o.get("payment_method_name", "?"), 0) + o["total"]
+        total += o["total"]
+    cash = sum(o["total"] for o in orders if o.get("payment_method_type") == "cash")
+    return {"order_count": len(orders), "total_sales": round(total, 2), "by_type": by_type,
+            "by_payment": by_pm, "expected_cash": round(shift["opening_cash"] + cash, 2)}
+
+@api.get("/shifts")
+async def list_shifts(admin: dict = Depends(require_admin)):
+    return await db.shifts.find({}, {"_id": 0}).sort("opened_at", -1).to_list(200)
+
+# ================================================================== REPORTS
+@api.get("/reports/summary")
+async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
+                         admin: dict = Depends(require_admin)):
+    d = date_str or now_utc().strftime("%Y-%m-%d")
+    q = {"status": "paid", "created_at": {"$gte": d + "T00:00:00", "$lte": d + "T23:59:59.999999+00:00"}}
+    orders = await db.orders.find(q, {"_id": 0}).to_list(5000)
+    by_type = {"dine_in": {"count": 0, "total": 0}, "take_away": {"count": 0, "total": 0}, "retail": {"count": 0, "total": 0}}
+    by_pm = {}
+    product_sales = {}
+    total = 0
+    total_discount = 0
+    for o in orders:
+        bt = by_type[o["order_type"]]
+        bt["count"] += 1
+        bt["total"] += o["total"]
+        total += o["total"]
+        total_discount += o.get("discount", 0)
+        by_pm[o.get("payment_method_name", "?")] = by_pm.get(o.get("payment_method_name", "?"), 0) + o["total"]
+        for it in o["items"]:
+            ps = product_sales.setdefault(it["name"], {"qty": 0, "total": 0})
+            ps["qty"] += it["qty"]
+            ps["total"] += it["price"] * it["qty"]
+    top = sorted([{"name": k, **v} for k, v in product_sales.items()], key=lambda x: x["total"], reverse=True)[:8]
+    fnb_total = by_type["dine_in"]["total"] + by_type["take_away"]["total"]
+    return {"date": d, "total_sales": round(total, 2), "order_count": len(orders),
+            "total_discount": round(total_discount, 2), "by_type": by_type, "by_payment": by_pm,
+            "fnb_total": round(fnb_total, 2), "retail_total": round(by_type["retail"]["total"], 2),
+            "top_products": top}
+
+@api.get("/reports/range")
+async def report_range(start: str, end: str, admin: dict = Depends(require_admin)):
+    q = {"status": "paid", "created_at": {"$gte": start + "T00:00:00", "$lte": end + "T23:59:59.999999+00:00"}}
+    orders = await db.orders.find(q, {"_id": 0}).to_list(20000)
+    daily = {}
+    for o in orders:
+        day = o["created_at"][:10]
+        daily.setdefault(day, {"date": day, "total": 0, "count": 0})
+        daily[day]["total"] += o["total"]
+        daily[day]["count"] += 1
+    return {"daily": sorted(daily.values(), key=lambda x: x["date"])}
+
+# ================================================================== AI
+def _get_chat(session, system, model):
+    from emergentintegrations.llm.chat import LlmChat
+    return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
+
+@api.post("/ai/product-description")
+async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):
+    from emergentintegrations.llm.chat import UserMessage
+    try:
+        chat = _get_chat(new_id(),
+                         "Anda copywriter menu F&B & retail Indonesia. Tulis deskripsi produk singkat, menggugah selera, maksimal 2 kalimat, bahasa Indonesia. Jangan pakai emoji.",
+                         "gemini-2.5-flash")
+        prompt = f"Produk: {body.name}\nTipe: {body.type}\nKategori: {body.category}\nKata kunci: {body.keywords}\nTulis deskripsi produk."
+        text = await chat.send_message(UserMessage(text=prompt))
+        return {"description": text.strip()}
+    except Exception as e:
+        logger.error(f"AI desc error: {e}")
+        raise HTTPException(500, f"AI gagal: {e}")
+
+@api.post("/ai/product-image")
+async def ai_image(body: AIImageIn, admin: dict = Depends(require_admin)):
+    from emergentintegrations.llm.chat import UserMessage
+    try:
+        chat = _get_chat(new_id(), "You are a professional food & product photographer.",
+                         "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+        prompt = f"Professional appetizing product photo of '{body.name}'. {body.description}. Clean studio background, top menu photography, high detail, no text overlay."
+        text, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
+        if not images:
+            raise HTTPException(500, "Tidak ada gambar dihasilkan")
+        img = images[0]
+        return {"image": f"data:{img['mime_type']};base64,{img['data']}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI image error: {e}")
+        raise HTTPException(500, f"AI gambar gagal: {e}")
+
+@api.post("/reports/ai-summary")
+async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
+    from emergentintegrations.llm.chat import UserMessage
+    d = body.date or now_utc().strftime("%Y-%m-%d")
+    summary = await report_summary(date_str=d, admin=admin)
+    try:
+        chat = _get_chat(new_id(),
+                         "Anda analis bisnis F&B. Beri ringkasan penjualan harian yang tegas dan actionable dalam bahasa Indonesia. Format: 3-4 poin insight + 1 rekomendasi. Tanpa emoji.",
+                         "gemini-2.5-flash")
+        prompt = (f"Data penjualan {d}:\n"
+                  f"Total: Rp{summary['total_sales']:,.0f}, {summary['order_count']} order.\n"
+                  f"Dine-in: Rp{summary['by_type']['dine_in']['total']:,.0f} ({summary['by_type']['dine_in']['count']} order)\n"
+                  f"Take away: Rp{summary['by_type']['take_away']['total']:,.0f} ({summary['by_type']['take_away']['count']} order)\n"
+                  f"Retail: Rp{summary['by_type']['retail']['total']:,.0f} ({summary['by_type']['retail']['count']} order)\n"
+                  f"Total diskon: Rp{summary['total_discount']:,.0f}\n"
+                  f"Produk terlaris: {', '.join(p['name'] for p in summary['top_products'][:5])}\n"
+                  f"Buat ringkasan analitik.")
+        text = await chat.send_message(UserMessage(text=prompt))
+        return {"date": d, "summary": text.strip(), "data": summary}
+    except Exception as e:
+        logger.error(f"AI summary error: {e}")
+        raise HTTPException(500, f"AI ringkasan gagal: {e}")
+
+# ================================================================== EXCEL
+IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "status_aktif", "sold_out", "deskripsi", "stok_awal"]
+
+@api.get("/products/template")
+async def download_template(user: dict = Depends(get_current_user)):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Produk"
+    ws.append(IMPORT_COLUMNS)
+    ws.append(["Nasi Goreng Aceh", "FD-001", "Makanan Utama", "makanan", 25000, "aktif", "tidak", "Nasi goreng khas Aceh", 0])
+    ws.append(["Kopi Sanger", "DR-001", "Minuman", "minuman", 15000, "aktif", "tidak", "Kopi susu khas Aceh", 0])
+    ws.append(["Keripik Pisang", "RT-001", "Snack Retail", "retail", 12000, "aktif", "tidak", "Keripik pisang kemasan", 50])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=template_produk_gak.xlsx"})
+
+@api.get("/products/export")
+async def export_products(admin: dict = Depends(require_admin)):
+    import openpyxl
+    cats = {c["id"]: c["name"] for c in await db.categories.find({}, {"_id": 0}).to_list(500)}
+    products = await db.products.find({}, {"_id": 0}).sort("name", 1).to_list(5000)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Produk"
+    ws.append(IMPORT_COLUMNS)
+    for p in products:
+        ws.append([p["name"], p["sku"], cats.get(p["category_id"], ""), p["type"], p["price"],
+                   "aktif" if p.get("active") else "nonaktif", "ya" if p.get("sold_out") else "tidak",
+                   p.get("description", ""), p.get("stock", 0)])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=produk_gak.xlsx"})
+
+async def _parse_import(file_bytes):
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return [], ["File kosong"]
+    header = [str(h).strip().lower() if h else "" for h in rows[0]]
+    cats = {c["name"].strip().lower(): c for c in await db.categories.find({}, {"_id": 0}).to_list(500)}
+    existing_skus = {p["sku"] for p in await db.products.find({}, {"_id": 0, "sku": 1}).to_list(5000)}
+    parsed = []
+    seen_skus = set()
+    for idx, raw in enumerate(rows[1:], start=2):
+        row = {header[i]: raw[i] if i < len(raw) else None for i in range(len(header))}
+        errors = []
+        name = str(row.get("nama_produk") or "").strip()
+        sku = str(row.get("sku") or "").strip()
+        cat_name = str(row.get("kategori") or "").strip()
+        ptype = str(row.get("tipe_produk") or "").strip().lower()
+        if not name:
+            errors.append("nama produk kosong")
+        if not sku:
+            errors.append("SKU kosong")
+        elif sku in seen_skus:
+            errors.append(f"SKU '{sku}' duplikat di file")
+        seen_skus.add(sku)
+        cat = cats.get(cat_name.lower())
+        if not cat:
+            errors.append(f"kategori '{cat_name}' tidak valid")
+        if ptype not in PRODUCT_TYPES:
+            errors.append(f"tipe '{ptype}' tidak valid (makanan/minuman/retail)")
+        elif cat and cat["type"] != ptype:
+            errors.append(f"tipe produk '{ptype}' tidak sesuai tipe kategori '{cat['type']}'")
+        try:
+            price = float(row.get("harga") or 0)
+            if price < 0:
+                errors.append("harga negatif")
+        except (ValueError, TypeError):
+            price = 0
+            errors.append("harga bukan angka")
+        try:
+            stock = int(float(row.get("stok_awal") or 0))
+        except (ValueError, TypeError):
+            stock = 0
+        active = str(row.get("status_aktif") or "aktif").strip().lower() in ("aktif", "aktif ", "ya", "true", "1", "active")
+        sold_out = str(row.get("sold_out") or "tidak").strip().lower() in ("ya", "true", "1", "sold out", "soldout")
+        parsed.append({
+            "row": idx, "name": name, "sku": sku, "category_id": cat["id"] if cat else None,
+            "category_name": cat_name, "type": ptype, "price": price, "stock": stock,
+            "description": str(row.get("deskripsi") or ""), "active": active, "sold_out": sold_out,
+            "exists": sku in existing_skus, "errors": errors, "valid": len(errors) == 0,
+        })
+    return parsed, []
+
+@api.post("/products/import/preview")
+async def import_preview(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    content = await file.read()
+    parsed, file_errors = await _parse_import(content)
+    if file_errors:
+        raise HTTPException(400, file_errors[0])
+    valid = [p for p in parsed if p["valid"]]
+    return {"rows": parsed, "total": len(parsed), "valid_count": len(valid),
+            "error_count": len(parsed) - len(valid),
+            "new_count": len([p for p in valid if not p["exists"]]),
+            "update_count": len([p for p in valid if p["exists"]])}
+
+@api.post("/products/import/commit")
+async def import_commit(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    content = await file.read()
+    parsed, file_errors = await _parse_import(content)
+    if file_errors:
+        raise HTTPException(400, file_errors[0])
+    created = updated = 0
+    for p in parsed:
+        if not p["valid"]:
+            continue
+        doc = {"name": p["name"], "sku": p["sku"], "category_id": p["category_id"], "type": p["type"],
+               "price": p["price"], "description": p["description"], "active": p["active"],
+               "sold_out": p["sold_out"], "stock": p["stock"], "track_stock": p["type"] == "retail",
+               "image": ""}
+        if p["exists"]:
+            await db.products.update_one({"sku": p["sku"]}, {"$set": doc})
+            updated += 1
+        else:
+            doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
+            await db.products.insert_one(doc)
+            created += 1
+    log = {"id": new_id(), "filename": file.filename, "at": now_utc().isoformat(), "by": admin["name"],
+           "created": created, "updated": updated, "errors": len([p for p in parsed if not p["valid"]])}
+    await db.import_logs.insert_one(log)
+    log.pop("_id", None)
+    return log
+
+@api.get("/import-logs")
+async def import_logs(admin: dict = Depends(require_admin)):
+    return await db.import_logs.find({}, {"_id": 0}).sort("at", -1).to_list(100)
+
+# ------------------------------------------------------------------ startup
+@app.on_event("startup")
+async def startup():
+    await db.users.create_index("email", unique=True)
+    await db.products.create_index("sku", unique=True)
+    admin_email = os.environ["ADMIN_EMAIL"].lower()
+    admin_pw = os.environ["ADMIN_PASSWORD"]
+    existing = await db.users.find_one({"email": admin_email})
+    if not existing:
+        await db.users.insert_one({"id": new_id(), "name": os.environ.get("ADMIN_NAME", "Admin"),
+                                   "email": admin_email, "password_hash": hash_password(admin_pw),
+                                   "role": "admin", "active": True, "created_at": now_utc().isoformat()})
+    elif not verify_password(admin_pw, existing["password_hash"]):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pw)}})
+    # seed a cashier
+    if not await db.users.find_one({"email": "kasir@grandaceh.com"}):
+        await db.users.insert_one({"id": new_id(), "name": "Kasir Satu", "email": "kasir@grandaceh.com",
+                                   "password_hash": hash_password("kasir123"), "role": "kasir",
+                                   "active": True, "created_at": now_utc().isoformat()})
+    # seed payment methods
+    if await db.payment_methods.count_documents({}) == 0:
+        for n, t in [("Cash", "cash"), ("QRIS", "qris"), ("Kartu Debit/Kredit", "card")]:
+            await db.payment_methods.insert_one({"id": new_id(), "name": n, "type": t, "active": True})
+    logger.info("Startup seeding complete")
+
+@app.on_event("shutdown")
+async def shutdown():
+    client.close()
+
+app.include_router(api)
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=False,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
