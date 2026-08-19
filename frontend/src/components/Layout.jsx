@@ -1,20 +1,46 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useOffline } from "@/context/OfflineContext";
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff,
 } from "lucide-react";
 
 const NAV = [
   { to: "/pos", label: "POS Kasir", icon: ShoppingCart, roles: ["admin", "kasir"] },
+  { to: "/cash", label: "Kas", icon: Wallet, roles: ["admin", "kasir"] },
   { to: "/shift", label: "Shift", icon: Clock, roles: ["admin", "kasir"] },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin"] },
   { to: "/products", label: "Produk", icon: Package, roles: ["admin"] },
+  { to: "/inventory", label: "Persediaan", icon: Boxes, roles: ["admin"] },
   { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin"] },
   { to: "/tables", label: "Meja", icon: Armchair, roles: ["admin"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
 ];
+
+function OfflineStatus() {
+  const { online, pendingCount, syncing, syncNow } = useOffline();
+  return (
+    <div data-testid="offline-status" className={`px-3 py-2.5 border-b border-white/10 ${online ? "" : "bg-[#EF4444]/20"}`}>
+      <div className="flex items-center gap-2 text-sm font-bold">
+        {online ? <Wifi size={16} className="text-[#22C55E]" /> : <WifiOff size={16} className="text-[#EF4444]" />}
+        <span className={online ? "text-[#22C55E]" : "text-[#EF4444]"}>{online ? "Online" : "Offline"}</span>
+      </div>
+      {pendingCount > 0 && (
+        <div className="mt-2 flex items-center justify-between gap-2 bg-[#F59E0B]/20 rounded-lg px-2 py-1.5" data-testid="pending-sync">
+          <span className="text-[11px] font-bold text-[#FBBF24] flex items-center gap-1"><CloudOff size={13} /> {pendingCount} belum sinkron</span>
+          {online && (
+            <button data-testid="sync-now-btn" onClick={syncNow} disabled={syncing} className="tap text-[11px] font-bold bg-white/15 hover:bg-white/25 rounded px-2 py-1 flex items-center gap-1">
+              <RefreshCw size={11} className={syncing ? "animate-spin" : ""} /> Sinkron
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -41,6 +67,7 @@ export default function Layout({ children }) {
             </div>
           </div>
         </div>
+        <OfflineStatus />
         <nav className="flex-1 overflow-y-auto no-scrollbar py-3 px-3 space-y-1">
           {NAV.filter((n) => n.roles.includes(user?.role)).map((n) => (
             <NavLink

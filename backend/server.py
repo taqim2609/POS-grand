@@ -111,6 +111,7 @@ class ProductIn(BaseModel):
     category_id: str
     type: Literal["makanan", "minuman", "retail"]
     price: float
+    cost: float = 0
     description: Optional[str] = ""
     image: Optional[str] = ""
     active: bool = True
@@ -279,8 +280,8 @@ async def list_products(type: Optional[str] = None, category_id: Optional[str] =
 
 @api.post("/products")
 async def create_product(body: ProductIn, admin: dict = Depends(require_admin)):
-    if body.price < 0:
-        raise HTTPException(400, "Harga tidak boleh negatif")
+    if body.price < 0 or body.cost < 0:
+        raise HTTPException(400, "Harga/HPP tidak boleh negatif")
     if await db.products.find_one({"sku": body.sku}):
         raise HTTPException(400, f"SKU '{body.sku}' sudah dipakai")
     if not await db.categories.find_one({"id": body.category_id}):
@@ -294,16 +295,17 @@ async def create_product(body: ProductIn, admin: dict = Depends(require_admin)):
 
 @api.put("/products/{pid}")
 async def update_product(pid: str, body: ProductIn, admin: dict = Depends(require_admin)):
-    if body.price < 0:
-        raise HTTPException(400, "Harga tidak boleh negatif")
+    if body.price < 0 or body.cost < 0:
+        raise HTTPException(400, "Harga/HPP tidak boleh negatif")
     existing = await db.products.find_one({"id": pid})
     if not existing:
         raise HTTPException(404, "Produk tidak ditemukan")
     dup = await db.products.find_one({"sku": body.sku, "id": {"$ne": pid}})
     if dup:
         raise HTTPException(400, f"SKU '{body.sku}' sudah dipakai produk lain")
-    doc = body.model_dump()
-    doc["track_stock"] = body.type == "retail"
+    doc = body.model_dump(exclude_unset=True)
+    if "type" in doc:
+        doc["track_stock"] = doc["type"] == "retail"
     await db.products.update_one({"id": pid}, {"$set": doc})
     return await db.products.find_one({"id": pid}, {"_id": 0})
 
@@ -410,6 +412,7 @@ async def _resolve_items(raw_items):
         if p.get("sold_out"):
             raise HTTPException(400, f"Produk sold out: {p['name']}")
         resolved.append({"product_id": p["id"], "name": p["name"], "price": p["price"],
+                         "cost": p.get("cost", 0),
                          "qty": it.qty, "type": p["type"], "track_stock": p.get("track_stock", False)})
     return resolved
 
@@ -616,6 +619,7 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
     product_sales = {}
     total = 0
     total_discount = 0
+    total_cost = 0
     for o in orders:
         bt = by_type[o["order_type"]]
         bt["count"] += 1
@@ -627,16 +631,22 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
             ps = product_sales.setdefault(it["name"], {"qty": 0, "total": 0})
             ps["qty"] += it["qty"]
             ps["total"] += it["price"] * it["qty"]
+            total_cost += it.get("cost", 0) * it["qty"]
     top = sorted([{"name": k, **v} for k, v in product_sales.items()], key=lambda x: x["total"], reverse=True)[:8]
     fnb_total = by_type["dine_in"]["total"] + by_type["take_away"]["total"]
     low_stock = await db.products.find(
         {"track_stock": True, "active": True, "stock": {"$lte": LOW_STOCK_THRESHOLD}},
         {"_id": 0, "name": 1, "sku": 1, "stock": 1}
     ).sort("stock", 1).to_list(100)
+    cash_moves = await db.cash_movements.find({"created_at": {"$gte": start, "$lt": end}}, {"_id": 0}).to_list(2000)
+    cash_in = sum(m["amount"] for m in cash_moves if m["type"] == "in")
+    cash_out = sum(m["amount"] for m in cash_moves if m["type"] == "out")
     return {"date": d, "total_sales": round(total, 2), "order_count": len(orders),
             "total_discount": round(total_discount, 2), "by_type": by_type, "by_payment": by_pm,
             "fnb_total": round(fnb_total, 2), "retail_total": round(by_type["retail"]["total"], 2),
-            "top_products": top, "low_stock": low_stock, "low_stock_threshold": LOW_STOCK_THRESHOLD}
+            "top_products": top, "low_stock": low_stock, "low_stock_threshold": LOW_STOCK_THRESHOLD,
+            "total_cost": round(total_cost, 2), "gross_profit": round(total - total_cost, 2),
+            "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2), "cash_net": round(cash_in - cash_out, 2)}
 
 @api.get("/reports/range")
 async def report_range(start: str, end: str, admin: dict = Depends(require_admin)):
@@ -651,6 +661,94 @@ async def report_range(start: str, end: str, admin: dict = Depends(require_admin
         daily[day]["total"] += o["total"]
         daily[day]["count"] += 1
     return {"daily": sorted(daily.values(), key=lambda x: x["date"])}
+
+# ================================================================== INVENTORY (Retail)
+class PurchaseIn(BaseModel):
+    product_id: str
+    qty: int = Field(gt=0)
+    unit_cost: float = Field(ge=0)
+    note: Optional[str] = ""
+
+@api.post("/purchases")
+async def create_purchase(body: PurchaseIn, admin: dict = Depends(require_admin)):
+    p = await db.products.find_one({"id": body.product_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    if not p.get("track_stock"):
+        raise HTTPException(400, "Pembelian stok hanya untuk produk retail")
+    await db.products.update_one({"id": body.product_id},
+                                 {"$inc": {"stock": body.qty}, "$set": {"cost": body.unit_cost}})
+    doc = {"id": new_id(), "product_id": p["id"], "product_name": p["name"], "sku": p["sku"],
+           "qty": body.qty, "unit_cost": body.unit_cost, "total_cost": round(body.qty * body.unit_cost, 2),
+           "note": body.note, "by": admin["name"], "created_at": now_utc().isoformat()}
+    await db.purchases.insert_one(doc)
+    doc.pop("_id", None)
+    return {**doc, "new_stock": p.get("stock", 0) + body.qty}
+
+@api.get("/purchases")
+async def list_purchases(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(require_admin)):
+    q = {}
+    if date_str:
+        s, e = wib_day_range(date_str)
+        q["created_at"] = {"$gte": s, "$lt": e}
+    return await db.purchases.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+class OpnameIn(BaseModel):
+    product_id: str
+    counted_stock: int = Field(ge=0)
+    note: Optional[str] = ""
+
+@api.post("/stock-opname")
+async def create_opname(body: OpnameIn, admin: dict = Depends(require_admin)):
+    p = await db.products.find_one({"id": body.product_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    if not p.get("track_stock"):
+        raise HTTPException(400, "Stok opname hanya untuk produk retail")
+    system_stock = p.get("stock", 0)
+    diff = body.counted_stock - system_stock
+    await db.products.update_one({"id": body.product_id}, {"$set": {"stock": body.counted_stock}})
+    doc = {"id": new_id(), "product_id": p["id"], "product_name": p["name"], "sku": p["sku"],
+           "system_stock": system_stock, "counted_stock": body.counted_stock, "difference": diff,
+           "note": body.note, "by": admin["name"], "created_at": now_utc().isoformat()}
+    await db.stock_opname.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.get("/stock-opname")
+async def list_opname(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(require_admin)):
+    q = {}
+    if date_str:
+        s, e = wib_day_range(date_str)
+        q["created_at"] = {"$gte": s, "$lt": e}
+    return await db.stock_opname.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+# ================================================================== CASH MOVEMENTS
+class CashIn(BaseModel):
+    type: Literal["in", "out"]
+    amount: float = Field(gt=0)
+    category: str = "Lainnya"
+    note: Optional[str] = ""
+
+@api.post("/cash")
+async def create_cash(body: CashIn, user: dict = Depends(get_current_user)):
+    shift = await _current_shift(user)
+    doc = {"id": new_id(), "type": body.type, "amount": body.amount, "category": body.category,
+           "note": body.note, "cashier_id": user["id"], "cashier_name": user["name"],
+           "shift_id": shift["id"] if shift else None, "created_at": now_utc().isoformat()}
+    await db.cash_movements.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.get("/cash")
+async def list_cash(date_str: Optional[str] = Query(None, alias="date"), user: dict = Depends(get_current_user)):
+    d = date_str or wib_today()
+    s, e = wib_day_range(d)
+    moves = await db.cash_movements.find({"created_at": {"$gte": s, "$lt": e}}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    cin = sum(m["amount"] for m in moves if m["type"] == "in")
+    cout = sum(m["amount"] for m in moves if m["type"] == "out")
+    return {"date": d, "movements": moves, "cash_in": round(cin, 2), "cash_out": round(cout, 2),
+            "cash_net": round(cin - cout, 2)}
 
 # ================================================================== AI
 def _get_chat(session, system, model):
@@ -713,7 +811,7 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
         raise HTTPException(500, f"AI ringkasan gagal: {e}")
 
 # ================================================================== EXCEL
-IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "status_aktif", "sold_out", "deskripsi", "stok_awal"]
+IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "harga_beli", "status_aktif", "sold_out", "deskripsi", "stok_awal"]
 
 @api.get("/products/template")
 async def download_template(user: dict = Depends(get_current_user)):
@@ -722,9 +820,9 @@ async def download_template(user: dict = Depends(get_current_user)):
     ws = wb.active
     ws.title = "Produk"
     ws.append(IMPORT_COLUMNS)
-    ws.append(["Nasi Goreng Aceh", "FD-001", "Makanan Utama", "makanan", 25000, "aktif", "tidak", "Nasi goreng khas Aceh", 0])
-    ws.append(["Kopi Sanger", "DR-001", "Minuman", "minuman", 15000, "aktif", "tidak", "Kopi susu khas Aceh", 0])
-    ws.append(["Keripik Pisang", "RT-001", "Snack Retail", "retail", 12000, "aktif", "tidak", "Keripik pisang kemasan", 50])
+    ws.append(["Nasi Goreng Aceh", "FD-001", "Makanan Utama", "makanan", 25000, 12000, "aktif", "tidak", "Nasi goreng khas Aceh", 0])
+    ws.append(["Kopi Sanger", "DR-001", "Minuman", "minuman", 15000, 6000, "aktif", "tidak", "Kopi susu khas Aceh", 0])
+    ws.append(["Keripik Pisang", "RT-001", "Snack Retail", "retail", 12000, 8000, "aktif", "tidak", "Keripik pisang kemasan", 50])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -741,7 +839,7 @@ async def export_products(admin: dict = Depends(require_admin)):
     ws.title = "Produk"
     ws.append(IMPORT_COLUMNS)
     for p in products:
-        ws.append([p["name"], p["sku"], cats.get(p["category_id"], ""), p["type"], p["price"],
+        ws.append([p["name"], p["sku"], cats.get(p["category_id"], ""), p["type"], p["price"], p.get("cost", 0),
                    "aktif" if p.get("active") else "nonaktif", "ya" if p.get("sold_out") else "tidak",
                    p.get("description", ""), p.get("stock", 0)])
     buf = io.BytesIO()
@@ -791,6 +889,12 @@ async def _parse_import(file_bytes):
             price = 0
             errors.append("harga bukan angka")
         try:
+            cost = float(row.get("harga_beli") or 0)
+            if cost < 0:
+                cost = 0
+        except (ValueError, TypeError):
+            cost = 0
+        try:
             stock = int(float(row.get("stok_awal") or 0))
         except (ValueError, TypeError):
             stock = 0
@@ -798,7 +902,7 @@ async def _parse_import(file_bytes):
         sold_out = str(row.get("sold_out") or "tidak").strip().lower() in ("ya", "true", "1", "sold out", "soldout")
         parsed.append({
             "row": idx, "name": name, "sku": sku, "category_id": cat["id"] if cat else None,
-            "category_name": cat_name, "type": ptype, "price": price, "stock": stock,
+            "category_name": cat_name, "type": ptype, "price": price, "cost": cost, "stock": stock,
             "description": str(row.get("deskripsi") or ""), "active": active, "sold_out": sold_out,
             "exists": sku in existing_skus, "errors": errors, "valid": len(errors) == 0,
         })
@@ -827,7 +931,7 @@ async def import_commit(file: UploadFile = File(...), admin: dict = Depends(requ
         if not p["valid"]:
             continue
         doc = {"name": p["name"], "sku": p["sku"], "category_id": p["category_id"], "type": p["type"],
-               "price": p["price"], "description": p["description"], "active": p["active"],
+               "price": p["price"], "cost": p["cost"], "description": p["description"], "active": p["active"],
                "sold_out": p["sold_out"], "stock": p["stock"], "track_stock": p["type"] == "retail",
                "image": ""}
         if p["exists"]:

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah } from "@/lib/format";
 import { printReceipt } from "@/lib/receipt";
+import { useOffline } from "@/context/OfflineContext";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -18,6 +19,7 @@ const ORDER_TYPES = [
 ];
 
 export default function POS() {
+  const { online, addPending } = useOffline();
   const [orderType, setOrderType] = useState("take_away");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -35,16 +37,29 @@ export default function POS() {
   const [receipt, setReceipt] = useState(null);
 
   const load = useCallback(async () => {
-    const [p, c, t, m] = await Promise.all([
-      api.get("/products", { params: { active_only: true } }),
-      api.get("/categories", { params: { include_inactive: false } }),
-      api.get("/tables"),
-      api.get("/payment-methods"),
-    ]);
-    setProducts(p.data);
-    setCategories(c.data);
-    setTables(t.data);
-    setPms(m.data.filter((x) => x.active));
+    try {
+      const [p, c, t, m] = await Promise.all([
+        api.get("/products", { params: { active_only: true } }),
+        api.get("/categories", { params: { include_inactive: false } }),
+        api.get("/tables"),
+        api.get("/payment-methods"),
+      ]);
+      const cached = { products: p.data, categories: c.data, tables: t.data, pms: m.data.filter((x) => x.active) };
+      localStorage.setItem("gak_pos_cache", JSON.stringify(cached));
+      setProducts(cached.products);
+      setCategories(cached.categories);
+      setTables(cached.tables);
+      setPms(cached.pms);
+    } catch (e) {
+      const cache = JSON.parse(localStorage.getItem("gak_pos_cache") || "null");
+      if (cache) {
+        setProducts(cache.products);
+        setCategories(cache.categories);
+        setTables(cache.tables);
+        setPms(cache.pms);
+        toast.info("Mode offline: memakai data produk tersimpan");
+      }
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -138,6 +153,29 @@ export default function POS() {
   };
 
   const doPay = async (pm, amountPaid) => {
+    if (!online) {
+      if (orderType === "dine_in" || currentOrderId) {
+        return toast.error("Mode offline hanya untuk take away & retail (bukan open bill dine-in)");
+      }
+      const payload = {
+        order_type: orderType, table_id: null,
+        items: cart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
+        discount_type: discType, discount_value: Number(discVal),
+        pay_now: true, payment_method: pm.id,
+      };
+      addPending(payload);
+      const offlineReceipt = {
+        order_number: `OFFLINE-${Date.now().toString().slice(-8)}`, order_type: orderType, items: cart,
+        subtotal, discount, total, cashier_name: "(offline)",
+        payment_method_name: pm.name, amount_paid: amountPaid || total,
+        change: (amountPaid || total) - total, created_at: new Date().toISOString(), offline: true,
+      };
+      setPayOpen(false);
+      setReceipt(offlineReceipt);
+      resetSale();
+      toast.success("Disimpan offline. Otomatis disinkron saat online kembali.");
+      return;
+    }
     try {
       const oid = await ensureOrder();
       const { data } = await api.post(`/orders/${oid}/pay`, {
@@ -451,6 +489,7 @@ function ReceiptDialog({ order, onClose }) {
       <DialogContent>
         <DialogHeader><DialogTitle className="flex items-center gap-2 text-[#047857]"><CheckCircle2 /> Transaksi Selesai</DialogTitle></DialogHeader>
         <div className="text-center">
+          {order.offline && <div data-testid="offline-receipt-badge" className="inline-block bg-[#0A0A0A] text-white text-xs font-bold px-3 py-1 rounded-full mb-2">STRUK OFFLINE — BELUM DISINKRON</div>}
           <div className="font-num text-sm text-[#52525B]">{order.order_number}</div>
           <div className="font-num text-3xl font-extrabold mt-1">{rupiah(order.total)}</div>
           {order.change > 0 && <div className="text-sm mt-1">Kembalian: <span className="font-num font-bold">{rupiah(order.change)}</span></div>}

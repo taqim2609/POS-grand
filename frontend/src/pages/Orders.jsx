@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
-import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
+import { rupiah, ORDER_TYPE_LABEL, wibToday } from "@/lib/format";
 import { printReceipt } from "@/lib/receipt";
 import { toast } from "sonner";
 import { FileSpreadsheet, Receipt, Ban, RotateCcw } from "lucide-react";
@@ -13,7 +13,7 @@ const STATUS_STYLE = {
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(wibToday());
   const [fType, setFType] = useState("");
   const [voidTarget, setVoidTarget] = useState(null);
   const [reason, setReason] = useState("");

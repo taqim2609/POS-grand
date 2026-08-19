@@ -12,3 +12,5 @@ export const TYPE_LABEL = {
   minuman: "Minuman",
   retail: "Retail",
 };
+
+export const wibToday = () => new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);

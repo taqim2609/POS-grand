@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
-import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
+import { rupiah, ORDER_TYPE_LABEL, wibToday } from "@/lib/format";
 import { toast } from "sonner";
 import {
   LayoutDashboard, TrendingUp, Utensils, ShoppingBag, Store,
-  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX,
+  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX, Coins, Wallet,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 
 export default function Dashboard() {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(wibToday());
   const [data, setData] = useState(null);
   const [ai, setAi] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -64,6 +64,22 @@ export default function Dashboard() {
             <div className="text-xs font-bold mt-1">{data.by_type[t.key].count} order</div>
           </div>
         ))}
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4 mb-4">
+        <div className="rounded-2xl border-2 border-[#10B981] bg-[#ECFDF5] p-5" data-testid="stat-gross-profit">
+          <Coins size={20} className="text-[#047857]" />
+          <div className="text-xs font-bold uppercase tracking-wider mt-3 text-[#047857]">Laba Kotor</div>
+          <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.gross_profit || 0)}</div>
+          <div className="text-[11px] text-[#52525B] mt-1">HPP terjual: {rupiah(data.total_cost || 0)}</div>
+        </div>
+        <Stat icon={TrendingUp} label="Total Penjualan (ulang)" value={rupiah(data.total_sales)} />
+        <div className="rounded-2xl border-2 border-[#0A0A0A] bg-[#0A0A0A] text-white p-5" data-testid="stat-cash-net">
+          <Wallet size={20} className="text-white/80" />
+          <div className="text-xs font-bold uppercase tracking-wider mt-3 text-white/70">Kas Bersih Harian</div>
+          <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.cash_net || 0)}</div>
+          <div className="text-[11px] text-white/50 mt-1">Masuk {rupiah(data.cash_in || 0)} · Keluar {rupiah(data.cash_out || 0)}</div>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">

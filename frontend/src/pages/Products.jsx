@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const empty = { name: "", sku: "", category_id: "", type: "makanan", price: 0, description: "", image: "", active: true, sold_out: false, stock: 0 };
+const empty = { name: "", sku: "", category_id: "", type: "makanan", price: 0, cost: 0, description: "", image: "", active: true, sold_out: false, stock: 0 };
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 
 export default function Products() {
@@ -31,7 +31,7 @@ export default function Products() {
     if (!form.name.trim() || !form.sku.trim()) return toast.error("Nama & SKU wajib");
     if (!form.category_id) return toast.error("Pilih kategori");
     try {
-      const payload = { ...form, price: Number(form.price), stock: Number(form.stock) };
+      const payload = { ...form, price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock) };
       if (editId) await api.put(`/products/${editId}`, payload);
       else await api.post("/products", payload);
       toast.success("Produk tersimpan"); setOpen(false); load();
@@ -96,7 +96,7 @@ export default function Products() {
       <div className="bg-white rounded-2xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-[#F4F5F7] text-[#52525B] text-xs uppercase tracking-wider">
-            <tr><th className="text-left p-3">Produk</th><th className="text-left p-3">SKU</th><th className="text-left p-3">Tipe</th><th className="text-right p-3">Harga</th><th className="text-right p-3">Stok</th><th className="text-center p-3">Status</th><th className="p-3"></th></tr>
+            <tr><th className="text-left p-3">Produk</th><th className="text-left p-3">SKU</th><th className="text-left p-3">Tipe</th><th className="text-right p-3">Harga</th><th className="text-right p-3">HPP/Beli</th><th className="text-right p-3">Stok</th><th className="text-center p-3">Status</th><th className="p-3"></th></tr>
           </thead>
           <tbody>
             {shown.map((p) => (
@@ -110,6 +110,7 @@ export default function Products() {
                 <td className="p-3 font-num text-[#52525B]">{p.sku}</td>
                 <td className="p-3">{TYPE_LABEL[p.type]}</td>
                 <td className="p-3 text-right font-num font-bold">{rupiah(p.price)}</td>
+                <td className="p-3 text-right font-num text-[#52525B]">{rupiah(p.cost || 0)}</td>
                 <td className="p-3 text-right font-num">{p.track_stock ? p.stock : "-"}</td>
                 <td className="p-3 text-center">
                   <button data-testid={`soldout-toggle-${p.id}`} onClick={() => toggleSold(p)} className={`text-xs font-bold px-2 py-1 rounded ${p.sold_out ? "bg-[#FEE2E2] text-[#EF4444]" : "bg-[#D1FAE5] text-[#047857]"}`}>
@@ -151,9 +152,12 @@ export default function Products() {
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Harga"><input data-testid="prod-price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
-              {form.type === "retail" && <Field label="Stok Awal"><input data-testid="prod-stock" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>}
+              <Field label="Harga Jual"><input data-testid="prod-price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+              <Field label={form.type === "retail" ? "Harga Beli" : "HPP (Modal)"}><input data-testid="prod-cost" type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
             </div>
+            {form.type === "retail" && (
+              <Field label="Stok Awal"><input data-testid="prod-stock" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+            )}
             <Field label="Deskripsi">
               <div className="relative">
                 <textarea data-testid="prod-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full rounded-xl border px-3 py-2 resize-none" />
