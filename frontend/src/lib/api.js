@@ -23,7 +23,14 @@ api.interceptors.response.use(
 
 export function apiError(detail) {
   if (detail == null) return "Terjadi kesalahan. Coba lagi.";
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") {
+    const s = detail.trim();
+    // Ignore non-JSON gateway/HTML error pages (e.g. Cloudflare 5xx)
+    if (/<\/?html|<!doctype|cloudflare|origin web server/i.test(s)) {
+      return "Terjadi kesalahan pada server. Coba lagi.";
+    }
+    return s;
+  }
   if (Array.isArray(detail)) return detail.map((e) => e?.msg || JSON.stringify(e)).join(" ");
   return detail?.msg || String(detail);
 }

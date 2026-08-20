@@ -19,6 +19,13 @@ def _creds():
     content = p.read_text(encoding="utf-8")
     emails = re.findall(r'(?im)^\s*[-*]?\s*Email:\s*`?([^`\s]+)', content)
     pws = re.findall(r'(?im)^\s*[-*]?\s*Password:\s*`?([^`\s]+)', content)
+    if not emails or not pws:
+        # markdown table format: | role | email | password |
+        for line in content.splitlines():
+            cells = [c.strip().strip('`') for c in line.split("|") if c.strip()]
+            if len(cells) >= 3 and "@" in cells[1] and "." in cells[1]:
+                emails.append(cells[1])
+                pws.append(cells[2])
     return emails, pws
 
 

@@ -690,6 +690,12 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
     total = 0
     total_discount = 0
     total_cost = 0
+    prods = await db.products.find({}, {"_id": 0, "id": 1, "category_id": 1, "type": 1}).to_list(5000)
+    prod_map = {p["id"]: p for p in prods}
+    cats_all = await db.categories.find({}, {"_id": 0}).to_list(1000)
+    cat_map = {c["id"]: c for c in cats_all}
+    cat_sales = {}
+    group_totals = {"makanan": 0, "minuman": 0, "retail": 0}
     for o in orders:
         bt = by_type[o["order_type"]]
         bt["count"] += 1
@@ -698,11 +704,23 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
         total_discount += o.get("discount", 0)
         by_pm[o.get("payment_method_name", "?")] = by_pm.get(o.get("payment_method_name", "?"), 0) + o["total"]
         for it in o["items"]:
+            line = it["price"] * it["qty"]
             ps = product_sales.setdefault(it["name"], {"qty": 0, "total": 0, "cost": 0})
             ps["qty"] += it["qty"]
-            ps["total"] += it["price"] * it["qty"]
+            ps["total"] += line
             ps["cost"] += it.get("cost", 0) * it["qty"]
             total_cost += it.get("cost", 0) * it["qty"]
+            pinfo = prod_map.get(it.get("product_id"), {})
+            itype = pinfo.get("type") or it.get("type") or "retail"
+            if itype in group_totals:
+                group_totals[itype] += line
+            cid = pinfo.get("category_id")
+            if cid:
+                cinfo = cat_map.get(cid, {})
+                cs = cat_sales.setdefault(cid, {"category_id": cid, "name": cinfo.get("name", "?"),
+                                                "type": cinfo.get("type", itype), "qty": 0, "total": 0})
+                cs["qty"] += it["qty"]
+                cs["total"] += line
     top = []
     for k, v in sorted(product_sales.items(), key=lambda x: x[1]["total"], reverse=True)[:8]:
         profit = v["total"] - v["cost"]
@@ -710,6 +728,16 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
         top.append({"name": k, "qty": v["qty"], "total": round(v["total"], 2),
                     "cost": round(v["cost"], 2), "profit": round(profit, 2), "margin": margin})
     fnb_total = by_type["dine_in"]["total"] + by_type["take_away"]["total"]
+    by_cat = sorted(cat_sales.values(), key=lambda x: x["total"], reverse=True)
+    for c in by_cat:
+        c["total"] = round(c["total"], 2)
+    category_report = {
+        "makanan": {"total": round(group_totals["makanan"], 2),
+                    "categories": [c for c in by_cat if c["type"] == "makanan"]},
+        "minuman": {"total": round(group_totals["minuman"], 2),
+                    "categories": [c for c in by_cat if c["type"] == "minuman"]},
+        "retail": {"total": round(group_totals["retail"], 2)},
+    }
     low_stock = await db.products.aggregate([
         {"$match": {"track_stock": True, "active": True}},
         {"$addFields": {"eff_min": {"$ifNull": ["$min_stock", LOW_STOCK_THRESHOLD]}}},
@@ -726,7 +754,8 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
             "fnb_total": round(fnb_total, 2), "retail_total": round(by_type["retail"]["total"], 2),
             "top_products": top, "low_stock": low_stock, "low_stock_threshold": LOW_STOCK_THRESHOLD,
             "total_cost": round(total_cost, 2), "gross_profit": round(total - total_cost, 2),
-            "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2), "cash_net": round(cash_in - cash_out, 2)}
+            "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2), "cash_net": round(cash_in - cash_out, 2),
+            "category_report": category_report}
 
 @api.get("/reports/range")
 async def report_range(start: str, end: str, admin: dict = Depends(require_admin)):
@@ -863,7 +892,7 @@ def _get_chat(session, system, model):
     from emergentintegrations.llm.chat import LlmChat
     return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
 
-AI_FEATURES = {"description": "Deskripsi Produk", "image": "Gambar Produk", "summary": "Analisis Laporan"}
+AI_FEATURES = {"description": "Deskripsi Produk", "image": "Gambar Produk", "summary": "Analisis Laporan", "vision": "Baca Faktur (Vision)"}
 
 async def _ai_cfg(feature="description"):
     """Per-feature AI provider config: DB settings (editable in UI) override .env.
@@ -1028,6 +1057,67 @@ async def ai_credit(feature: str = "description", admin: dict = Depends(require_
                     "remaining": round(float(total) - used, 2), "currency": "USD"}
     except Exception as e:
         return {"available": False, "message": f"Gagal cek kredit: {e}"}
+
+import json as _json, re as _re
+
+def _num(v):
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = _re.sub(r"[^0-9]", "", str(v))
+    return float(s) if s else 0.0
+
+def _extract_json_list(text):
+    t = (text or "").strip()
+    m = _re.search(r"\[.*\]", t, _re.S)
+    if m:
+        t = m.group(0)
+    try:
+        data = _json.loads(t)
+    except Exception:
+        return []
+    out = []
+    for d in (data if isinstance(data, list) else []):
+        if not isinstance(d, dict):
+            continue
+        name = str(d.get("name", "")).strip()
+        if name:
+            out.append({"name": name, "qty": _num(d.get("qty", 1)) or 1, "unit_cost": _num(d.get("unit_cost", 0))})
+    return out
+
+class AIInvoiceIn(BaseModel):
+    image: str
+
+@api.post("/ai/parse-invoice")
+async def ai_parse_invoice(body: AIInvoiceIn, admin: dict = Depends(require_admin)):
+    cfg = await _ai_cfg("vision")
+    if not (cfg["api_key"] and cfg["base_url"] and cfg["model"]):
+        raise HTTPException(400, "Konfigurasi AI 'Baca Faktur (Vision)' belum lengkap di Pengaturan AI")
+    img = body.image if body.image.startswith("data:") else f"data:image/jpeg;base64,{body.image}"
+    system = "Anda asisten yang membaca foto faktur/nota pembelian toko."
+    prompt = ('Baca foto faktur berikut dan ekstrak daftar barang. Kembalikan HANYA JSON array. '
+              'Tiap elemen: {"name": "nama barang", "qty": angka, "unit_cost": angka}. '
+              'unit_cost = harga beli per unit (Rupiah, angka saja tanpa titik/koma). Tanpa teks lain.')
+    from openai import OpenAI
+
+    def run():
+        client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+        r = client.chat.completions.create(
+            model=cfg["model"],
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": img}},
+                ]},
+            ],
+            max_tokens=1500, temperature=0,
+        )
+        return r.choices[0].message.content or ""
+    try:
+        raw = await asyncio.to_thread(run)
+    except Exception as e:
+        raise HTTPException(400, f"Gagal memanggil AI Vision: {e}")
+    return {"items": _extract_json_list(raw)}
 
 @api.post("/ai/product-description")
 async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):

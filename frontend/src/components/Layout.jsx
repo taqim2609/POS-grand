@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings,
 } from "lucide-react";
 
 function ChangePasswordDialog({ open, onClose }) {
@@ -48,18 +48,15 @@ function ChangePasswordDialog({ open, onClose }) {
 }
 
 const NAV = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin"] },
   { to: "/pos", label: "POS Kasir", icon: ShoppingCart, roles: ["admin", "kasir"] },
   { to: "/cash", label: "Kas", icon: Wallet, roles: ["admin", "kasir"] },
   { to: "/shift", label: "Shift", icon: Clock, roles: ["admin", "kasir"] },
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin"] },
   { to: "/products", label: "Produk", icon: Package, roles: ["admin"] },
   { to: "/inventory", label: "Persediaan", icon: Boxes, roles: ["admin"] },
   { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin"] },
-  { to: "/tables", label: "Meja", icon: Armchair, roles: ["admin"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
-  { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
-  { to: "/settings-ai", label: "Pengaturan AI", icon: Sparkles, roles: ["admin"] },
-  { to: "/settings-data", label: "Reset Data", icon: Trash2, roles: ["admin"] },
+  { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
 ];
 
 function OfflineStatus({ onOpenQueue }) {

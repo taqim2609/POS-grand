@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Utensils, ShoppingBag, Store, Plus, Minus, Trash2, Armchair,
-  Search, Receipt, X, CheckCircle2, Layers, Database,
+  Search, Receipt, X, CheckCircle2, Layers, Database, ScanLine, Clock, Play,
 } from "lucide-react";
 
 const ORDER_TYPES = [
@@ -36,6 +36,9 @@ export default function POS() {
   const [tableOpen, setTableOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [cacheAt, setCacheAt] = useState(() => localStorage.getItem("gak_pos_cache_at"));
+  const [shift, setShift] = useState(undefined);
+  const [openingCash, setOpeningCash] = useState("");
+  const [barcode, setBarcode] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +78,11 @@ export default function POS() {
     window.addEventListener("gak-synced", onSynced);
     return () => window.removeEventListener("gak-synced", onSynced);
   }, [load]);
+
+  // Shift gate: POS is only usable after opening a shift (offline is allowed).
+  useEffect(() => {
+    api.get("/shifts/current").then((r) => setShift(r.data || null)).catch(() => setShift({ offline: true }));
+  }, []);
 
   const relevantTypes = orderType === "retail" ? ["retail"] : ["makanan", "minuman"];
   const cats = categories.filter((c) => relevantTypes.includes(c.type));
@@ -123,6 +131,23 @@ export default function POS() {
       prev.map((i) => (i.product_id === id ? { ...i, qty: i.qty + d } : i)).filter((i) => i.qty > 0)
     );
   const removeItem = (id) => setCart((prev) => prev.filter((i) => i.product_id !== id));
+
+  const openShiftInline = async () => {
+    try {
+      const { data } = await api.post("/shifts/open", { opening_cash: Number(openingCash || 0) });
+      setShift(data);
+      toast.success("Shift dibuka. POS siap digunakan.");
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
+  const handleBarcode = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const code = barcode.trim();
+    if (!code) return;
+    const found = products.find((p) => p.type === "retail" && (p.sku || "").toLowerCase() === code.toLowerCase());
+    if (found) { addItem(found); setBarcode(""); }
+    else { toast.error(`Produk kode "${code}" tidak ditemukan`); setBarcode(""); }
+  };
 
   const openTablePicker = () => setTableOpen(true);
   const selectTable = async (t) => {
@@ -202,6 +227,28 @@ export default function POS() {
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
 
+  if (shift === undefined) {
+    return <div className="h-screen grid place-items-center"><div className="animate-pulse text-[#E63946] font-bold">Memuat…</div></div>;
+  }
+  if (shift === null) {
+    return (
+      <div className="h-screen grid place-items-center bg-[#F4F5F7] p-6" data-testid="shift-gate">
+        <div className="w-full max-w-md bg-white rounded-2xl border p-7 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-[#FEF2F2] grid place-items-center mx-auto mb-4"><Clock className="text-[#E63946]" /></div>
+          <h2 className="text-2xl font-extrabold">Buka Shift Dulu</h2>
+          <p className="text-sm text-[#52525B] mt-1 mb-5">Masukkan kas awal untuk memulai. POS Kasir baru bisa dipakai setelah shift dibuka.</p>
+          <label className="text-xs uppercase tracking-wider font-bold text-[#52525B] text-left block">Kas Awal</label>
+          <input data-testid="gate-opening-cash" type="number" value={openingCash} onChange={(e) => setOpeningCash(e.target.value)}
+            placeholder="0" className="w-full h-12 rounded-xl border px-3 mt-1.5 font-num text-lg" autoFocus />
+          <button data-testid="gate-open-shift-btn" onClick={openShiftInline}
+            className="tap w-full py-3 mt-4 rounded-xl bg-[#E63946] hover:bg-[#BE123C] text-white font-bold flex items-center justify-center gap-2">
+            <Play size={16} /> Buka Shift & Mulai
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col">
       {/* top bar: order type */}
@@ -264,7 +311,21 @@ export default function POS() {
 
         {/* product grid */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-3 border-b bg-white">
+          <div className="p-3 border-b bg-white space-y-2">
+            {orderType === "retail" && (
+              <div className="relative">
+                <ScanLine size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#E63946]" />
+                <input
+                  data-testid="barcode-input"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  onKeyDown={handleBarcode}
+                  placeholder="Scan / ketik kode produk lalu Enter"
+                  className="w-full h-12 pl-10 pr-3 rounded-xl border-2 border-[#E63946] outline-none font-num"
+                  autoFocus
+                />
+              </div>
+            )}
             <div className="relative">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a1a1aa]" />
               <input

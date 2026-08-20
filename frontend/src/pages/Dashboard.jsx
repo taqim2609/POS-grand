@@ -63,6 +63,46 @@ function TrendChart() {
   );
 }
 
+function CategoryReport({ data }) {
+  const cr = data.category_report;
+  if (!cr) return null;
+  const groups = [
+    { key: "makanan", label: "Makanan", color: "#E63946" },
+    { key: "minuman", label: "Minuman", color: "#0EA5E9" },
+  ];
+  return (
+    <div className="bg-white rounded-2xl border p-5 mt-4" data-testid="category-report">
+      <h3 className="font-extrabold mb-4">Laporan per Kategori</h3>
+      <div className="grid md:grid-cols-3 gap-4">
+        {groups.map((g) => (
+          <div key={g.key} className="rounded-xl border p-4" data-testid={`catgroup-${g.key}`}>
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold" style={{ color: g.color }}>{g.label}</span>
+              <span className="font-num font-extrabold">{rupiah(cr[g.key].total)}</span>
+            </div>
+            <div className="mt-3 space-y-1">
+              {cr[g.key].categories.length === 0 && <div className="text-xs text-[#a1a1aa]">Belum ada penjualan.</div>}
+              {cr[g.key].categories.map((c) => (
+                <div key={c.category_id} data-testid={`catrow-${c.category_id}`} className="flex items-center justify-between text-sm border-b last:border-0 py-1">
+                  <span className="text-[#52525B]">{c.name} <span className="text-[#a1a1aa] font-num">×{c.qty}</span></span>
+                  <span className="font-num font-bold">{rupiah(c.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="rounded-xl border p-4 bg-[#FAFAFA]" data-testid="catgroup-retail">
+          <div className="flex items-center justify-between">
+            <span className="font-extrabold text-[#047857]">Retail (gabungan)</span>
+            <span className="font-num font-extrabold">{rupiah(cr.retail.total)}</span>
+          </div>
+          <div className="text-xs text-[#a1a1aa] mt-3">Semua penjualan retail digabung menjadi satu.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [date, setDate] = useState(wibToday());
   const [data, setData] = useState(null);
@@ -235,6 +275,7 @@ export default function Dashboard() {
         )}
       </div>
 
+      <CategoryReport data={data} />
       <TrendChart />
     </div>
   );

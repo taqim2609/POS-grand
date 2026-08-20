@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah } from "@/lib/format";
 import { toast } from "sonner";
-import { Boxes, PackagePlus, ClipboardCheck, Plus } from "lucide-react";
+import { Boxes, PackagePlus, ClipboardCheck, Plus, Camera, ScanLine, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { wibToday } from "@/lib/format";
 
 export default function Inventory() {
@@ -40,6 +41,7 @@ function Purchase({ products, onDone }) {
   const [cost, setCost] = useState("");
   const [note, setNote] = useState("");
   const [list, setList] = useState([]);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const load = () => api.get("/purchases", { params: { date: wibToday() } }).then((r) => setList(r.data));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
@@ -74,6 +76,8 @@ function Purchase({ products, onDone }) {
         </div>
         <Field label="Catatan" className="mt-3"><input value={note} onChange={(e) => setNote(e.target.value)} className="w-full h-11 rounded-xl border px-3" placeholder="opsional" /></Field>
         <button data-testid="submit-purchase" onClick={submit} className="tap w-full h-12 mt-4 rounded-xl bg-[#E63946] text-white font-bold flex items-center justify-center gap-2"><Plus size={18} /> Simpan Pembelian</button>
+        <button data-testid="scan-invoice-btn" onClick={() => setScanOpen(true)} className="tap w-full h-12 mt-2 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center justify-center gap-2"><Camera size={18} /> Scan Faktur (AI)</button>
+        <InvoiceScan open={scanOpen} onClose={() => setScanOpen(false)} onDone={() => { load(); onDone(); }} />
       </div>
 
       <div className="lg:col-span-2 bg-white rounded-2xl border overflow-hidden">
@@ -179,3 +183,124 @@ function Opname({ products, onDone }) {
 const Field = ({ label, children, className = "" }) => (
   <div className={className}><label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">{label}</label><div className="mt-1.5">{children}</div></div>
 );
+
+function InvoiceScan({ open, onClose, onDone }) {
+  const [image, setImage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [cats, setCats] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setImage(""); setRows([]);
+    api.get("/products", { params: { type: "retail" } }).then((r) => setProducts(r.data)).catch(() => {});
+    api.get("/categories").then((r) => setCats(r.data.filter((c) => c.type === "retail"))).catch(() => {});
+  }, [open]);
+
+  const pickFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => setImage(reader.result);
+    reader.readAsDataURL(f);
+  };
+
+  const autoMatch = (name) => {
+    const n = (name || "").toLowerCase();
+    const hit = products.find((p) => p.name.toLowerCase() === n)
+      || products.find((p) => p.name.toLowerCase().includes(n) || n.includes(p.name.toLowerCase()));
+    return hit ? hit.id : "";
+  };
+
+  const parse = async () => {
+    if (!image) return toast.error("Pilih/foto faktur dulu");
+    setLoading(true);
+    try {
+      const { data } = await api.post("/ai/parse-invoice", { image });
+      if (!data.items?.length) { toast.error("AI tidak menemukan item pada faktur"); setRows([]); }
+      else setRows(data.items.map((it) => ({ ...it, match: autoMatch(it.name), newCat: cats[0]?.id || "", newPrice: it.unit_cost })));
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
+  };
+
+  const upd = (i, patch) => setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+
+  const save = async () => {
+    const valid = rows.filter((r) => r.match && r.match !== "skip");
+    if (!valid.length) return toast.error("Pilih minimal satu item untuk disimpan");
+    setSaving(true);
+    let ok = 0;
+    try {
+      for (const r of rows) {
+        if (!r.match || r.match === "skip") continue;
+        let pid = r.match;
+        if (r.match === "new") {
+          if (!r.newCat) { toast.error(`Pilih kategori untuk "${r.name}"`); continue; }
+          const sku = "AI-" + Date.now().toString(36).slice(-5) + ok;
+          const { data: np } = await api.post("/products", {
+            name: r.name, sku, category_id: r.newCat, type: "retail",
+            price: Number(r.newPrice || r.unit_cost), cost: Number(r.unit_cost), stock: 0, min_stock: 10,
+          });
+          pid = np.id;
+        }
+        await api.post("/purchases", { product_id: pid, qty: Number(r.qty), unit_cost: Number(r.unit_cost), note: "Faktur AI" });
+        ok += 1;
+      }
+      toast.success(`${ok} item pembelian tersimpan, stok bertambah`);
+      onDone(); onClose();
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader><DialogTitle>Scan Faktur Pembelian (AI)</DialogTitle></DialogHeader>
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="tap inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-[#F4F5F7] border font-bold text-sm cursor-pointer">
+              <Camera size={16} /> Pilih / Foto Faktur
+              <input data-testid="invoice-file" type="file" accept="image/*" capture="environment" className="hidden" onChange={pickFile} />
+            </label>
+            <button data-testid="invoice-parse-btn" onClick={parse} disabled={!image || loading}
+              className="tap h-11 px-5 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center gap-2 disabled:opacity-50">
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <ScanLine size={16} />} Baca dengan AI
+            </button>
+          </div>
+          {image && <img src={image} alt="faktur" className="max-h-48 rounded-xl border" />}
+
+          {rows.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-[#52525B]">Cocokkan tiap item ke produk retail, lalu simpan:</div>
+              {rows.map((r, i) => (
+                <div key={i} data-testid={`invoice-row-${i}`} className="rounded-xl border p-3 grid md:grid-cols-12 gap-2 items-center">
+                  <input value={r.name} onChange={(e) => upd(i, { name: e.target.value })} className="md:col-span-4 h-10 rounded-lg border px-2 text-sm" />
+                  <input type="number" value={r.qty} onChange={(e) => upd(i, { qty: e.target.value })} className="md:col-span-1 h-10 rounded-lg border px-2 text-sm font-num" title="Qty" />
+                  <input type="number" value={r.unit_cost} onChange={(e) => upd(i, { unit_cost: e.target.value })} className="md:col-span-2 h-10 rounded-lg border px-2 text-sm font-num" title="Harga beli/unit" />
+                  <select data-testid={`invoice-match-${i}`} value={r.match} onChange={(e) => upd(i, { match: e.target.value })} className="md:col-span-3 h-10 rounded-lg border px-2 text-sm bg-white">
+                    <option value="">— pilih produk —</option>
+                    <option value="new">＋ Buat produk baru</option>
+                    <option value="skip">Lewati item ini</option>
+                    {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  {r.match === "new" ? (
+                    <select data-testid={`invoice-newcat-${i}`} value={r.newCat} onChange={(e) => upd(i, { newCat: e.target.value })} className="md:col-span-2 h-10 rounded-lg border px-2 text-sm bg-white" title="Kategori produk baru">
+                      <option value="">Kategori...</option>
+                      {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  ) : (
+                    <div className="md:col-span-2 text-right font-num text-sm font-bold">{rupiah((Number(r.qty) || 0) * (Number(r.unit_cost) || 0))}</div>
+                  )}
+                </div>
+              ))}
+              <button data-testid="invoice-save-btn" onClick={save} disabled={saving}
+                className="tap w-full h-12 rounded-xl bg-[#E63946] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Simpan Semua Pembelian
+              </button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

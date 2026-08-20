@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 8 full-stack test of the new batch (shift gate, grouped Settings, Dashboard-first nav, per-category reports, retail barcode/SKU, AI invoice scan). Backend: new pytest suite tests/test_iteration8_features.py -> 9/10 pass (only the AI-vision error-body check fails, see below); full regression run of /app/backend/tests = 122 passed / 9 failed, all failures are either stale iteration-5 expectations or the invalid AI provider key. Frontend: verified end-to-end via Playwright on the public URL for admin + kasir - shift gate, barcode scan (valid + invalid), retail & take-away cash payments, Dashboard category report numbers, all 4 Settings sub-tabs, invoice-scan dialog + graceful failure. All requested features work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/ai/parse-invoice", "issue": "Returns HTTP 502 on AI failure. Through the public ingress Cloudflare replaces the 502 body with its own HTML page, so the Indonesian detail ('Gagal memanggil AI Vision: 401 Invalid token') never reaches the browser - the UI toast shows the raw English Cloudflare text. Verified: localhost:8001 returns JSON 502, public URL returns text/html 502. Use 400/500 (or 200 + error field) instead of 502."},
+      {"endpoint": "AI features (description/image/summary/vision)", "issue": "Configured provider key is rejected (401 'Invalid token' from https://www.chenzk.top/v1) and Gemini image quota = 0, so every AI endpoint fails. Routes/validation/permissions are correct; only the credential is unusable."},
+      {"endpoint": "POST /api/categories", "issue": "No duplicate-name validation - two categories with the identical name/type can be created (observed during seeding)."},
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force lockout: 6 consecutive wrong passwords all return 401 and the correct password still logs in immediately (playbook item 4 not implemented). bcrypt hashes are correct ($2b$12$) and seed_admin re-hashes when the env password changes."},
+      {"endpoint": "POST /api/products", "issue": "sku is a required non-nullable string; sending sku: null returns 422. Confirm the Products UI never posts null for F&B products."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Inventory > Pembelian > Scan Faktur (AI) > Baca dengan AI", "issue": "Parse failure is handled without crashing (dialog stays, spinner clears) but the toast displays the Cloudflare English message 'The origin web server returned an invalid or incomplete response to Cloudflare...' because the 502 body is not JSON. apiError() should fall back to the generic Indonesian message when response data is not an object/string-detail.", "affected_selectors": ["[data-testid=\"invoice-parse-btn\"]", "[data-sonner-toast]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_features.py",
+    "/app/backend/tests/seed_ui_iteration8.py",
+    "/app/backend/tests/cleanup_iteration8.py",
+    "/app/test_reports/pytest/iteration8_results.xml",
+    "/app/test_reports/pytest/iteration8_all.xml"
+  ],
+  "action_items": [
+    "Change POST /api/ai/parse-invoice AI-call failure status from 502 to 400/500 so the JSON detail survives the Cloudflare ingress (currently the user sees an English Cloudflare error).",
+    "Harden apiError()/callers to ignore non-JSON (HTML) error bodies and show the Indonesian fallback message.",
+    "Replace the invalid AI provider API key - all four AI features (description, image, summary, vision) currently fail with 401 / quota 0.",
+    "Optional: add duplicate-name guard on POST /api/categories and login attempt lockout.",
+    "Delete/refresh stale tests: tests/test_iteration5_features.py::TestAISettings (old flat ai-settings schema) and tests/backend_test.py::TestTables::test_list_tables (asserts >=8 seeded tables; DB was reset)."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py is 1353 lines - split into routers (orders, reports, ai, inventory, settings) for maintainability.",
+    "Barcode lookup in POS.jsx matches only against the client-side products array (active_only, 5000 limit) - acceptable offline-first design, but SKUs of inactive/limit-truncated products will silently report 'tidak ditemukan'.",
+    "report_summary category grouping uses product.type from the product master and category.type for rows; verified consistent (no cross-type contamination) in tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (credentials parser now also reads the markdown table format in /app/memory/test_credentials.md - it previously raised IndexError)",
+    "/app/backend/tests/test_iteration8_features.py (new)",
+    "/app/backend/tests/seed_ui_iteration8.py (new)",
+    "/app/backend/tests/cleanup_iteration8.py (new)"
+  ],
+  "success_rate": {"backend": "93% (122/131 suite; 9/10 of the new iteration-8 tests)", "frontend": "100% of the 7 requested flows"},
+  "seed_data_creation": "Left in place for the user: categories 'UI Makanan' (makanan), 'UI Minuman' (minuman), 'UI Retail' (retail); products 'UI Nasi Goreng' (SKU UIFOOD1, 30000), 'UI Es Teh' (SKU UIDRINK1, 6000), 'UI Sabun' (SKU UIRETAIL1, 12000, stock 100). Paid orders today: 1 retail (12.000) + 1 take-away (36.000). All TEST_* pytest data cleaned via cleanup_iteration8.py. Admin + kasir shifts are currently OPEN (opened during gate testing) - close them from the Shift page if the gate needs to be re-tested. Passwords unchanged.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin taqim2609@gmail.com / GrandAceh#2026 ; kasir kasir@grandaceh.com / kasir123 (unchanged)",
+  "context_for_next_testing_agent": "Verified passing: (1) shift gate blocker (shift-gate/gate-opening-cash/gate-open-shift-btn) shows when no open shift, opening works and persists over reload for admin and kasir; (2) sidebar nav order = dashboard, pos, cash, shift, products, inventory, categories, orders, settings (Dashboard first, single 'Pengaturan', no Meja/Pengguna/AI/Reset items; Ganti Password button present); (3) /settings 4 sub-tabs all render (users list incl admin email, Tables, AI with 4 cards incl 'Baca Faktur (Vision)', Reset Data); (4) Dashboard category-report shows catgroup-makanan (UI Makanan Rp30.000), catgroup-minuman (UI Minuman Rp6.000), catgroup-retail combined Rp12.000 - matches API category_report exactly (verified numerically in pytest); (5) barcode-input only on Retail tab, valid SKU adds to cart + clears field, unknown code -> Indonesian error toast + cart unchanged; (6) retail and take-away cash payments produce receipts; (7) invoice scan dialog opens, file preview works, parse button disabled without image, failure does not crash. Remaining known gap: 502 -> Cloudflare HTML masks the AI error detail. To re-test the shift gate, close the open shifts first (POST /api/shifts/close or Shift page).",
+  "rca_of_the_issue": "AI invoice parse toast shows an English Cloudflare message: server.py raises HTTPException(502) when the OpenAI-compatible vision call fails; the Kubernetes/Cloudflare ingress treats an origin 502 as a gateway error and substitutes its own text/html error page, discarding the FastAPI JSON body. axios then has e.response.data as an HTML string, and Inventory.jsx passes e.response?.data?.detail (undefined for a string body) -> apiError returns the generic message only if detail is null, but sonner rendered the HTML-derived text because data is a string. Fix at both layers: non-502 status code in backend + non-JSON body guard in apiError."
+}

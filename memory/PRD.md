@@ -23,6 +23,16 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Margin profit per produk di laporan (/reports/summary top_products: cost/profit/margin).
 - Validasi tanggal wib_day_range (400). KPI "Rata-rata per Order".
 
+## Build 6 (2026-06) — Kasir & laporan besar
+- Barcode/SKU di POS tab Retail: ketik/scan kode + Enter → produk masuk keranjang (match SKU client-side); tidak ketemu → toast error. Hanya tab Retail.
+- Input pembelian via FOTO faktur (AI vision): `POST /api/ai/parse-invoice` (fitur AI 'vision', gagal → 400 agar detail lolos ingress). UI di Persediaan > Pembelian > "Scan Faktur (AI)": unggah/foto → baca AI → daftar item editable → cocokkan ke produk retail / buat baru / lewati → simpan (bulk purchase + auto-create produk).
+- Dashboard dipindah ke urutan teratas sidebar.
+- Laporan per kategori di Dashboard (`category_report`): grup Makanan & Minuman dengan rincian tiap kategori + Retail digabung.
+- Menu "Pengaturan" (admin) dengan sub-tab: Pengguna, Meja, Pengaturan AI, Reset Data (menggantikan item terpisah).
+- POS wajib buka shift dulu: gate inline "Buka Shift + Kas Awal" di layar POS; offline diizinkan.
+- Fix: apiError abaikan body HTML (Cloudflare) → pesan generik.
+- Verified: testing agent iteration_8 frontend 100% (7/7 flow), backend 93% (sisa gagal = key AI invalid + test lama usang).
+
 ## Build 5 (2026-06) — Android (Capacitor) + PWA/APK
 - PWA manifest ditingkatkan (id, description, lang, categories, display_override, ikon any+maskable) + `/.well-known/assetlinks.json` placeholder untuk TWA. Siap PWABuilder.
 - Capacitor 6 di-setup di /app/frontend (core/cli/android 6.2.1); platform Android digenerate di `frontend/android/` (Gradle project lengkap). appId `host.emergent.hybridposaceh`, orientasi landscape terkunci, minSdk 22/SDK 34. Aset di-bundle dari `build/` (dibuild dengan REACT_APP_BACKEND_URL=produksi).

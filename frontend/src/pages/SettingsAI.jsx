@@ -11,6 +11,7 @@ const FEATURE_META = {
   description: { label: "Deskripsi Produk", icon: FileText, hint: "Model teks (chat) untuk menulis deskripsi produk.", modelPh: "claude-sonnet-5" },
   image: { label: "Gambar Produk", icon: ImageIcon, hint: "Model gambar (image generation, mis. dall-e-3). Kosongkan bila ingin pakai Gemini/bawaan.", modelPh: "dall-e-3" },
   summary: { label: "Analisis Laporan", icon: BarChart3, hint: "Model teks (chat) untuk ringkasan & analisis penjualan.", modelPh: "claude-sonnet-5" },
+  vision: { label: "Baca Faktur (Vision)", icon: FileText, hint: "Model yang mendukung GAMBAR/vision (mis. claude-sonnet-5, gpt-4o) untuk membaca foto faktur pembelian.", modelPh: "claude-sonnet-5" },
 };
 
 export default function SettingsAI() {
