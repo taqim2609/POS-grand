@@ -39,6 +39,12 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (non-dine-in: tak
 - 6 adversarial security gaps fixed & re-verified via curl (price tamper, type spoof, negative qty, negative discount, underpayment, oversell).
 - E2E take-away purchase → payment → receipt confirmed via screenshot.
 
+## Offline resilience (cloud-hosted, added)
+- Frontend is a PWA: service worker (`public/sw.js`, network-first + cache fallback) caches app shell so POS opens even after internet is cut / app restart; `manifest.json` + icons make it installable (landscape, standalone).
+- Auth is offline-safe: on network error `/auth/me` keeps session from cached `gak_user` (only real 401 logs out) — kasir stays logged in offline.
+- POS caches master data (`gak_pos_cache`) and queues take-away/retail sales offline (`gak_pending_orders`), stamps receipt "BELUM DISINKRON", auto-syncs on reconnect. Dine-in offline blocked.
+- LIMITATION: true always-offline (even if device never loaded app online, or backend unreachable at boot) requires the local outlet server (Raspberry Pi/mini-PC) + local↔cloud sync layer — NOT yet built. AI stays on Emergent key for now.
+
 ## Backlog (P1/P2 — non-blocking)
 - Timezone: reports/shift bucket by UTC day; add WIB (UTC+7) offset for accurate Aceh day boundaries.
 - Login rate limiting/lockout.
