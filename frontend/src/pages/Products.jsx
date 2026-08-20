@@ -119,8 +119,8 @@ export default function Products() {
                 </td>
                 <td className="p-3">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => { setForm(p); setEditId(p.id); setOpen(true); }} className="tap h-8 w-8 rounded-lg bg-[#F4F5F7] grid place-items-center"><Pencil size={14} /></button>
-                    <button onClick={() => del(p)} className="tap h-8 w-8 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={14} /></button>
+                    <button data-testid={`edit-product-${p.id}`} onClick={() => { setForm(p); setEditId(p.id); setOpen(true); }} className="tap h-8 w-8 rounded-lg bg-[#F4F5F7] grid place-items-center"><Pencil size={14} /></button>
+                    <button data-testid={`delete-product-${p.id}`} onClick={() => del(p)} className="tap h-8 w-8 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>

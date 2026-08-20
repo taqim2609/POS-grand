@@ -1,0 +1,56 @@
+{
+  "summary": "Regression check after code-quality refactor (receipt XSS escaping, AuthContext/OfflineContext useMemo, Dashboard useCallback). Backend: 99/99 pytest passed (backend_test.py + test_new_features.py) against the public preview URL. Frontend: verified admin+kasir auth & role gating, session persistence, POS checkout end-to-end (order types, category filter, cart, discount, cash/QRIS payment, change), receipt print + Cetak Ulang reprint, Dashboard reload on date change + Gemini AI summary, offline sale queue/auto-sync, and admin CRUD (category, product w/ cost, edit, sold-out toggle, table, purchase, stock opname, cash in/out). XSS escaping explicitly proven with a seeded product named 'TEST_XSS <img src=x onerror=alert(1)> & \"q\"' - receipt markup contained &lt;img ... &gt;, &amp;, &quot; and fired no JS dialog. Zero console/page errors in all flows. No regressions found from the refactor; 2 pre-existing defects and 1 backend data-integrity bug reported below.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/orders (gen_order_number, server.py:195-197)", "issue": "Order number is generated with count_documents on today's prefix, which is not atomic. Concurrent order creation produces duplicate order numbers - DB currently holds GAK-20260820-0004 three times (found via aggregation). Duplicate receipt numbers break reprint/audit traceability. Fix: atomic $inc counter document (findOneAndUpdate) per day + unique index on order_number.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force protection / lockout: unlimited failed attempts allowed for the same email (playbook expects lockout after ~5 failures). bcrypt hashes are correct ($2b$12$) and seed_admin is idempotent (updates hash when ADMIN_PASSWORD changes)."},
+      {"endpoint": "startup seeding (server.py:1004-1007)", "issue": "Cashier seed credentials are hardcoded in source ('kasir@grandaceh.com'/'kasir123'); should come from env vars like the admin seed."},
+      {"endpoint": "CORS middleware (server.py:1020-1022)", "issue": "allow_origins falls back to '*' when CORS_ORIGINS is unset. allow_credentials=False (JWT Bearer, no cookies) so it is not exploitable, but an explicit origin list is preferable."},
+      {"endpoint": "DELETE /api/products|tables|categories", "issue": "Soft-delete only (active=false). Acceptable for history integrity, but test/seed rows accumulate invisibly in the DB - noted for future cleanup expectations."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "POS - selectTable (POS.jsx:127-139)", "issue": "Choosing a dine-in table for a table WITHOUT an open bill silently wipes the cart (setCart([])). Reproduced: added item then picked/switched table -> cart went from 1 item to 0 with no warning; the 'Ganti jenis transaksi' style confirm is not applied here. Cashier loses keyed-in items.", "selector": "[data-testid^=\"table-opt-\"]", "priority": "MEDIUM"},
+      {"component": "Layout - SyncQueueDialog / OfflineStatus", "issue": "The sync-history + reconciliation view (data-testid=sync-history) is only reachable through open-queue-btn, which renders only while pendingCount > 0. After a successful sync the queue empties and the offline->official order-number reconciliation history becomes unreachable from the UI. Needs a persistent entry point.", "selector": "[data-testid=\"open-queue-btn\"]", "priority": "MEDIUM"},
+      {"component": "Layout - OfflineStatus cache time", "issue": "cacheAt is read from localStorage during render without state/subscription, so 'Data ter-cache' only refreshes on re-render of the sidebar (stale timestamp possible).", "selector": "[data-testid=\"cache-time\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/xss_seed.py",
+    "/app/backend/tests/cleanup_iteration3.py",
+    "/app/test_reports/pytest/pytest_results_it3.xml"
+  ],
+  "action_items": [
+    "HIGH: make order-number generation atomic (counter doc + unique index on orders.order_number); existing duplicate GAK-20260820-0004 (x3) should be reconciled.",
+    "MEDIUM: POS dine-in table selection must not silently discard an existing cart (merge, or confirm like switchType).",
+    "MEDIUM: expose sync history/reconciliation even when the offline queue is empty.",
+    "LOW: add login attempt throttling/lockout; move seeded kasir credentials to env; set explicit CORS_ORIGINS."
+  ],
+  "critical_code_review_comments": [
+    "receipt.js esc() correctly covers all user-controlled interpolations (item name, order_number, cashier_name, order type label, payment method name, formatted date); numeric values go through rupiah() so they are safe. Verified end-to-end with a malicious product name.",
+    "AuthContext/OfflineContext useMemo+useCallback are dependency-correct; offline fallback to cached gak_user on network error still works (verified: reload while online keeps session, offline sale still authorised and queued).",
+    "Dashboard load useCallback([date]) + useEffect([load]) is correct - changing the date refetches the summary and resets the AI text.",
+    "gen_order_number using count_documents is the only real correctness bug found; it also means order numbers can regress if an order is hard-deleted."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Products.jsx (added data-testid edit-product-{id} / delete-product-{id})",
+    "/app/frontend/src/pages/Categories.jsx (added data-testid edit-category-{id} / delete-category-{id})",
+    "/app/frontend/src/pages/Tables.jsx (added data-testid edit-table-{id} / delete-table-{id})",
+    "/app/backend/tests/xss_seed.py (new)",
+    "/app/backend/tests/cleanup_iteration3.py (new)"
+  ],
+  "success_rate": {"backend": "100% (99/99 pytest)", "frontend": "100% of regression flows passed (3 pre-existing UX/reactivity defects reported)"},
+  "seed_data_creation": "Seeded then removed: product 'TEST_XSS <img src=x onerror=alert(1)> & \"q\"' (XSS proof), TEST_IT3_PROD / TEST_IT3_KAT / TEST_IT3_MEJA, purchase + opname on TEST_IT3_PROD, cash in Rp50.000 / out Rp10.000. Leftover TEST_* rows from iterations 1-2 also soft-deleted; leaked pytest users test_*@example.com removed from Mongo. Real POS orders created during checkout tests (GAK-20260820-0018/0019 + one synced offline order) remain because there is no order-delete API - they only affect today's report totals.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Admin taqim2609@gmail.com / GrandAceh#2026 ; Kasir kasir@grandaceh.com / kasir123 (from /app/memory/test_credentials.md, both valid)",
+  "context_for_next_testing_agent": "Public URL from frontend/.env. Backend suites: /app/backend/tests/backend_test.py + test_new_features.py (99 tests, all pass, run with pytest.ini defaults -n 2). Playwright notes: login lands on /pos not /dashboard; POS testids are ordertype-{dine_in|take_away|retail}, cat-{id}, product-card-{id}, discount-type/discount-value, pay-btn, pm-{cash|qris|card}, cash-amount, confirm-pay-btn, print-receipt-btn; Orders page uses reprint-btn-{id}. To assert receipt content, stub window.open before printing and capture document.write payload. Offline can be simulated with page.context.set_offline(True) + dispatching 'offline'/'online' events. Product edit/delete now have data-testids (added this iteration). Always run /app/backend/tests/cleanup_iteration3.py after CRUD tests.",
+  "rca_of_the_issue": "Duplicate order numbers: gen_order_number() counts today's orders and appends count+1, so two concurrent POSTs (e.g. parallel pytest workers or two cashiers) read the same count and mint the same number; no unique index exists to reject it. POS cart wipe: selectTable() unconditionally executes setCart([]) in the else-branch when the picked table has no open_order_id, discarding items added before the table was chosen."
+}

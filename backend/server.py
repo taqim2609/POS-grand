@@ -9,6 +9,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadF
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, date, timedelta
@@ -194,8 +195,15 @@ def compute_totals(items, discount_type, discount_value):
 
 async def gen_order_number():
     today = wib_today().replace("-", "")
-    count = await db.orders.count_documents({"order_number": {"$regex": f"^GAK-{today}"}})
-    return f"GAK-{today}-{count + 1:04d}"
+    cid = f"order-{today}"
+    # migration-safe init: seed counter from any orders already created today
+    if not await db.counters.find_one({"_id": cid}):
+        cnt = await db.orders.count_documents({"order_number": {"$regex": f"^GAK-{today}-"}})
+        await db.counters.update_one({"_id": cid}, {"$setOnInsert": {"seq": cnt}}, upsert=True)
+    doc = await db.counters.find_one_and_update(
+        {"_id": cid}, {"$inc": {"seq": 1}}, return_document=ReturnDocument.AFTER
+    )
+    return f"GAK-{today}-{doc['seq']:04d}"
 
 # ================================================================== AUTH
 @api.post("/auth/login")
@@ -991,6 +999,10 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.products.create_index("sku", unique=True)
     await db.orders.create_index("client_ref", sparse=True)
+    try:
+        await db.orders.create_index("order_number", unique=True)
+    except Exception as e:
+        logger.warning(f"order_number unique index not applied (resolve duplicates): {e}")
     admin_email = os.environ["ADMIN_EMAIL"].lower()
     admin_pw = os.environ["ADMIN_PASSWORD"]
     existing = await db.users.find_one({"email": admin_email})

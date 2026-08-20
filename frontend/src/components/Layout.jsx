@@ -24,7 +24,7 @@ const NAV = [
 ];
 
 function OfflineStatus({ onOpenQueue }) {
-  const { online, pendingCount, syncing, syncNow } = useOffline();
+  const { online, pendingCount, syncing, syncNow, syncLog } = useOffline();
   const cacheAt = localStorage.getItem("gak_pos_cache_at");
   return (
     <div data-testid="offline-status" className={`px-3 py-2.5 border-b border-white/10 ${online ? "" : "bg-[#EF4444]/20"}`}>
@@ -48,6 +48,11 @@ function OfflineStatus({ onOpenQueue }) {
             </button>
           )}
         </div>
+      )}
+      {pendingCount === 0 && syncLog.length > 0 && (
+        <button data-testid="open-history-btn" onClick={onOpenQueue} className="mt-2 text-[10px] font-bold text-white/45 hover:text-white/80 flex items-center gap-1">
+          <RefreshCw size={10} /> Riwayat sinkron ({syncLog.length})
+        </button>
       )}
     </div>
   );

@@ -49,9 +49,9 @@ export default function Tables() {
                 <div className="font-extrabold text-lg">{t.name}</div>
                 <div className="text-[11px]">{t.capacity} kursi · {t.status === "open_bill" ? "OPEN BILL" : t.active ? "Kosong" : "Nonaktif"}</div>
                 <div className="flex gap-1 mt-2">
-                  <button onClick={() => { setForm(t); setEditId(t.id); setOpen(true); }} className="tap flex-1 h-8 rounded-lg bg-white/70 grid place-items-center"><Pencil size={13} /></button>
+                  <button data-testid={`edit-table-${t.id}`} onClick={() => { setForm(t); setEditId(t.id); setOpen(true); }} className="tap flex-1 h-8 rounded-lg bg-white/70 grid place-items-center"><Pencil size={13} /></button>
                   <button onClick={() => toggle(t)} className="tap h-8 w-8 rounded-lg bg-white/70 grid place-items-center"><Power size={13} /></button>
-                  <button onClick={() => del(t)} className="tap h-8 w-8 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={13} /></button>
+                  <button data-testid={`delete-table-${t.id}`} onClick={() => del(t)} className="tap h-8 w-8 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={13} /></button>
                 </div>
               </div>
             ))}

@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration-4 targeted verification of the 3 fixes from iteration_3 plus regression smoke. Backend: 104/104 pytest passed against the public preview URL (existing backend_test.py + test_new_features.py + new test_order_number_atomic.py). Atomic order numbers CONFIRMED FIXED: unique index on orders.order_number exists, 5 sequential creations are unique/monotonic/gapless, 10 concurrent POST /api/orders (10 threads) all succeeded with 10 distinct GAK-YYYYMMDD-#### numbers, and a full-collection aggregation found zero duplicate order_numbers. Frontend (Playwright, public URL): POS dine-in cart preservation CONFIRMED FIXED (added Ayam Tangkap Rp45.000, picked an empty table -> cart still 1 item / Rp45.000, table label shown as 'Meja: Meja 1'). Sync history reachability CONFIRMED FIXED (offline sale queued with offline receipt badge, auto-sync on 'online' emptied the queue, persistent 'Riwayat sinkron' button [open-history-btn] appeared and opened the dialog with sync-history showing OFF-1787193971859-22vhi -> GAK-20260820-0046 reconciliation; button correctly hidden when the log is empty). Regression smoke passed: admin + kasir login, take-away cash checkout (GAK-20260820-0045, change Rp141.000) with receipt print payload containing the order number, Orders page reprint buttons render, admin Dashboard loads all KPIs with zero console errors. One NEW minor defect found: duplicate sync-log entries due to a non-reentrant syncNow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "Still no brute-force throttling/lockout (pre-existing, playbook expects lockout after ~5 failures)."},
+      {"endpoint": "startup seeding / CORS", "issue": "Pre-existing: kasir seed credentials hardcoded in server.py; CORS allow_origins falls back to '*' when CORS_ORIGINS unset (allow_credentials=False so not exploitable)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OfflineContext.syncNow", "issue": "NEW (MEDIUM-LOW): syncNow has no re-entrancy guard, so two triggers (browser 'online' event + the effect's initial navigator.onLine call) run concurrently, both read the same pending list and both write a sync-log entry. Result: the same offline sale is logged twice ('1 transaksi disinkron' x2 for the identical client_ref OFF-...-22vhi -> GAK-20260820-0046). No duplicate order is created (backend dedupes on client_ref) but the history/reconciliation view over-reports, and the read-modify-write on gak_sync_log can also lose entries. Fix: guard with a syncing/in-flight ref and/or dedupe log entries by client_ref.", "selector": "[data-testid=\"history-item\"]", "priority": "MEDIUM"},
+      {"component": "Layout - OfflineStatus cache time", "issue": "Pre-existing LOW (unchanged): cacheAt is read from localStorage during render without state/subscription, so 'Data ter-cache' can show a stale timestamp.", "selector": "[data-testid=\"cache-time\"]", "priority": "LOW"},
+      {"component": "Radix DialogContent (TableDialog, PayDialog, SyncQueueDialog)", "issue": "A11y console warning: 'Missing Description or aria-describedby={undefined} for DialogContent'. Add DialogDescription or aria-describedby.", "selector": "[role=\"dialog\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "POS product grid", "issues": ["4 of 9 seeded products (Es Timun Serut, Roti Cane Kari, Teh Tarik, Kopi Espresso partially) render only the grey placeholder icon instead of a photo - seed image_url missing/broken for those items."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_order_number_atomic.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/cleanup_iteration4.py",
+    "/app/test_reports/pytest/pytest_results_it4.xml"
+  ],
+  "action_items": [
+    "MEDIUM-LOW: add a re-entrancy guard to OfflineContext.syncNow (and/or dedupe sync-log items by client_ref) to stop duplicate sync-history entries.",
+    "LOW: add DialogDescription/aria-describedby to POS + sync dialogs to clear the Radix a11y warning.",
+    "LOW (pre-existing, optional): login attempt throttling, kasir seed creds via env, explicit CORS_ORIGINS.",
+    "LOW: fix/replace missing seed product images."
+  ],
+  "critical_code_review_comments": [
+    "gen_order_number(): atomic findOneAndUpdate($inc) + ReturnDocument.AFTER on db.counters plus the unique index on orders.order_number is the correct fix; the migration-safe seeding of the counter from count_documents runs only once per WIB day and is race-tolerant because it uses $setOnInsert with upsert.",
+    "Note: the counter never decreases, so hard-deleting orders (e.g. test cleanup) leaves gaps - acceptable and safer than the old count-based scheme.",
+    "POS.selectTable(): else-branch now only clears currentOrderId, preserving the cart; open-bill branch still replaces cart from the server order - both verified in the UI.",
+    "Layout.OfflineStatus: open-history-btn condition (pendingCount===0 && syncLog.length>0) is correct and reuses SyncQueueDialog, so no duplicate dialog code."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_order_number_atomic.py (new)",
+    "/app/backend/tests/cleanup_iteration4.py (new)"
+  ],
+  "success_rate": {"backend": "100% (104/104 pytest)", "frontend": "100% of the 3 fixes + regression smoke verified (1 new minor defect, 2 pre-existing low issues)"},
+  "seed_data_creation": "Created 15 test orders via API (5 sequential + 10 concurrent, note TEST_IT4_atomic), 1 paid take-away order (GAK-20260820-0045) and 1 offline-then-synced order (GAK-20260820-0046) from the UI. Cleanup ran /app/backend/tests/cleanup_iteration4.py: all 61 GAK-20260820-* orders hard-deleted from Mongo, order counters removed, and leftover TEST_* products/tables/categories from earlier iterations soft-deleted. DB is back to 0 orders for today.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin taqim2609@gmail.com / GrandAceh#2026 ; Kasir kasir@grandaceh.com / kasir123 (both valid)",
+  "context_for_next_testing_agent": "All 3 iteration_3 bugs are fixed and verified. Backend suite is now 3 files (backend_test.py, test_new_features.py, test_order_number_atomic.py) = 104 tests, run with pytest.ini defaults (-n 2 --dist loadscope). Order-number atomicity has a dedicated class incl. a 10-thread concurrency test and a whole-collection duplicate scan. Always run /app/backend/tests/cleanup_iteration4.py afterwards - it also hard-deletes today's orders (regex GAK-YYYYMMDD) and the counter doc; update the date regex for the current WIB day. Playwright: login lands on /pos; offline sim = page.context.set_offline(True) + dispatch 'offline'/'online'; stub window.open to capture the receipt HTML. Only open defect left is the duplicate sync-log entry (OfflineContext.syncNow re-entrancy).",
+  "rca_of_the_issue": "Duplicate sync-history entries: OfflineContext's effect calls syncNow() both on mount (navigator.onLine) and from the 'online' listener; syncNow only bails on an empty queue and has no in-flight lock, so two overlapping runs each POST the same queued order (backend returns the same order via client_ref idempotency) and each unshifts its own entry into gak_sync_log after a separate read, producing duplicate (and potentially lost) log rows."
+}

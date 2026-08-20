@@ -1,5 +1,9 @@
 import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
 
+// HTML-escape any user-controlled value before it enters printable markup (prevents XSS)
+const esc = (v) =>
+  String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 // Attempt native Sunmi built-in printer (80mm) via its WebView JS bridge.
 // Works on Sunmi T2s when the app runs inside a Sunmi WebView exposing the printer interface.
 function trySunmiPrinter(order) {
@@ -42,7 +46,7 @@ export function printReceipt(order) {
   const rows = order.items
     .map(
       (i) =>
-        `<tr><td>${i.name}<br><span class="s">${i.qty} x ${rupiah(i.price)}</span></td>
+        `<tr><td>${esc(i.name)}<br><span class="s">${i.qty} x ${rupiah(i.price)}</span></td>
          <td class="r">${rupiah(i.price * i.qty)}</td></tr>`
     )
     .join("");
@@ -62,10 +66,10 @@ export function printReceipt(order) {
     <div class="c s">Jl. Contoh No. 1, Banda Aceh</div>
     ${order.offline ? '<div class="off">STRUK OFFLINE — BELUM DISINKRON</div>' : ""}
     <div class="hr"></div>
-    <div>No: ${order.order_number}</div>
-    <div>${dt}</div>
-    <div>Kasir: ${order.cashier_name || "-"}</div>
-    <div class="c" style="margin:4px 0"><span class="badge">${ORDER_TYPE_LABEL[order.order_type]}</span></div>
+    <div>No: ${esc(order.order_number)}</div>
+    <div>${esc(dt)}</div>
+    <div>Kasir: ${esc(order.cashier_name || "-")}</div>
+    <div class="c" style="margin:4px 0"><span class="badge">${esc(ORDER_TYPE_LABEL[order.order_type] || order.order_type)}</span></div>
     <div class="hr"></div>
     <table>${rows}</table>
     <div class="hr"></div>
@@ -73,7 +77,7 @@ export function printReceipt(order) {
       <tr><td>Subtotal</td><td class="r">${rupiah(order.subtotal)}</td></tr>
       ${order.discount ? `<tr><td>Diskon</td><td class="r">-${rupiah(order.discount)}</td></tr>` : ""}
       <tr class="tot"><td>TOTAL</td><td class="r">${rupiah(order.total)}</td></tr>
-      ${order.payment_method_name ? `<tr><td>${order.payment_method_name}</td><td class="r">${rupiah(order.amount_paid || order.total)}</td></tr>` : ""}
+      ${order.payment_method_name ? `<tr><td>${esc(order.payment_method_name)}</td><td class="r">${rupiah(order.amount_paid || order.total)}</td></tr>` : ""}
       ${order.change ? `<tr><td>Kembali</td><td class="r">${rupiah(order.change)}</td></tr>` : ""}
     </table>
     <div class="hr"></div>

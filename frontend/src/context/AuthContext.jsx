@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import api from "@/lib/api";
 
 const AuthContext = createContext(null);
@@ -32,23 +32,25 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
     localStorage.setItem("gak_token", data.token);
     localStorage.setItem("gak_user", JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("gak_token");
     localStorage.removeItem("gak_user");
     setUser(null);
     window.location.href = "/login";
-  };
+  }, []);
+
+  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

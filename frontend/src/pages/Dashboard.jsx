@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah, ORDER_TYPE_LABEL, wibToday } from "@/lib/format";
 import { toast } from "sonner";
@@ -14,8 +14,11 @@ export default function Dashboard() {
   const [ai, setAi] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
 
-  const load = () => api.get("/reports/summary", { params: { date } }).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e.response?.data?.detail)));
-  useEffect(() => { load(); setAi(""); }, [date]);
+  const load = useCallback(
+    () => api.get("/reports/summary", { params: { date } }).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e.response?.data?.detail))),
+    [date]
+  );
+  useEffect(() => { load(); setAi(""); }, [load]);
 
   const genAi = async () => {
     setAiLoading(true);

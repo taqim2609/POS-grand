@@ -53,9 +53,9 @@ export default function Categories() {
               <span className="font-num text-xs text-[#52525B]">#{c.sort_order}</span>
             </div>
             <div className="flex gap-1 mt-3">
-              <button onClick={() => { setForm(c); setEditId(c.id); setOpen(true); }} className="tap flex-1 h-9 rounded-lg bg-[#F4F5F7] flex items-center justify-center gap-1 text-sm font-bold"><Pencil size={14} /> Edit</button>
+              <button data-testid={`edit-category-${c.id}`} onClick={() => { setForm(c); setEditId(c.id); setOpen(true); }} className="tap flex-1 h-9 rounded-lg bg-[#F4F5F7] flex items-center justify-center gap-1 text-sm font-bold"><Pencil size={14} /> Edit</button>
               <button onClick={() => toggle(c)} className="tap h-9 w-9 rounded-lg bg-[#F4F5F7] grid place-items-center"><Power size={15} /></button>
-              <button onClick={() => del(c)} className="tap h-9 w-9 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={15} /></button>
+              <button data-testid={`delete-category-${c.id}`} onClick={() => del(c)} className="tap h-9 w-9 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={15} /></button>
             </div>
           </div>
         ))}

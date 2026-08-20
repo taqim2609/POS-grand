@@ -135,7 +135,7 @@ export default function POS() {
       setDiscVal(data.discount_value);
       toast.info(`Open bill ${data.order_number} dimuat`);
     } else {
-      setCart([]); setCurrentOrderId(null);
+      setCurrentOrderId(null); // keep items the cashier already added; assign them to this table
     }
   };
 
