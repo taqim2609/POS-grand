@@ -68,6 +68,13 @@ export default function POS() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Auto-refresh cached master data (stock/prices) after offline orders finish uploading
+  useEffect(() => {
+    const onSynced = () => load();
+    window.addEventListener("gak-synced", onSynced);
+    return () => window.removeEventListener("gak-synced", onSynced);
+  }, [load]);
+
   const relevantTypes = orderType === "retail" ? ["retail"] : ["makanan", "minuman"];
   const cats = categories.filter((c) => relevantTypes.includes(c.type));
 

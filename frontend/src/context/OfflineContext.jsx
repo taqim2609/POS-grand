@@ -46,6 +46,7 @@ export function OfflineProvider({ children }) {
       }
     }
     persist(Array.from(map.values()));
+    if (ok) window.dispatchEvent(new Event("gak-synced")); // trigger cache refresh after successful upload
     return ok;
   }, []);
 
