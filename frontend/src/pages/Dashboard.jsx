@@ -6,7 +6,62 @@ import {
   LayoutDashboard, TrendingUp, Utensils, ShoppingBag, Store,
   Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX, Coins, Wallet,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, LineChart, Line, CartesianGrid } from "recharts";
+
+function TrendChart() {
+  const [period, setPeriod] = useState("week");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const days = period === "week" ? 7 : 30;
+    const end = wibToday();
+    const start = new Date(Date.now() + 7 * 3600 * 1000 - (days - 1) * 86400000).toISOString().slice(0, 10);
+    setLoading(true);
+    api.get("/reports/range", { params: { start, end } })
+      .then((r) => {
+        const map = {};
+        (r.data.daily || []).forEach((d) => { map[d.date] = d; });
+        const out = [];
+        for (let i = days - 1; i >= 0; i--) {
+          const d = new Date(Date.now() + 7 * 3600 * 1000 - i * 86400000).toISOString().slice(0, 10);
+          const rec = map[d] || { total: 0, count: 0 };
+          out.push({ date: d, label: d.slice(5), total: rec.total, count: rec.count });
+        }
+        setRows(out);
+      })
+      .catch((e) => toast.error(apiError(e.response?.data?.detail)))
+      .finally(() => setLoading(false));
+  }, [period]);
+
+  const totalPeriod = rows.reduce((s, r) => s + r.total, 0);
+
+  return (
+    <div className="bg-white rounded-2xl border p-5 mt-4" data-testid="trend-chart">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h3 className="font-extrabold">Tren Penjualan</h3>
+          <div className="text-xs text-[#52525B] font-bold">Total periode: <span className="font-num text-[#0A0A0A]">{rupiah(totalPeriod)}</span></div>
+        </div>
+        <div className="flex gap-2">
+          <button data-testid="trend-week-btn" onClick={() => setPeriod("week")} className={`tap h-9 px-4 rounded-lg text-sm font-bold ${period === "week" ? "bg-[#0A0A0A] text-white" : "bg-[#F4F5F7] border"}`}>Mingguan</button>
+          <button data-testid="trend-month-btn" onClick={() => setPeriod("month")} className={`tap h-9 px-4 rounded-lg text-sm font-bold ${period === "month" ? "bg-[#0A0A0A] text-white" : "bg-[#F4F5F7] border"}`}>Bulanan</button>
+        </div>
+      </div>
+      {loading ? <div className="h-[240px] grid place-items-center"><Loader2 className="animate-spin text-[#E63946]" /></div> : (
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={rows} margin={{ left: 10, right: 24 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F4" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={period === "week" ? 0 : "preserveStartEnd"} padding={{ right: 12 }} />
+            <YAxis tick={{ fontSize: 11 }} width={70} tickFormatter={(v) => "Rp" + (v >= 1000 ? (v / 1000) + "k" : v)} />
+            <Tooltip formatter={(v) => rupiah(v)} labelFormatter={(l) => `Tanggal ${l}`} />
+            <Line type="monotone" dataKey="total" stroke="#E63946" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} name="Penjualan" />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [date, setDate] = useState(wibToday());
@@ -52,7 +107,7 @@ export default function Dashboard() {
 
       {lowStock.length > 0 && (
         <div data-testid="low-stock-banner" className="flex items-center gap-3 bg-[#FEF3C7] border border-[#F59E0B] text-[#B45309] rounded-xl px-4 py-3 mb-4 font-bold text-sm">
-          <AlertTriangle size={18} /> {lowStock.length} produk retail stoknya menipis (≤ {data.low_stock_threshold}). Segera restock.
+          <AlertTriangle size={18} /> {lowStock.length} produk retail stoknya menipis (di bawah ambang per-produk). Segera restock.
         </div>
       )}
 
@@ -76,7 +131,12 @@ export default function Dashboard() {
           <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.gross_profit || 0)}</div>
           <div className="text-[11px] text-[#52525B] mt-1">HPP terjual: {rupiah(data.total_cost || 0)}</div>
         </div>
-        <Stat icon={TrendingUp} label="Total Penjualan (ulang)" value={rupiah(data.total_sales)} />
+        <div className="rounded-2xl border-2 border-[#E63946] bg-[#FEF2F2] p-5" data-testid="stat-avg-order">
+          <TrendingUp size={20} className="text-[#E63946]" />
+          <div className="text-xs font-bold uppercase tracking-wider mt-3 text-[#B91C1C]">Rata-rata per Order</div>
+          <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.order_count ? data.total_sales / data.order_count : 0)}</div>
+          <div className="text-[11px] text-[#52525B] mt-1">{data.order_count} order · omzet {rupiah(data.total_sales)}</div>
+        </div>
         <div className="rounded-2xl border-2 border-[#0A0A0A] bg-[#0A0A0A] text-white p-5" data-testid="stat-cash-net">
           <Wallet size={20} className="text-white/80" />
           <div className="text-xs font-bold uppercase tracking-wider mt-3 text-white/70">Kas Bersih Harian</div>
@@ -87,18 +147,42 @@ export default function Dashboard() {
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-2xl border p-5">
-          <h3 className="font-extrabold mb-4">Produk Terlaris</h3>
-          {chartData.length === 0 ? <p className="text-sm text-[#a1a1aa]">Belum ada penjualan hari ini.</p> : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 10 }}>
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v) => rupiah(v)} />
-                <Bar dataKey="total" radius={[0, 6, 6, 0]}>
-                  {chartData.map((_, i) => <Cell key={i} fill="#E63946" />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="font-extrabold mb-4">Produk Terlaris & Margin</h3>
+          {data.top_products.length === 0 ? <p className="text-sm text-[#a1a1aa]">Belum ada penjualan hari ini.</p> : (
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} layout="vertical" margin={{ left: 10 }}>
+                  <XAxis type="number" hide />
+                  <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v) => rupiah(v)} />
+                  <Bar dataKey="total" radius={[0, 6, 6, 0]}>
+                    {chartData.map((_, i) => <Cell key={i} fill="#E63946" />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-3 border rounded-xl overflow-hidden" data-testid="margin-table">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#F4F5F7] text-[#52525B] text-xs uppercase tracking-wider">
+                    <tr><th className="text-left p-2.5">Produk</th><th className="text-right p-2.5">Qty</th><th className="text-right p-2.5">Omzet</th><th className="text-right p-2.5">Laba</th><th className="text-right p-2.5">Margin</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.top_products.map((p) => (
+                      <tr key={p.name} data-testid={`margin-row-${p.name}`} className="border-t">
+                        <td className="p-2.5 font-bold truncate max-w-[160px]">{p.name}</td>
+                        <td className="p-2.5 text-right font-num">{p.qty}</td>
+                        <td className="p-2.5 text-right font-num">{rupiah(p.total)}</td>
+                        <td className="p-2.5 text-right font-num font-bold text-[#047857]">{rupiah(p.profit || 0)}</td>
+                        <td className="p-2.5 text-right">
+                          <span className={`font-num font-bold px-2 py-0.5 rounded ${(p.margin || 0) >= 40 ? "bg-[#D1FAE5] text-[#047857]" : (p.margin || 0) >= 15 ? "bg-[#FEF3C7] text-[#B45309]" : "bg-[#FEE2E2] text-[#EF4444]"}`}>
+                            {(p.margin || 0).toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
@@ -130,7 +214,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl border p-5 mt-4" data-testid="low-stock-panel">
         <h3 className="font-extrabold mb-3 flex items-center gap-2">
           <AlertTriangle size={18} className="text-[#B45309]" /> Stok Retail Menipis
-          <span className="text-xs font-bold text-[#52525B]">(ambang ≤ {data.low_stock_threshold})</span>
+          <span className="text-xs font-bold text-[#52525B]">(ambang per-produk)</span>
         </h3>
         {lowStock.length === 0 ? (
           <p className="text-sm text-[#047857] font-bold">Semua stok retail aman.</p>
@@ -140,7 +224,7 @@ export default function Dashboard() {
               <div key={p.sku} data-testid={`low-stock-${p.sku}`} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${p.stock <= 0 ? "bg-[#FEE2E2] border-[#EF4444]" : "bg-[#FEF9C3] border-[#F59E0B]"}`}>
                 <div className="overflow-hidden">
                   <div className="font-bold text-sm truncate">{p.name}</div>
-                  <div className="font-num text-xs text-[#52525B]">{p.sku}</div>
+                  <div className="font-num text-xs text-[#52525B]">{p.sku} · ambang {p.min_stock}</div>
                 </div>
                 <div className={`font-num font-extrabold flex items-center gap-1 ${p.stock <= 0 ? "text-[#EF4444]" : "text-[#B45309]"}`}>
                   {p.stock <= 0 && <PackageX size={15} />}{p.stock}
@@ -150,6 +234,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <TrendChart />
     </div>
   );
 }

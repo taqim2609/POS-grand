@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles,
 } from "lucide-react";
 
 const NAV = [
@@ -21,6 +21,7 @@ const NAV = [
   { to: "/tables", label: "Meja", icon: Armchair, roles: ["admin"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
+  { to: "/settings-ai", label: "Pengaturan AI", icon: Sparkles, roles: ["admin"] },
 ];
 
 function OfflineStatus({ onOpenQueue }) {

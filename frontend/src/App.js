@@ -16,6 +16,7 @@ import Orders from "@/pages/Orders";
 import UsersPage from "@/pages/Users";
 import Inventory from "@/pages/Inventory";
 import Cash from "@/pages/Cash";
+import SettingsAI from "@/pages/SettingsAI";
 
 const wrap = (el, adminOnly = false) => (
   <ProtectedRoute adminOnly={adminOnly}>
@@ -42,6 +43,7 @@ function App() {
               <Route path="/tables" element={wrap(<Tables />, true)} />
               <Route path="/orders" element={wrap(<Orders />, true)} />
               <Route path="/users" element={wrap(<UsersPage />, true)} />
+              <Route path="/settings-ai" element={wrap(<SettingsAI />, true)} />
               <Route path="/" element={<Navigate to="/pos" replace />} />
               <Route path="*" element={<Navigate to="/pos" replace />} />
             </Routes>

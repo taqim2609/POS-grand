@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const empty = { name: "", sku: "", category_id: "", type: "makanan", price: 0, cost: 0, description: "", image: "", active: true, sold_out: false, stock: 0 };
+const empty = { name: "", sku: "", category_id: "", type: "makanan", price: 0, cost: 0, description: "", image: "", active: true, sold_out: false, stock: 0, min_stock: 10 };
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 
 export default function Products() {
@@ -31,7 +31,7 @@ export default function Products() {
     if (!form.name.trim() || !form.sku.trim()) return toast.error("Nama & SKU wajib");
     if (!form.category_id) return toast.error("Pilih kategori");
     try {
-      const payload = { ...form, price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock) };
+      const payload = { ...form, price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock), min_stock: Number(form.min_stock) };
       if (editId) await api.put(`/products/${editId}`, payload);
       else await api.post("/products", payload);
       toast.success("Produk tersimpan"); setOpen(false); load();
@@ -119,7 +119,7 @@ export default function Products() {
                 </td>
                 <td className="p-3">
                   <div className="flex gap-1 justify-end">
-                    <button data-testid={`edit-product-${p.id}`} onClick={() => { setForm(p); setEditId(p.id); setOpen(true); }} className="tap h-8 w-8 rounded-lg bg-[#F4F5F7] grid place-items-center"><Pencil size={14} /></button>
+                    <button data-testid={`edit-product-${p.id}`} onClick={() => { setForm({ ...empty, ...p, min_stock: p.min_stock ?? 10 }); setEditId(p.id); setOpen(true); }} className="tap h-8 w-8 rounded-lg bg-[#F4F5F7] grid place-items-center"><Pencil size={14} /></button>
                     <button data-testid={`delete-product-${p.id}`} onClick={() => del(p)} className="tap h-8 w-8 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center"><Trash2 size={14} /></button>
                   </div>
                 </td>
@@ -156,7 +156,10 @@ export default function Products() {
               <Field label={form.type === "retail" ? "Harga Beli" : "HPP (Modal)"}><input data-testid="prod-cost" type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
             </div>
             {form.type === "retail" && (
-              <Field label="Stok Awal"><input data-testid="prod-stock" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Stok Awal"><input data-testid="prod-stock" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+                <Field label="Ambang Stok Menipis"><input data-testid="prod-min-stock" type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+              </div>
             )}
             <Field label="Deskripsi">
               <div className="relative">

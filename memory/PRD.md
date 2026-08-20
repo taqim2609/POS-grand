@@ -46,13 +46,26 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (non-dine-in: tak
 - LIMITATION: true always-offline (even if device never loaded app online, or backend unreachable at boot) requires the local outlet server (Raspberry Pi/mini-PC) + local↔cloud sync layer — NOT yet built. AI stays on Emergent key for now.
 
 ## Backlog (P1/P2 — non-blocking)
-- Timezone: reports/shift bucket by UTC day; add WIB (UTC+7) offset for accurate Aceh day boundaries.
-- Login rate limiting/lockout.
-- POS portrait (<768px) layout guard / collapsible rails.
-- Replace native date inputs with shadcn Calendar on Dashboard/Transaksi.
-- Dialog aria-describedby a11y warnings.
-- Real hardware: Sunmi T2s printer + cash drawer integration (currently browser print). NOT IMPLEMENTED (cannot test in cloud).
-- Local+cloud hybrid sync / offline mode. NOT IMPLEMENTED (structural only; cloud env is single-node).
+- Timezone: DONE — reports/shift bucket by WIB (UTC+7).
+- Login rate limiting/lockout. (P1 — still pending)
+- Production config: strict CORS + move seed cashier creds to env. (P1 — pending)
+- Raspberry Pi docker-compose + local sync agent. (P2 — pending)
+- Sync history audit across devices. (P2 — pending)
+
+## Build 2 (2026-06) — added
+- AI provider migrated to custom OpenAI-compatible endpoint (base URL / model / API key). `_ai_cfg()` reads DB `settings._id=ai` override, falls back to `.env`.
+- Pengaturan AI page (`/settings-ai`, admin-only): edit Base URL / Model / API Key with security warning; blank key preserves existing key. Endpoints `GET/PUT /api/settings/ai`.
+- Per-product low-stock threshold: `ProductIn.min_stock` (default 10); Products form field for retail; Dashboard low-stock panel/banner use per-product threshold via aggregation ($ifNull fallback).
+- Weekly/Monthly sales trend chart (Dashboard "Tren Penjualan", `/reports/range`).
+- Profit margin per product in reports: `/reports/summary` top_products now returns cost/profit/margin; Dashboard "Produk Terlaris & Margin" table.
+- Date param validation on `wib_day_range` → 400 instead of 500 for malformed dates.
+- Dashboard: replaced duplicate "Total Penjualan" KPI with "Rata-rata per Order".
+
+## KNOWN ISSUE (needs user action)
+- AI provider key in `backend/.env` (`OPENAI_COMPAT_API_KEY`) returns HTTP 401 "Invalid token" at `https://www.chenzk.top/v1`. AI features (deskripsi/gambar/ringkasan) will fail until owner enters a VALID key in Pengaturan AI.
+
+## Verified (build 2)
+- Testing agent iteration_5: frontend 100% (all 4 features), backend 94% (16/17 new tests). Date-validation fix confirmed 400. AI 401 is a stale third-party key, not a code bug.
 
 ## Credentials
 See `/app/memory/test_credentials.md`. Admin: taqim2609@gmail.com / GrandAceh#2026. Kasir: kasir@grandaceh.com / kasir123.

@@ -26,6 +26,9 @@ EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 GEMINI_TEXT_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
 GEMINI_IMAGE_MODEL = os.environ.get('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image')
+OPENAI_COMPAT_BASE_URL = os.environ.get('OPENAI_COMPAT_BASE_URL')
+OPENAI_COMPAT_API_KEY = os.environ.get('OPENAI_COMPAT_API_KEY')
+OPENAI_COMPAT_MODEL = os.environ.get('OPENAI_COMPAT_MODEL') or 'gpt-4o-mini'
 
 app = FastAPI(title="Grand Aceh Kuliner POS")
 api = APIRouter(prefix="/api")
@@ -46,7 +49,10 @@ def wib_today():
 
 def wib_day_range(date_str):
     """Given a WIB calendar date 'YYYY-MM-DD', return (start_utc_iso, end_utc_iso)."""
-    start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=WIB)
+    try:
+        start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=WIB)
+    except (ValueError, TypeError):
+        raise HTTPException(400, f"Tanggal tidak valid: '{date_str}'. Gunakan format YYYY-MM-DD.")
     end = start + timedelta(days=1)
     return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
 
@@ -121,6 +127,7 @@ class ProductIn(BaseModel):
     active: bool = True
     sold_out: bool = False
     stock: Optional[int] = 0
+    min_stock: Optional[int] = 10
 
 class TableIn(BaseModel):
     name: str
@@ -645,16 +652,26 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
         total_discount += o.get("discount", 0)
         by_pm[o.get("payment_method_name", "?")] = by_pm.get(o.get("payment_method_name", "?"), 0) + o["total"]
         for it in o["items"]:
-            ps = product_sales.setdefault(it["name"], {"qty": 0, "total": 0})
+            ps = product_sales.setdefault(it["name"], {"qty": 0, "total": 0, "cost": 0})
             ps["qty"] += it["qty"]
             ps["total"] += it["price"] * it["qty"]
+            ps["cost"] += it.get("cost", 0) * it["qty"]
             total_cost += it.get("cost", 0) * it["qty"]
-    top = sorted([{"name": k, **v} for k, v in product_sales.items()], key=lambda x: x["total"], reverse=True)[:8]
+    top = []
+    for k, v in sorted(product_sales.items(), key=lambda x: x[1]["total"], reverse=True)[:8]:
+        profit = v["total"] - v["cost"]
+        margin = round(profit / v["total"] * 100, 1) if v["total"] else 0
+        top.append({"name": k, "qty": v["qty"], "total": round(v["total"], 2),
+                    "cost": round(v["cost"], 2), "profit": round(profit, 2), "margin": margin})
     fnb_total = by_type["dine_in"]["total"] + by_type["take_away"]["total"]
-    low_stock = await db.products.find(
-        {"track_stock": True, "active": True, "stock": {"$lte": LOW_STOCK_THRESHOLD}},
-        {"_id": 0, "name": 1, "sku": 1, "stock": 1}
-    ).sort("stock", 1).to_list(100)
+    low_stock = await db.products.aggregate([
+        {"$match": {"track_stock": True, "active": True}},
+        {"$addFields": {"eff_min": {"$ifNull": ["$min_stock", LOW_STOCK_THRESHOLD]}}},
+        {"$match": {"$expr": {"$lte": ["$stock", "$eff_min"]}}},
+        {"$project": {"_id": 0, "name": 1, "sku": 1, "stock": 1, "min_stock": "$eff_min"}},
+        {"$sort": {"stock": 1}},
+        {"$limit": 100},
+    ]).to_list(100)
     cash_moves = await db.cash_movements.find({"created_at": {"$gte": start, "$lt": end}}, {"_id": 0}).to_list(2000)
     cash_in = sum(m["amount"] for m in cash_moves if m["type"] == "in")
     cash_out = sum(m["amount"] for m in cash_moves if m["type"] == "out")
@@ -800,8 +817,30 @@ def _get_chat(session, system, model):
     from emergentintegrations.llm.chat import LlmChat
     return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
 
+async def _ai_cfg():
+    """AI provider config: DB settings (editable in UI) override .env."""
+    doc = await db.settings.find_one({"_id": "ai"}) or {}
+    return {
+        "base_url": doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL,
+        "api_key": doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY,
+        "model": doc.get("openai_model") or OPENAI_COMPAT_MODEL,
+    }
+
 async def _gemini_text(system, prompt):
-    """Text via user's own Gemini key (free tier) when set, else Emergent universal key."""
+    """Text via OpenAI-compatible provider if configured, else user's Gemini key, else Emergent."""
+    cfg = await _ai_cfg()
+    if cfg["api_key"] and cfg["base_url"]:
+        from openai import OpenAI
+
+        def run():
+            client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+            r = client.chat.completions.create(
+                model=cfg["model"],
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                temperature=0.5, max_tokens=800,
+            )
+            return (r.choices[0].message.content or "").strip()
+        return await asyncio.to_thread(run)
     if GEMINI_API_KEY:
         from google import genai
         from google.genai import types
@@ -848,6 +887,32 @@ async def _gemini_image(prompt):
         img = images[0]
         return f"data:{img['mime_type']};base64,{img['data']}"
     return None
+
+class AISettingsIn(BaseModel):
+    openai_base_url: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    openai_model: Optional[str] = None
+
+@api.get("/settings/ai")
+async def get_ai_settings(admin: dict = Depends(require_admin)):
+    doc = await db.settings.find_one({"_id": "ai"}) or {}
+    return {
+        "openai_base_url": doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL or "",
+        "openai_model": doc.get("openai_model") or (OPENAI_COMPAT_MODEL if OPENAI_COMPAT_API_KEY else ""),
+        "api_key_set": bool(doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY),
+    }
+
+@api.put("/settings/ai")
+async def put_ai_settings(body: AISettingsIn, admin: dict = Depends(require_admin)):
+    upd = {}
+    if body.openai_base_url is not None:
+        upd["openai_base_url"] = body.openai_base_url.strip()
+    if body.openai_model is not None:
+        upd["openai_model"] = body.openai_model.strip()
+    if body.openai_api_key:  # only overwrite key when a new one is provided
+        upd["openai_api_key"] = body.openai_api_key.strip()
+    await db.settings.update_one({"_id": "ai"}, {"$set": upd}, upsert=True)
+    return {"ok": True}
 
 @api.post("/ai/product-description")
 async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):
