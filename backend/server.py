@@ -5,7 +5,7 @@ import os
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1175,6 +1175,172 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
     except Exception as e:
         logger.error(f"AI summary error: {e}")
         raise HTTPException(500, f"AI ringkasan gagal: {e}")
+
+# ================================================================== REPORT EXPORT & WHATSAPP
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+TWILIO_WHATSAPP_FROM = os.environ.get('TWILIO_WHATSAPP_FROM')
+WEBHOOK_CRON_SECRET = os.environ.get('WEBHOOK_CRON_SECRET')
+
+def _report_lines(d, s, ai_text=None):
+    cr = s.get("category_report", {})
+    L = ["*Laporan Grand Aceh Kuliner*", f"Tanggal: {d}", "",
+         f"Total Penjualan: Rp{s['total_sales']:,.0f}",
+         f"Jumlah Order: {s['order_count']}",
+         f"Laba Kotor: Rp{s['gross_profit']:,.0f}",
+         f"Total Diskon: Rp{s['total_discount']:,.0f}", "",
+         "Per Kategori:",
+         f"- Makanan: Rp{cr.get('makanan', {}).get('total', 0):,.0f}",
+         f"- Minuman: Rp{cr.get('minuman', {}).get('total', 0):,.0f}",
+         f"- Retail: Rp{cr.get('retail', {}).get('total', 0):,.0f}"]
+    if s.get("by_payment"):
+        L += ["", "Metode Bayar:"] + [f"- {k}: Rp{v:,.0f}" for k, v in s["by_payment"].items()]
+    if s.get("top_products"):
+        L += ["", "Produk Terlaris:"] + [f"- {p['name']} (x{p['qty']})" for p in s["top_products"][:5]]
+    if ai_text:
+        L += ["", "Analisis AI:", ai_text]
+    return L
+
+def _report_excel(d, s):
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Laporan"
+    for ln in _report_lines(d, s):
+        ws.append([ln.replace("*", "")])
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf
+
+def _report_pdf(d, s, ai_text=None):
+    from fpdf import FPDF
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", size=12)
+    for ln in _report_lines(d, s, ai_text):
+        txt = ln.replace("*", "").encode("latin-1", "replace").decode("latin-1")
+        pdf.multi_cell(pdf.epw, 7, txt or " ")
+    return io.BytesIO(bytes(pdf.output()))
+
+@api.get("/reports/export/excel")
+async def export_report_excel(date_str: Optional[str] = Query(None, alias="date"), user: dict = Depends(get_current_user)):
+    d = date_str or wib_today()
+    s = await report_summary(date_str=d, admin=user)
+    return StreamingResponse(_report_excel(d, s), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=laporan-{d}.xlsx"})
+
+@api.get("/reports/export/pdf")
+async def export_report_pdf(date_str: Optional[str] = Query(None, alias="date"), user: dict = Depends(get_current_user)):
+    d = date_str or wib_today()
+    s = await report_summary(date_str=d, admin=user)
+    return StreamingResponse(_report_pdf(d, s), media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=laporan-{d}.pdf"})
+
+class ReportSettingsIn(BaseModel):
+    whatsapp_enabled: bool = False
+    whatsapp_time: str = "22:00"
+    recipients: List[str] = []
+    include_ai: bool = True
+
+@api.get("/settings/report")
+async def get_report_settings(admin: dict = Depends(require_admin)):
+    doc = await db.settings.find_one({"_id": "report"}, {"_id": 0}) or {}
+    return {
+        "whatsapp_enabled": doc.get("whatsapp_enabled", False),
+        "whatsapp_time": doc.get("whatsapp_time", "22:00"),
+        "recipients": doc.get("recipients", []),
+        "include_ai": doc.get("include_ai", True),
+        "whatsapp_configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM),
+        "last_sent_date": doc.get("last_sent_date"),
+    }
+
+@api.put("/settings/report")
+async def put_report_settings(body: ReportSettingsIn, admin: dict = Depends(require_admin)):
+    await db.settings.update_one({"_id": "report"}, {"$set": {
+        "whatsapp_enabled": body.whatsapp_enabled, "whatsapp_time": body.whatsapp_time,
+        "recipients": [r.strip() for r in body.recipients if r.strip()], "include_ai": body.include_ai,
+    }}, upsert=True)
+    return {"ok": True}
+
+async def _send_whatsapp(recipients, text):
+    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM):
+        raise HTTPException(400, "WhatsApp belum dikonfigurasi. Isi kredensial Twilio di server.")
+    from twilio.rest import Client
+    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    frm = TWILIO_WHATSAPP_FROM if TWILIO_WHATSAPP_FROM.startswith("whatsapp:") else f"whatsapp:{TWILIO_WHATSAPP_FROM}"
+
+    def send_one(to):
+        num = to if to.startswith("whatsapp:") else f"whatsapp:{to}"
+        return client.messages.create(from_=frm, to=num, body=text)
+    out = []
+    for to in recipients:
+        try:
+            msg = await asyncio.to_thread(send_one, to)
+            out.append({"to": to, "sid": msg.sid, "ok": True})
+        except Exception as e:
+            out.append({"to": to, "ok": False, "error": str(e)})
+    return out
+
+class WhatsAppSendIn(BaseModel):
+    date: Optional[str] = None
+    recipients: Optional[List[str]] = None
+
+@api.post("/reports/send-whatsapp")
+async def send_report_whatsapp(body: WhatsAppSendIn, admin: dict = Depends(require_admin)):
+    d = body.date or wib_today()
+    s = await report_summary(date_str=d, admin=admin)
+    doc = await db.settings.find_one({"_id": "report"}) or {}
+    recips = body.recipients or doc.get("recipients", [])
+    if not recips:
+        raise HTTPException(400, "Belum ada nomor WhatsApp tujuan. Atur di Pengaturan.")
+    ai_text = None
+    if doc.get("include_ai", True):
+        try:
+            r = await ai_summary(AISummaryIn(date=d), admin=admin)
+            ai_text = r.get("summary")
+        except Exception:
+            ai_text = None
+    text = "\n".join(_report_lines(d, s, ai_text))
+    result = await _send_whatsapp(recips, text)
+    if not any(r.get("ok") for r in result):
+        raise HTTPException(400, f"Gagal kirim WhatsApp: {result[0].get('error') if result else 'tidak diketahui'}")
+    return {"sent": result}
+
+async def _run_daily_report_job():
+    doc = await db.settings.find_one({"_id": "report"}) or {}
+    if not doc.get("whatsapp_enabled") or not doc.get("recipients"):
+        return
+    noww = datetime.now(WIB)
+    try:
+        target_hour = int(str(doc.get("whatsapp_time", "22:00")).split(":")[0])
+    except Exception:
+        target_hour = 22
+    if noww.hour != target_hour:
+        return
+    today = noww.strftime("%Y-%m-%d")
+    if doc.get("last_sent_date") == today:
+        return
+    s = await report_summary(date_str=today, admin={"role": "admin", "id": "cron"})
+    ai_text = None
+    if doc.get("include_ai", True):
+        try:
+            r = await ai_summary(AISummaryIn(date=today), admin={"role": "admin", "id": "cron"})
+            ai_text = r.get("summary")
+        except Exception:
+            pass
+    text = "\n".join(_report_lines(today, s, ai_text))
+    try:
+        await _send_whatsapp(doc["recipients"], text)
+        await db.settings.update_one({"_id": "report"}, {"$set": {"last_sent_date": today}}, upsert=True)
+        logger.info(f"Daily WA report sent for {today}")
+    except Exception as e:
+        logger.error(f"Daily WA report failed: {e}")
+
+@api.post("/cron/daily-report")
+async def cron_daily_report(request: Request, background: BackgroundTasks):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    import hmac as _hmac
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not (WEBHOOK_CRON_SECRET and _hmac.compare_digest(token, WEBHOOK_CRON_SECRET)):
+        raise HTTPException(401, "unauthorized")
+    background.add_task(_run_daily_report_job)
+    return {"ok": True}
 
 # ================================================================== EXCEL
 IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "harga_beli", "status_aktif", "sold_out", "deskripsi", "stok_awal"]

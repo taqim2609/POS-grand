@@ -23,6 +23,17 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Margin profit per produk di laporan (/reports/summary top_products: cost/profit/margin).
 - Validasi tanggal wib_day_range (400). KPI "Rata-rata per Order".
 
+## Build 7 (2026-06) — Ekspor, Laporan Terjadwal & WhatsApp
+- Ekspor laporan: `GET /api/reports/export/excel` & `/pdf` (openpyxl + fpdf2). Tombol Excel/PDF di Dashboard (unduh via blob).
+- WhatsApp (Twilio): `POST /api/reports/send-whatsapp` kirim laporan teks (total, per kategori, metode bayar, produk terlaris, + analisis AI opsional). Tombol "Kirim WhatsApp" di Dashboard.
+- Pengaturan Laporan & WA (tab baru di Pengaturan): aktif/nonaktif, jam kirim (WIB), daftar nomor, sertakan AI. `GET/PUT /api/settings/report`.
+- Laporan terjadwal: cron `.emergent/crons.yml` (hourly `0 * * * *`) → `POST /api/cron/daily-report` (auth WEBHOOK_CRON_SECRET, ack cepat + background). Job cek jam WIB == jam setelan & idempoten per hari (last_sent_date).
+- Env baru di backend/.env: WEBHOOK_CRON_SECRET (terisi), TWILIO_ACCOUNT_SID/AUTH_TOKEN/WHATSAPP_FROM (kosong — diisi user).
+- Verified via curl: excel 200, pdf 200 (%PDF), settings GET/PUT, send-whatsapp 400 saat Twilio belum diisi, cron 401 tanpa secret / 200 dengan secret, crons.yml valid.
+
+## KETERGANTUNGAN USER (WhatsApp)
+- Isi TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM (mis. `whatsapp:+14155238886` sandbox) di backend/.env agar kirim WA aktif. Sebelum diisi, tombol/kirim WA mengembalikan 400 "WhatsApp belum dikonfigurasi".
+
 ## Build 6 (2026-06) — Kasir & laporan besar
 - Barcode/SKU di POS tab Retail: ketik/scan kode + Enter → produk masuk keranjang (match SKU client-side); tidak ketemu → toast error. Hanya tab Retail.
 - Input pembelian via FOTO faktur (AI vision): `POST /api/ai/parse-invoice` (fitur AI 'vision', gagal → 400 agar detail lolos ingress). UI di Persediaan > Pembelian > "Scan Faktur (AI)": unggah/foto → baca AI → daftar item editable → cocokkan ke produk retail / buat baru / lewati → simpan (bulk purchase + auto-create produk).

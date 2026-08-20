@@ -4,7 +4,7 @@ import { rupiah, ORDER_TYPE_LABEL, wibToday } from "@/lib/format";
 import { toast } from "sonner";
 import {
   LayoutDashboard, TrendingUp, Utensils, ShoppingBag, Store,
-  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX, Coins, Wallet,
+  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX, Coins, Wallet, MessageCircle,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, LineChart, Line, CartesianGrid } from "recharts";
 
@@ -108,6 +108,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [ai, setAi] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [waLoading, setWaLoading] = useState(false);
 
   const load = useCallback(
     () => api.get("/reports/summary", { params: { date } }).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e.response?.data?.detail))),
@@ -119,6 +120,23 @@ export default function Dashboard() {
     setAiLoading(true);
     try { const { data } = await api.post("/reports/ai-summary", { date }); setAi(data.summary); }
     catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setAiLoading(false); }
+  };
+
+  const download = async (fmt) => {
+    try {
+      const res = await api.get(`/reports/export/${fmt}`, { params: { date }, responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = `laporan-${date}.${fmt === "excel" ? "xlsx" : "pdf"}`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch (e) { toast.error("Gagal mengunduh laporan"); }
+  };
+  const sendWa = async () => {
+    setWaLoading(true);
+    try {
+      const { data } = await api.post("/reports/send-whatsapp", { date });
+      toast.success(`Laporan terkirim ke WhatsApp (${data.sent.filter((x) => x.ok).length} nomor)`);
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setWaLoading(false); }
   };
 
   if (!data) return <div className="h-full grid place-items-center"><Loader2 className="animate-spin text-[#E63946]" /></div>;
@@ -135,7 +153,14 @@ export default function Dashboard() {
     <div className="h-full overflow-y-auto p-8">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-3xl font-extrabold flex items-center gap-2"><LayoutDashboard /> Dashboard</h1>
-        <input data-testid="report-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 rounded-xl border px-3 font-num bg-white" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <input data-testid="report-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 rounded-xl border px-3 font-num bg-white" />
+          <button data-testid="export-excel-btn" onClick={() => download("excel")} className="tap h-11 px-4 rounded-xl bg-white border font-bold text-sm">Excel</button>
+          <button data-testid="export-pdf-btn" onClick={() => download("pdf")} className="tap h-11 px-4 rounded-xl bg-white border font-bold text-sm">PDF</button>
+          <button data-testid="send-wa-btn" onClick={sendWa} disabled={waLoading} className="tap h-11 px-4 rounded-xl bg-[#25D366] hover:bg-[#1EBE5B] text-white font-bold text-sm flex items-center gap-2 disabled:opacity-60">
+            {waLoading ? <Loader2 size={15} className="animate-spin" /> : <MessageCircle size={15} />} Kirim WhatsApp
+          </button>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-4 gap-4 mb-4">

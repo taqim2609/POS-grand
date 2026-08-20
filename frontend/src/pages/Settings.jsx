@@ -3,12 +3,14 @@ import UsersPage from "@/pages/Users";
 import Tables from "@/pages/Tables";
 import SettingsAI from "@/pages/SettingsAI";
 import SettingsData from "@/pages/SettingsData";
-import { Users, Armchair, Sparkles, Trash2 } from "lucide-react";
+import SettingsReport from "@/pages/SettingsReport";
+import { Users, Armchair, Sparkles, Trash2, MessageCircle } from "lucide-react";
 
 const TABS = [
   { key: "users", label: "Pengguna", icon: Users, comp: UsersPage },
   { key: "tables", label: "Meja", icon: Armchair, comp: Tables },
   { key: "ai", label: "Pengaturan AI", icon: Sparkles, comp: SettingsAI },
+  { key: "report", label: "Laporan & WA", icon: MessageCircle, comp: SettingsReport },
   { key: "data", label: "Reset Data", icon: Trash2, comp: SettingsData },
 ];
 
