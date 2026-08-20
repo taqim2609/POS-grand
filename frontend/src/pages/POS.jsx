@@ -64,6 +64,7 @@ export default function POS() {
         toast.info("Mode offline: memakai data produk tersimpan");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only stable refs (api/setters/toast) used
   }, []);
 
   useEffect(() => { load(); }, [load]);

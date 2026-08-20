@@ -23,6 +23,7 @@ export default function Products() {
   const [importOpen, setImportOpen] = useState(false);
 
   const load = () => Promise.all([api.get("/products"), api.get("/categories")]).then(([p, c]) => { setItems(p.data); setCats(c.data); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   const catCandidates = cats.filter((c) => c.type === form.type && c.active);

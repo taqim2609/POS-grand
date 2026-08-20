@@ -12,6 +12,7 @@ export default function UsersPage() {
   const [form, setForm] = useState(empty);
 
   const load = () => api.get("/users").then((r) => setItems(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   const save = async () => {

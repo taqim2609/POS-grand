@@ -13,6 +13,7 @@ export default function Shift() {
 
   const load = () =>
     api.get("/shifts/current").then((r) => setShift(r.data)).finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   const open = async () => {

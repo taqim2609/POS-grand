@@ -20,6 +20,7 @@ export default function Orders() {
   const [action, setAction] = useState("void");
 
   const load = () => api.get("/orders", { params: { date, order_type: fType || undefined } }).then((r) => setOrders(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch on filter change
   useEffect(() => { load(); }, [date, fType]);
 
   const doVoid = async () => {

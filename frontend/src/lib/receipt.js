@@ -86,7 +86,9 @@ export function printReceipt(order) {
   </body></html>`;
   const w = window.open("", "_blank", "width=360,height=640");
   if (w) {
-    w.document.write(html);
-    w.document.close();
+    // Avoid document.write: load escaped HTML via a same-origin Blob URL
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    w.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 }
