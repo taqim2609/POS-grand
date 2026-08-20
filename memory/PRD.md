@@ -61,8 +61,15 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (non-dine-in: tak
 - Date param validation on `wib_day_range` → 400 instead of 500 for malformed dates.
 - Dashboard: replaced duplicate "Total Penjualan" KPI with "Rata-rata per Order".
 
+## Build 3 (2026-06) — Pengaturan AI per-fungsi
+- AI Settings redesigned to PER-FEATURE config (Deskripsi / Gambar / Analisis), each with own Base URL, API Key, Model. Stored under `settings._id=ai` → `features.{feature}.{base_url,api_key,model}`; falls back to legacy flat + `.env`.
+- `_ai_cfg(feature)` resolves per-feature; description/summary use chat completions, image uses OpenAI-compatible `/images/generations` ONLY when the image feature is fully configured (else Gemini/Emergent). Image never inherits the legacy text model.
+- Endpoints: `GET /api/settings/ai` → `{features:{...,api_key_last4 masked}}`; `PUT /api/settings/ai` `{feature,base_url,api_key?,model}` (blank key preserved); `GET /api/settings/ai/credit?feature=` best-effort remaining-credit via provider billing endpoints (graceful message if unsupported).
+- Frontend: 3 feature cards + security/cost warning + per-feature "Cek Sisa Kredit" button + masked key status badge.
+- Verified: testing agent iteration_6 = frontend 100% (5/5); backend curl-verified. Cleaned leftover test data.
+
 ## KNOWN ISSUE (needs user action)
-- AI provider key in `backend/.env` (`OPENAI_COMPAT_API_KEY`) returns HTTP 401 "Invalid token" at `https://www.chenzk.top/v1`. AI features (deskripsi/gambar/ringkasan) will fail until owner enters a VALID key in Pengaturan AI.
+- AI provider key returns HTTP 401 "Invalid token" — owner must enter a VALID key per feature in Pengaturan AI. Until then AI generation + credit check will fail (expected).
 
 ## Verified (build 2)
 - Testing agent iteration_5: frontend 100% (all 4 features), backend 94% (16/17 new tests). Date-validation fix confirmed 400. AI 401 is a stale third-party key, not a code bug.

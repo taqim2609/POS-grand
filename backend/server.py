@@ -817,18 +817,22 @@ def _get_chat(session, system, model):
     from emergentintegrations.llm.chat import LlmChat
     return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
 
-async def _ai_cfg():
-    """AI provider config: DB settings (editable in UI) override .env."""
+AI_FEATURES = {"description": "Deskripsi Produk", "image": "Gambar Produk", "summary": "Analisis Laporan"}
+
+async def _ai_cfg(feature="description"):
+    """Per-feature AI provider config: DB settings (editable in UI) override .env.
+    Fallback order: feature-specific -> legacy flat -> .env defaults."""
     doc = await db.settings.find_one({"_id": "ai"}) or {}
+    feat = (doc.get("features", {}) or {}).get(feature, {}) or {}
     return {
-        "base_url": doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL,
-        "api_key": doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY,
-        "model": doc.get("openai_model") or OPENAI_COMPAT_MODEL,
+        "base_url": feat.get("base_url") or doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL,
+        "api_key": feat.get("api_key") or doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY,
+        "model": feat.get("model") or doc.get("openai_model") or OPENAI_COMPAT_MODEL,
     }
 
-async def _gemini_text(system, prompt):
+async def _gemini_text(system, prompt, feature="description"):
     """Text via OpenAI-compatible provider if configured, else user's Gemini key, else Emergent."""
-    cfg = await _ai_cfg()
+    cfg = await _ai_cfg(feature)
     if cfg["api_key"] and cfg["base_url"]:
         from openai import OpenAI
 
@@ -858,7 +862,22 @@ async def _gemini_text(system, prompt):
     return (await chat.send_message(UserMessage(text=prompt))).strip()
 
 async def _gemini_image(prompt):
-    """Image via user's own Gemini key when set, else Emergent universal key."""
+    """Image via OpenAI-compatible image endpoint (only when explicitly configured for 'image'),
+    else user's own Gemini key, else Emergent universal key."""
+    doc = await db.settings.find_one({"_id": "ai"}) or {}
+    feat = (doc.get("features", {}) or {}).get("image", {}) or {}
+    if feat.get("api_key") and feat.get("base_url") and feat.get("model"):
+        from openai import OpenAI
+
+        def run():
+            client = OpenAI(api_key=feat["api_key"], base_url=feat["base_url"])
+            r = client.images.generate(model=feat["model"], prompt=prompt, n=1, size="1024x1024")
+            d = r.data[0]
+            b64 = getattr(d, "b64_json", None)
+            if b64:
+                return f"data:image/png;base64,{b64}"
+            return getattr(d, "url", None)
+        return await asyncio.to_thread(run)
     if GEMINI_API_KEY:
         from google import genai
         from google.genai import types
@@ -889,37 +908,87 @@ async def _gemini_image(prompt):
     return None
 
 class AISettingsIn(BaseModel):
-    openai_base_url: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    openai_model: Optional[str] = None
+    feature: Literal["description", "image", "summary"]
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+
+def _mask_key(k):
+    if not k:
+        return ""
+    return "••••" + k[-4:] if len(k) >= 4 else "••••"
 
 @api.get("/settings/ai")
 async def get_ai_settings(admin: dict = Depends(require_admin)):
     doc = await db.settings.find_one({"_id": "ai"}) or {}
-    return {
-        "openai_base_url": doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL or "",
-        "openai_model": doc.get("openai_model") or (OPENAI_COMPAT_MODEL if OPENAI_COMPAT_API_KEY else ""),
-        "api_key_set": bool(doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY),
-    }
+    feats = doc.get("features", {}) or {}
+    out = {}
+    for key, label in AI_FEATURES.items():
+        f = feats.get(key, {}) or {}
+        if key == "image":
+            # Image generation only activates with explicit per-feature config;
+            # never fall back to the legacy/env text model (not a valid image model).
+            akey = f.get("api_key")
+            base = f.get("base_url") or ""
+            model = f.get("model") or ""
+        else:
+            akey = f.get("api_key") or doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY
+            base = f.get("base_url") or doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL or ""
+            model = f.get("model") or doc.get("openai_model") or (OPENAI_COMPAT_MODEL if akey else "") or ""
+        out[key] = {"label": label, "base_url": base, "model": model,
+                    "api_key_set": bool(akey), "api_key_last4": _mask_key(akey)}
+    return {"features": out}
 
 @api.put("/settings/ai")
 async def put_ai_settings(body: AISettingsIn, admin: dict = Depends(require_admin)):
     upd = {}
-    if body.openai_base_url is not None:
-        upd["openai_base_url"] = body.openai_base_url.strip()
-    if body.openai_model is not None:
-        upd["openai_model"] = body.openai_model.strip()
-    if body.openai_api_key:  # only overwrite key when a new one is provided
-        upd["openai_api_key"] = body.openai_api_key.strip()
-    await db.settings.update_one({"_id": "ai"}, {"$set": upd}, upsert=True)
+    if body.base_url is not None:
+        upd[f"features.{body.feature}.base_url"] = body.base_url.strip()
+    if body.model is not None:
+        upd[f"features.{body.feature}.model"] = body.model.strip()
+    if body.api_key:  # only overwrite key when a new one is provided
+        upd[f"features.{body.feature}.api_key"] = body.api_key.strip()
+    if upd:
+        await db.settings.update_one({"_id": "ai"}, {"$set": upd}, upsert=True)
     return {"ok": True}
+
+@api.get("/settings/ai/credit")
+async def ai_credit(feature: str = "description", admin: dict = Depends(require_admin)):
+    """Best-effort remaining credit lookup via OpenAI-compatible billing endpoints."""
+    import httpx, datetime as _dt
+    cfg = await _ai_cfg(feature)
+    if not (cfg["api_key"] and cfg["base_url"]):
+        return {"available": False, "message": "Konfigurasi belum lengkap untuk fitur ini."}
+    base = cfg["base_url"].rstrip("/")
+    headers = {"Authorization": f"Bearer {cfg['api_key']}"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            sub = await client.get(f"{base}/dashboard/billing/subscription", headers=headers)
+            if sub.status_code != 200:
+                return {"available": False, "message": f"Provider tidak menyediakan info kredit (HTTP {sub.status_code})."}
+            s = sub.json()
+            total = s.get("hard_limit_usd") or s.get("system_hard_limit_usd") or 0
+            used = 0.0
+            try:
+                end = _dt.date.today() + _dt.timedelta(days=1)
+                start = end - _dt.timedelta(days=100)
+                u = await client.get(f"{base}/dashboard/billing/usage", headers=headers,
+                                     params={"start_date": str(start), "end_date": str(end)})
+                if u.status_code == 200:
+                    used = (u.json().get("total_usage") or 0) / 100.0
+            except Exception:
+                pass
+            return {"available": True, "total": round(float(total), 2), "used": round(used, 2),
+                    "remaining": round(float(total) - used, 2), "currency": "USD"}
+    except Exception as e:
+        return {"available": False, "message": f"Gagal cek kredit: {e}"}
 
 @api.post("/ai/product-description")
 async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):
     try:
         system = "Anda copywriter menu F&B & retail Indonesia. Tulis deskripsi produk singkat, menggugah selera, maksimal 2 kalimat, bahasa Indonesia. Jangan pakai emoji."
         prompt = f"Produk: {body.name}\nTipe: {body.type}\nKategori: {body.category}\nKata kunci: {body.keywords}\nTulis deskripsi produk."
-        text = await _gemini_text(system, prompt)
+        text = await _gemini_text(system, prompt, "description")
         return {"description": text}
     except Exception as e:
         logger.error(f"AI desc error: {e}")
@@ -957,7 +1026,7 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
                   f"Total diskon: Rp{summary['total_discount']:,.0f}\n"
                   f"Produk terlaris: {', '.join(p['name'] for p in summary['top_products'][:5])}\n"
                   f"Buat ringkasan analitik.")
-        text = await _gemini_text(system, prompt)
+        text = await _gemini_text(system, prompt, "summary")
         return {"date": d, "summary": text, "data": summary}
     except Exception as e:
         logger.error(f"AI summary error: {e}")
