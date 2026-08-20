@@ -54,7 +54,7 @@ function OfflineStatus({ onOpenQueue }) {
 }
 
 function SyncQueueDialog({ open, onClose }) {
-  const { pending, online, syncNow, retryOne, syncing } = useOffline();
+  const { pending, online, syncNow, retryOne, syncing, syncLog, clearSyncLog } = useOffline();
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
@@ -89,6 +89,32 @@ function SyncQueueDialog({ open, onClose }) {
             )}
           </>
         )}
+        <div className="mt-4 border-t pt-3" data-testid="sync-history">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-extrabold text-sm">Riwayat Sinkron</h4>
+            {syncLog.length > 0 && (
+              <button data-testid="clear-history-btn" onClick={clearSyncLog} className="text-[11px] font-bold text-[#EF4444] hover:underline">Bersihkan</button>
+            )}
+          </div>
+          {syncLog.length === 0 ? (
+            <p className="text-xs text-[#a1a1aa]">Belum ada riwayat sinkron.</p>
+          ) : (
+            <div className="max-h-40 overflow-y-auto space-y-2">
+              {syncLog.map((e, idx) => (
+                <div key={idx} data-testid="history-item" className="rounded-lg bg-[#F4F5F7] p-2.5">
+                  <div className="text-xs font-bold text-[#047857]">
+                    {e.ok} transaksi disinkron <span className="text-[#52525B] font-normal font-num">· {new Date(e.at).toLocaleString("id-ID")}</span>
+                  </div>
+                  {e.items.map((it) => (
+                    <div key={it.client_ref} className="text-[11px] text-[#52525B] font-num mt-0.5 truncate">
+                      {it.client_ref} → <span className="font-bold text-[#0A0A0A]">{it.order_number || "-"}</span> · {rupiah(it.total || 0)}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

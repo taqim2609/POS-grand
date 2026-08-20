@@ -3,12 +3,14 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 
 const KEY = "gak_pending_orders";
+const LOG_KEY = "gak_sync_log";
 const OfflineContext = createContext(null);
 
 export function OfflineProvider({ children }) {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [pending, setPending] = useState(() => JSON.parse(localStorage.getItem(KEY) || "[]"));
   const [syncing, setSyncing] = useState(false);
+  const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem(LOG_KEY) || "[]"));
 
   const persist = (list) => {
     localStorage.setItem(KEY, JSON.stringify(list));
@@ -32,11 +34,13 @@ export function OfflineProvider({ children }) {
   const _syncItems = useCallback(async (items) => {
     const map = new Map(JSON.parse(localStorage.getItem(KEY) || "[]").map((i) => [i.temp_id, i]));
     let ok = 0;
+    const done = [];
     for (const item of items) {
       try {
-        await api.post("/orders", item.payload); // idempotent via client_ref
+        const res = await api.post("/orders", item.payload); // idempotent via client_ref
         map.delete(item.temp_id);
         ok++;
+        done.push({ client_ref: item.temp_id, order_number: res.data?.order_number, total: item.meta?.total || 0, status: "ok" });
       } catch (e) {
         const cur = map.get(item.temp_id);
         if (cur) {
@@ -46,7 +50,15 @@ export function OfflineProvider({ children }) {
       }
     }
     persist(Array.from(map.values()));
-    if (ok) window.dispatchEvent(new Event("gak-synced")); // trigger cache refresh after successful upload
+    if (done.length) {
+      // record sync history + reconcile offline receipt numbers to official server numbers
+      const log = JSON.parse(localStorage.getItem(LOG_KEY) || "[]");
+      log.unshift({ at: new Date().toISOString(), ok: done.length, items: done });
+      const trimmed = log.slice(0, 50);
+      localStorage.setItem(LOG_KEY, JSON.stringify(trimmed));
+      setSyncLog(trimmed);
+      window.dispatchEvent(new Event("gak-synced")); // refresh cached master data after upload
+    }
     return ok;
   }, []);
 
@@ -71,6 +83,11 @@ export function OfflineProvider({ children }) {
     else toast.error("Masih gagal disinkron");
   }, [_syncItems]);
 
+  const clearSyncLog = useCallback(() => {
+    localStorage.removeItem(LOG_KEY);
+    setSyncLog([]);
+  }, []);
+
   useEffect(() => {
     const goOnline = () => { setOnline(true); syncNow(); };
     const goOffline = () => setOnline(false);
@@ -84,7 +101,7 @@ export function OfflineProvider({ children }) {
   }, [syncNow]);
 
   return (
-    <OfflineContext.Provider value={{ online, pending, pendingCount: pending.length, syncing, addPending, syncNow, retryOne }}>
+    <OfflineContext.Provider value={{ online, pending, pendingCount: pending.length, syncing, addPending, syncNow, retryOne, syncLog, clearSyncLog }}>
       {children}
     </OfflineContext.Provider>
   );
