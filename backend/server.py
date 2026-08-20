@@ -13,7 +13,7 @@ from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, date, timedelta
-import logging, uuid, io, bcrypt, jwt
+import logging, uuid, io, bcrypt, jwt, asyncio
 
 # ------------------------------------------------------------------ DB
 mongo_url = os.environ['MONGO_URL']
@@ -23,6 +23,9 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALG = "HS256"
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+GEMINI_TEXT_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+GEMINI_IMAGE_MODEL = os.environ.get('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image')
 
 app = FastAPI(title="Grand Aceh Kuliner POS")
 api = APIRouter(prefix="/api")
@@ -797,36 +800,81 @@ def _get_chat(session, system, model):
     from emergentintegrations.llm.chat import LlmChat
     return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
 
+async def _gemini_text(system, prompt):
+    """Text via user's own Gemini key (free tier) when set, else Emergent universal key."""
+    if GEMINI_API_KEY:
+        from google import genai
+        from google.genai import types
+
+        def run():
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            r = client.models.generate_content(
+                model=GEMINI_TEXT_MODEL, contents=f"{system}\n\n{prompt}",
+                config=types.GenerateContentConfig(temperature=0.5, max_output_tokens=800),
+            )
+            return (r.text or "").strip()
+        return await asyncio.to_thread(run)
+    from emergentintegrations.llm.chat import UserMessage
+    chat = _get_chat(new_id(), system, "gemini-2.5-flash")
+    return (await chat.send_message(UserMessage(text=prompt))).strip()
+
+async def _gemini_image(prompt):
+    """Image via user's own Gemini key when set, else Emergent universal key."""
+    if GEMINI_API_KEY:
+        from google import genai
+        from google.genai import types
+        import base64
+
+        def run():
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            r = client.models.generate_content(
+                model=GEMINI_IMAGE_MODEL, contents=prompt,
+                config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
+            )
+            for cand in (r.candidates or []):
+                for part in (cand.content.parts or []):
+                    inline = getattr(part, "inline_data", None)
+                    if inline and inline.data:
+                        data = inline.data
+                        b64 = base64.b64encode(data).decode() if isinstance(data, (bytes, bytearray)) else data
+                        return f"data:{inline.mime_type or 'image/png'};base64,{b64}"
+            return None
+        return await asyncio.to_thread(run)
+    from emergentintegrations.llm.chat import UserMessage
+    chat = _get_chat(new_id(), "You are a professional food & product photographer.",
+                     "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+    _, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
+    if images:
+        img = images[0]
+        return f"data:{img['mime_type']};base64,{img['data']}"
+    return None
+
 @api.post("/ai/product-description")
 async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):
-    from emergentintegrations.llm.chat import UserMessage
     try:
-        chat = _get_chat(new_id(),
-                         "Anda copywriter menu F&B & retail Indonesia. Tulis deskripsi produk singkat, menggugah selera, maksimal 2 kalimat, bahasa Indonesia. Jangan pakai emoji.",
-                         "gemini-2.5-flash")
+        system = "Anda copywriter menu F&B & retail Indonesia. Tulis deskripsi produk singkat, menggugah selera, maksimal 2 kalimat, bahasa Indonesia. Jangan pakai emoji."
         prompt = f"Produk: {body.name}\nTipe: {body.type}\nKategori: {body.category}\nKata kunci: {body.keywords}\nTulis deskripsi produk."
-        text = await chat.send_message(UserMessage(text=prompt))
-        return {"description": text.strip()}
+        text = await _gemini_text(system, prompt)
+        return {"description": text}
     except Exception as e:
         logger.error(f"AI desc error: {e}")
         raise HTTPException(500, f"AI gagal: {e}")
 
 @api.post("/ai/product-image")
 async def ai_image(body: AIImageIn, admin: dict = Depends(require_admin)):
-    from emergentintegrations.llm.chat import UserMessage
     try:
-        chat = _get_chat(new_id(), "You are a professional food & product photographer.",
-                         "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
         prompt = f"Professional appetizing product photo of '{body.name}'. {body.description}. Clean studio background, top menu photography, high detail, no text overlay."
-        text, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
-        if not images:
+        image = await _gemini_image(prompt)
+        if not image:
             raise HTTPException(500, "Tidak ada gambar dihasilkan")
-        img = images[0]
-        return {"image": f"data:{img['mime_type']};base64,{img['data']}"}
+        return {"image": image}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"AI image error: {e}")
+        msg = str(e)
+        if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
+            raise HTTPException(429, "Gambar AI belum aktif di akun Gemini Anda (kuota gambar free tier = 0). Aktifkan billing di Google Cloud/AI Studio untuk memakainya, atau unggah gambar produk secara manual.")
         raise HTTPException(500, f"AI gambar gagal: {e}")
 
 @api.post("/reports/ai-summary")
@@ -835,9 +883,7 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
     d = body.date or now_utc().strftime("%Y-%m-%d")
     summary = await report_summary(date_str=d, admin=admin)
     try:
-        chat = _get_chat(new_id(),
-                         "Anda analis bisnis F&B. Beri ringkasan penjualan harian yang tegas dan actionable dalam bahasa Indonesia. Format: 3-4 poin insight + 1 rekomendasi. Tanpa emoji.",
-                         "gemini-2.5-flash")
+        system = "Anda analis bisnis F&B. Beri ringkasan penjualan harian yang tegas dan actionable dalam bahasa Indonesia. Format: 3-4 poin insight + 1 rekomendasi. Tanpa emoji."
         prompt = (f"Data penjualan {d}:\n"
                   f"Total: Rp{summary['total_sales']:,.0f}, {summary['order_count']} order.\n"
                   f"Dine-in: Rp{summary['by_type']['dine_in']['total']:,.0f} ({summary['by_type']['dine_in']['count']} order)\n"
@@ -846,8 +892,8 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
                   f"Total diskon: Rp{summary['total_discount']:,.0f}\n"
                   f"Produk terlaris: {', '.join(p['name'] for p in summary['top_products'][:5])}\n"
                   f"Buat ringkasan analitik.")
-        text = await chat.send_message(UserMessage(text=prompt))
-        return {"date": d, "summary": text.strip(), "data": summary}
+        text = await _gemini_text(system, prompt)
+        return {"date": d, "summary": text, "data": summary}
     except Exception as e:
         logger.error(f"AI summary error: {e}")
         raise HTTPException(500, f"AI ringkasan gagal: {e}")
