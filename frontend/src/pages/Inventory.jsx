@@ -10,6 +10,7 @@ export default function Inventory() {
   const [products, setProducts] = useState([]);
 
   const loadProducts = () => api.get("/products", { params: { type: "retail" } }).then((r) => setProducts(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { loadProducts(); }, []);
 
   return (
@@ -41,6 +42,7 @@ function Purchase({ products, onDone }) {
   const [list, setList] = useState([]);
 
   const load = () => api.get("/purchases", { params: { date: wibToday() } }).then((r) => setList(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   const submit = async () => {
@@ -108,6 +110,7 @@ function Opname({ products, onDone }) {
   const selected = products.find((p) => p.id === pid);
 
   const load = () => api.get("/stock-opname", { params: { date: wibToday() } }).then((r) => setList(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   const submit = async () => {

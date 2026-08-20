@@ -156,7 +156,7 @@ export default function Dashboard() {
                   <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(v) => rupiah(v)} />
                   <Bar dataKey="total" radius={[0, 6, 6, 0]}>
-                    {chartData.map((_, i) => <Cell key={i} fill="#E63946" />)}
+                    {chartData.map((entry) => <Cell key={entry.name} fill="#E63946" />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

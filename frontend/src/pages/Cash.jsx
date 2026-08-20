@@ -16,6 +16,7 @@ export default function Cash() {
   const [date, setDate] = useState(wibToday());
 
   const load = () => api.get("/cash", { params: { date } }).then((r) => setData(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch on date change
   useEffect(() => { load(); }, [date]);
 
   const submit = async () => {

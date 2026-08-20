@@ -144,8 +144,8 @@ function SyncQueueDialog({ open, onClose }) {
             <p className="text-xs text-[#a1a1aa]">Belum ada riwayat sinkron.</p>
           ) : (
             <div className="max-h-40 overflow-y-auto space-y-2">
-              {syncLog.map((e, idx) => (
-                <div key={idx} data-testid="history-item" className="rounded-lg bg-[#F4F5F7] p-2.5">
+              {syncLog.map((e) => (
+                <div key={e.at} data-testid="history-item" className="rounded-lg bg-[#F4F5F7] p-2.5">
                   <div className="text-xs font-bold text-[#047857]">
                     {e.ok} transaksi disinkron <span className="text-[#52525B] font-normal font-num">· {new Date(e.at).toLocaleString("id-ID")}</span>
                   </div>

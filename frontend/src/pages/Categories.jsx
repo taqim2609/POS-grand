@@ -14,6 +14,7 @@ export default function Categories() {
   const [editId, setEditId] = useState(null);
 
   const load = () => api.get("/categories").then((r) => setItems(r.data));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   const save = async () => {

@@ -477,8 +477,8 @@ function PayDialog({ open, onClose, pms, total, onPay }) {
               placeholder="Jumlah bayar" className="w-full h-12 rounded-xl border px-3 font-num text-lg"
             />
             <div className="flex flex-wrap gap-2">
-              {quick.map((q, i) => (
-                <button key={i} onClick={() => setPaid(String(q))} className="tap px-3 h-9 rounded-lg bg-[#F4F5F7] text-sm font-num font-bold">
+              {quick.map((q) => (
+                <button key={q} onClick={() => setPaid(String(q))} className="tap px-3 h-9 rounded-lg bg-[#F4F5F7] text-sm font-num font-bold">
                   {rupiah(q)}
                 </button>
               ))}

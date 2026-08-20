@@ -23,6 +23,7 @@ export default function SettingsAI() {
       .catch((e) => toast.error(apiError(e.response?.data?.detail)))
       .finally(() => setLoading(false));
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
   if (loading || !features) return <div className="h-full grid place-items-center"><Loader2 className="animate-spin text-[#E63946]" /></div>;
