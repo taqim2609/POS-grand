@@ -23,6 +23,12 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Margin profit per produk di laporan (/reports/summary top_products: cost/profit/margin).
 - Validasi tanggal wib_day_range (400). KPI "Rata-rata per Order".
 
+## Build 5 (2026-06) — Android (Capacitor) + PWA/APK
+- PWA manifest ditingkatkan (id, description, lang, categories, display_override, ikon any+maskable) + `/.well-known/assetlinks.json` placeholder untuk TWA. Siap PWABuilder.
+- Capacitor 6 di-setup di /app/frontend (core/cli/android 6.2.1); platform Android digenerate di `frontend/android/` (Gradle project lengkap). appId `host.emergent.hybridposaceh`, orientasi landscape terkunci, minSdk 22/SDK 34. Aset di-bundle dari `build/` (dibuild dengan REACT_APP_BACKEND_URL=produksi).
+- Panduan build: `frontend/README-ANDROID.md` (buka di Android Studio → Build APK; + langkah plugin printer Sunmi native).
+- Catatan: cetak Sunmi native butuh plugin Capacitor tambahan (fallback print aktif tanpa plugin). Preview .env tidak diubah.
+
 ## Build 4 (2026-06) — Reset Data (admin)
 - POST /api/admin/reset-data { scope: 'transactions'|'all', password } — admin-only; verifies admin password; wipes transactional (+catalog if 'all'); KEEPS users, settings, payment_methods.
 - Frontend page /settings-data ('Reset Data' nav, admin): pilih cakupan + ketik "RESET" + password admin. Guards: kasir 403, wrong pw 400 (curl-verified).

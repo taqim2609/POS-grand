@@ -1,0 +1,8 @@
+{
+  "appId": "host.emergent.hybridposaceh",
+  "appName": "Grand Aceh Kuliner POS",
+  "webDir": "build",
+  "android": {
+    "allowMixedContent": false
+  }
+}
