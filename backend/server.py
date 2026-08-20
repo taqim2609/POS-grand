@@ -116,6 +116,10 @@ class ChangePasswordIn(BaseModel):
 class ResetPasswordIn(BaseModel):
     new_password: str
 
+class ResetDataIn(BaseModel):
+    scope: Literal["transactions", "all"]
+    password: str
+
 class CategoryIn(BaseModel):
     name: str
     type: Literal["makanan", "minuman", "retail"]
@@ -279,6 +283,21 @@ async def reset_user_password(uid: str, body: ResetPasswordIn, admin: dict = Dep
         raise HTTPException(404, "User tidak ditemukan")
     await db.users.update_one({"id": uid}, {"$set": {"password_hash": hash_password(body.new_password)}})
     return {"ok": True}
+
+@api.post("/admin/reset-data")
+async def reset_data(body: ResetDataIn, admin: dict = Depends(require_admin)):
+    """Destructive: wipe transactional (and optionally catalog) data. Keeps users, settings, payment methods."""
+    full = await db.users.find_one({"id": admin["id"]})
+    if not full or not verify_password(body.password, full["password_hash"]):
+        raise HTTPException(400, "Password admin salah")
+    tx = ["orders", "cash_movements", "shifts", "stock_opname", "purchases", "counters", "import_logs", "audit_logs"]
+    catalog = ["products", "categories", "tables"]
+    cols = tx + (catalog if body.scope == "all" else [])
+    deleted = {}
+    for col in cols:
+        r = await db[col].delete_many({})
+        deleted[col] = r.deleted_count
+    return {"ok": True, "scope": body.scope, "deleted": deleted}
 
 # ================================================================== CATEGORIES
 @api.get("/categories")

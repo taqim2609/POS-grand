@@ -23,6 +23,10 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Margin profit per produk di laporan (/reports/summary top_products: cost/profit/margin).
 - Validasi tanggal wib_day_range (400). KPI "Rata-rata per Order".
 
+## Build 4 (2026-06) — Reset Data (admin)
+- POST /api/admin/reset-data { scope: 'transactions'|'all', password } — admin-only; verifies admin password; wipes transactional (+catalog if 'all'); KEEPS users, settings, payment_methods.
+- Frontend page /settings-data ('Reset Data' nav, admin): pilih cakupan + ketik "RESET" + password admin. Guards: kasir 403, wrong pw 400 (curl-verified).
+
 ## Build 3 (2026-06) — Password management
 - POST /api/auth/change-password (self, verify current, min 6).
 - POST /api/users/{uid}/reset-password (admin-only, min 6).

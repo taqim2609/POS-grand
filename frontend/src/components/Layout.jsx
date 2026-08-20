@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2,
 } from "lucide-react";
 
 function ChangePasswordDialog({ open, onClose }) {
@@ -59,6 +59,7 @@ const NAV = [
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
   { to: "/settings-ai", label: "Pengaturan AI", icon: Sparkles, roles: ["admin"] },
+  { to: "/settings-data", label: "Reset Data", icon: Trash2, roles: ["admin"] },
 ];
 
 function OfflineStatus({ onOpenQueue }) {
