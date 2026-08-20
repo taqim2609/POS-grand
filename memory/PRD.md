@@ -23,6 +23,16 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Margin profit per produk di laporan (/reports/summary top_products: cost/profit/margin).
 - Validasi tanggal wib_day_range (400). KPI "Rata-rata per Order".
 
+## Build 8 (2026-06) — WhatsApp Web (whatsapp-web.js), Twilio dihapus
+- Twilio DIHAPUS total (kode + env). WhatsApp kini via layanan Node **whatsapp-web.js** (login QR, nomor sendiri, gratis) + bisa **chat**.
+- Layanan: `/app/whatsapp-service` (Express + whatsapp-web.js + qrcode), jalan via supervisor program `whatsapp` di port 3001, pakai Chromium sistem (`CHROME_BIN=/usr/bin/google-chrome`, LocalAuth persist di `.wwebjs_auth`). Env: WA_SERVICE_URL, WA_SECRET di backend/.env.
+- Backend proxy (admin): GET /api/whatsapp/status (ready+qr), /chats, /messages?chatId=, POST /send, /logout. `_send_whatsapp` & laporan terjadwal kini lewat layanan ini.
+- Frontend: halaman **WhatsApp** (nav admin) — scan QR + daftar chat + kirim/terima pesan. SettingsReport diarahkan ke menu WhatsApp (bukan Twilio).
+- Verified: layanan up, Chromium launch OK, QR ter-generate & lolos via proxy (`qr present: True`), 3 service RUNNING, frontend compiled. Scan QR & chat live TIDAK bisa diuji agent (butuh HP user).
+
+## CATATAN PENTING WhatsApp Web
+- Tak resmi (risiko blokir nomor). Andal di preview/server lokal (Raspberry Pi/PC toko); **produksi Emergent kemungkinan tidak menjalankan layanan Node ini** (supervisor conf di /etc/supervisor/conf.d tidak ikut deploy). Untuk produksi, jalankan layanan di server lokal outlet.
+
 ## Build 7 (2026-06) — Ekspor, Laporan Terjadwal & WhatsApp
 - Ekspor laporan: `GET /api/reports/export/excel` & `/pdf` (openpyxl + fpdf2). Tombol Excel/PDF di Dashboard (unduh via blob).
 - WhatsApp (Twilio): `POST /api/reports/send-whatsapp` kirim laporan teks (total, per kategori, metode bayar, produk terlaris, + analisis AI opsional). Tombol "Kirim WhatsApp" di Dashboard.

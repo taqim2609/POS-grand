@@ -19,6 +19,7 @@ import Cash from "@/pages/Cash";
 import SettingsAI from "@/pages/SettingsAI";
 import SettingsData from "@/pages/SettingsData";
 import Settings from "@/pages/Settings";
+import WhatsApp from "@/pages/WhatsApp";
 
 const wrap = (el, adminOnly = false) => (
   <ProtectedRoute adminOnly={adminOnly}>
@@ -48,6 +49,7 @@ function App() {
               <Route path="/settings-ai" element={wrap(<SettingsAI />, true)} />
               <Route path="/settings-data" element={wrap(<SettingsData />, true)} />
               <Route path="/settings" element={wrap(<Settings />, true)} />
+              <Route path="/whatsapp" element={wrap(<WhatsApp />, true)} />
               <Route path="/" element={<Navigate to="/pos" replace />} />
               <Route path="*" element={<Navigate to="/pos" replace />} />
             </Routes>

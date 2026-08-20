@@ -1177,10 +1177,24 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
         raise HTTPException(500, f"AI ringkasan gagal: {e}")
 
 # ================================================================== REPORT EXPORT & WHATSAPP
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-TWILIO_WHATSAPP_FROM = os.environ.get('TWILIO_WHATSAPP_FROM')
+WA_SERVICE_URL = os.environ.get('WA_SERVICE_URL')
+WA_SECRET = os.environ.get('WA_SECRET')
 WEBHOOK_CRON_SECRET = os.environ.get('WEBHOOK_CRON_SECRET')
+
+async def _wa_call(method, path, **kw):
+    import httpx
+    if not WA_SERVICE_URL:
+        raise HTTPException(400, "Layanan WhatsApp tidak aktif")
+    headers = {"x-wa-secret": WA_SECRET or ""}
+    async with httpx.AsyncClient(timeout=30) as c:
+        return await c.request(method, f"{WA_SERVICE_URL.rstrip('/')}{path}", headers=headers, **kw)
+
+async def _wa_ready():
+    try:
+        r = await _wa_call("GET", "/status")
+        return bool(r.json().get("ready"))
+    except Exception:
+        return False
 
 def _report_lines(d, s, ai_text=None):
     cr = s.get("category_report", {})
@@ -1245,7 +1259,7 @@ async def get_report_settings(admin: dict = Depends(require_admin)):
         "whatsapp_time": doc.get("whatsapp_time", "22:00"),
         "recipients": doc.get("recipients", []),
         "include_ai": doc.get("include_ai", True),
-        "whatsapp_configured": bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM),
+        "whatsapp_configured": await _wa_ready(),
         "last_sent_date": doc.get("last_sent_date"),
     }
 
@@ -1258,20 +1272,14 @@ async def put_report_settings(body: ReportSettingsIn, admin: dict = Depends(requ
     return {"ok": True}
 
 async def _send_whatsapp(recipients, text):
-    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM):
-        raise HTTPException(400, "WhatsApp belum dikonfigurasi. Isi kredensial Twilio di server.")
-    from twilio.rest import Client
-    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    frm = TWILIO_WHATSAPP_FROM if TWILIO_WHATSAPP_FROM.startswith("whatsapp:") else f"whatsapp:{TWILIO_WHATSAPP_FROM}"
-
-    def send_one(to):
-        num = to if to.startswith("whatsapp:") else f"whatsapp:{to}"
-        return client.messages.create(from_=frm, to=num, body=text)
     out = []
     for to in recipients:
         try:
-            msg = await asyncio.to_thread(send_one, to)
-            out.append({"to": to, "sid": msg.sid, "ok": True})
+            r = await _wa_call("POST", "/send", json={"to": to, "message": text})
+            if r.status_code == 200:
+                out.append({"to": to, "ok": True, "id": r.json().get("id")})
+            else:
+                out.append({"to": to, "ok": False, "error": r.json().get("error", r.text)})
         except Exception as e:
             out.append({"to": to, "ok": False, "error": str(e)})
     return out
@@ -1341,6 +1349,45 @@ async def cron_daily_report(request: Request, background: BackgroundTasks):
         raise HTTPException(401, "unauthorized")
     background.add_task(_run_daily_report_job)
     return {"ok": True}
+
+# ---- WhatsApp Web (whatsapp-web.js) proxy: QR login + chat ----
+class WAChatSendIn(BaseModel):
+    to: str
+    message: str
+
+@api.get("/whatsapp/status")
+async def whatsapp_status(admin: dict = Depends(require_admin)):
+    try:
+        r = await _wa_call("GET", "/status")
+        return r.json()
+    except Exception as e:
+        return {"ready": False, "qr": None, "error": str(e)}
+
+@api.get("/whatsapp/chats")
+async def whatsapp_chats(admin: dict = Depends(require_admin)):
+    r = await _wa_call("GET", "/chats")
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, r.json().get("error", "gagal memuat chat"))
+    return r.json()
+
+@api.get("/whatsapp/messages")
+async def whatsapp_messages(chatId: str, admin: dict = Depends(require_admin)):
+    r = await _wa_call("GET", "/messages", params={"chatId": chatId})
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, r.json().get("error", "gagal memuat pesan"))
+    return r.json()
+
+@api.post("/whatsapp/send")
+async def whatsapp_send(body: WAChatSendIn, admin: dict = Depends(require_admin)):
+    r = await _wa_call("POST", "/send", json={"to": body.to, "message": body.message})
+    if r.status_code != 200:
+        raise HTTPException(r.status_code, r.json().get("error", "gagal mengirim"))
+    return r.json()
+
+@api.post("/whatsapp/logout")
+async def whatsapp_logout(admin: dict = Depends(require_admin)):
+    r = await _wa_call("POST", "/logout")
+    return r.json()
 
 # ================================================================== EXCEL
 IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "harga_beli", "status_aktif", "sold_out", "deskripsi", "stok_awal"]

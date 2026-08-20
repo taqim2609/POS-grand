@@ -44,8 +44,8 @@ export default function SettingsReport() {
         <div data-testid="wa-not-configured" className="flex items-start gap-3 bg-[#FEF3C7] border border-[#F59E0B] text-[#92400E] rounded-2xl px-4 py-3 mb-5 max-w-2xl">
           <ShieldAlert size={20} className="shrink-0 mt-0.5" />
           <div className="text-sm">
-            <div className="font-extrabold">WhatsApp belum aktif</div>
-            Kredensial Twilio WhatsApp belum diisi di server. Hubungi admin/pengembang untuk mengisi Account SID, Auth Token, dan nomor WhatsApp Twilio agar pengiriman berfungsi.
+            <div className="font-extrabold">WhatsApp belum terhubung</div>
+            Buka menu <b>WhatsApp</b> di sidebar dan pindai QR dengan HP Anda (WhatsApp → Perangkat Tertaut) agar pengiriman laporan berfungsi.
           </div>
         </div>
       )}
