@@ -1153,15 +1153,23 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
     d = body.date or now_utc().strftime("%Y-%m-%d")
     summary = await report_summary(date_str=d, admin=admin)
     try:
-        system = "Anda analis bisnis F&B. Beri ringkasan penjualan harian yang tegas dan actionable dalam bahasa Indonesia. Format: 3-4 poin insight + 1 rekomendasi. Tanpa emoji."
+        system = ("Anda analis bisnis F&B & retail. Tulis LAPORAN penjualan harian dalam bahasa Indonesia yang tegas dan actionable. "
+                  "Struktur: (1) Ringkasan singkat, (2) Sorotan per kategori (Makanan/Minuman/Retail), (3) 2-3 insight, (4) 1-2 rekomendasi. Tanpa emoji.")
+        cr = summary.get("category_report", {})
+        mk, mn, rt = cr.get("makanan", {}), cr.get("minuman", {}), cr.get("retail", {})
+
+        def _cats(g):
+            return ", ".join(f"{c['name']} Rp{c['total']:,.0f}" for c in g.get("categories", [])[:6]) or "-"
         prompt = (f"Data penjualan {d}:\n"
-                  f"Total: Rp{summary['total_sales']:,.0f}, {summary['order_count']} order.\n"
-                  f"Dine-in: Rp{summary['by_type']['dine_in']['total']:,.0f} ({summary['by_type']['dine_in']['count']} order)\n"
-                  f"Take away: Rp{summary['by_type']['take_away']['total']:,.0f} ({summary['by_type']['take_away']['count']} order)\n"
-                  f"Retail: Rp{summary['by_type']['retail']['total']:,.0f} ({summary['by_type']['retail']['count']} order)\n"
-                  f"Total diskon: Rp{summary['total_discount']:,.0f}\n"
-                  f"Produk terlaris: {', '.join(p['name'] for p in summary['top_products'][:5])}\n"
-                  f"Buat ringkasan analitik.")
+                  f"Total: Rp{summary['total_sales']:,.0f} dari {summary['order_count']} order. Laba kotor: Rp{summary['gross_profit']:,.0f}.\n"
+                  f"Dine-in: Rp{summary['by_type']['dine_in']['total']:,.0f}; Take away: Rp{summary['by_type']['take_away']['total']:,.0f}; Retail: Rp{summary['by_type']['retail']['total']:,.0f}.\n"
+                  f"Makanan Rp{mk.get('total', 0):,.0f} (rincian: {_cats(mk)}).\n"
+                  f"Minuman Rp{mn.get('total', 0):,.0f} (rincian: {_cats(mn)}).\n"
+                  f"Retail gabungan Rp{rt.get('total', 0):,.0f}.\n"
+                  f"Total diskon: Rp{summary['total_discount']:,.0f}. Kas masuk: Rp{summary['cash_in']:,.0f}, kas keluar: Rp{summary['cash_out']:,.0f}.\n"
+                  f"Produk terlaris: {', '.join(p['name'] for p in summary['top_products'][:5])}.\n"
+                  f"Stok retail menipis: {len(summary.get('low_stock', []))} produk.\n"
+                  f"Buat laporan analitik.")
         text = await _gemini_text(system, prompt, "summary")
         return {"date": d, "summary": text, "data": summary}
     except Exception as e:

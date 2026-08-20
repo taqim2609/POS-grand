@@ -227,14 +227,20 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-[#0A0A0A] text-white rounded-2xl p-5 flex flex-col">
-          <h3 className="font-extrabold flex items-center gap-2 mb-2"><Sparkles size={18} className="text-[#E63946]" /> Ringkasan AI</h3>
-          <p className="text-xs text-white/50 mb-4">Analisis penjualan harian oleh Gemini</p>
-          <div className="flex-1 text-sm whitespace-pre-wrap overflow-y-auto no-scrollbar min-h-[120px]">
-            {ai || <span className="text-white/40">Klik tombol untuk membuat ringkasan analitik.</span>}
+          <h3 className="font-extrabold flex items-center gap-2 mb-2"><Sparkles size={18} className="text-[#E63946]" /> Laporan AI</h3>
+          <p className="text-xs text-white/50 mb-4">Laporan penjualan harian dibuat oleh AI</p>
+          <div data-testid="ai-summary-text" className="flex-1 text-sm whitespace-pre-wrap overflow-y-auto no-scrollbar min-h-[120px]">
+            {ai || <span className="text-white/40">Klik tombol untuk membuat laporan analitik.</span>}
           </div>
-          <button data-testid="ai-summary-btn" onClick={genAi} disabled={aiLoading} className="tap mt-4 h-11 rounded-xl bg-[#E63946] hover:bg-[#BE123C] font-bold flex items-center justify-center gap-2">
-            {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Buat Ringkasan
-          </button>
+          <div className="flex gap-2 mt-4">
+            <button data-testid="ai-summary-btn" onClick={genAi} disabled={aiLoading} className="tap flex-1 h-11 rounded-xl bg-[#E63946] hover:bg-[#BE123C] font-bold flex items-center justify-center gap-2">
+              {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} {ai ? "Buat Ulang" : "Buat Laporan"}
+            </button>
+            {ai && (
+              <button data-testid="ai-summary-copy" onClick={() => { navigator.clipboard?.writeText(ai); toast.success("Laporan disalin"); }}
+                className="tap h-11 px-4 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Salin</button>
+            )}
+          </div>
         </div>
       </div>
 

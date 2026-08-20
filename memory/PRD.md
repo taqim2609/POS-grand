@@ -32,6 +32,7 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - POS wajib buka shift dulu: gate inline "Buka Shift + Kas Awal" di layar POS; offline diizinkan.
 - Fix: apiError abaikan body HTML (Cloudflare) → pesan generik.
 - Verified: testing agent iteration_8 frontend 100% (7/7 flow), backend 93% (sisa gagal = key AI invalid + test lama usang).
+- Laporan AI ditingkatkan: `POST /api/reports/ai-summary` kini menyusun laporan lengkap (per kategori makanan/minuman, retail, laba kotor, kas, stok menipis, produk terlaris) + tombol Salin di panel "Laporan AI" Dashboard. Butuh key AI 'summary' valid.
 
 ## Build 5 (2026-06) — Android (Capacitor) + PWA/APK
 - PWA manifest ditingkatkan (id, description, lang, categories, display_override, ikon any+maskable) + `/.well-known/assetlinks.json` placeholder untuk TWA. Siap PWABuilder.
