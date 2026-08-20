@@ -1,10 +1,13 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
+import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database,
 } from "lucide-react";
 
 const NAV = [
@@ -20,17 +23,25 @@ const NAV = [
   { to: "/users", label: "Pengguna", icon: Users, roles: ["admin"] },
 ];
 
-function OfflineStatus() {
+function OfflineStatus({ onOpenQueue }) {
   const { online, pendingCount, syncing, syncNow } = useOffline();
+  const cacheAt = localStorage.getItem("gak_pos_cache_at");
   return (
     <div data-testid="offline-status" className={`px-3 py-2.5 border-b border-white/10 ${online ? "" : "bg-[#EF4444]/20"}`}>
       <div className="flex items-center gap-2 text-sm font-bold">
         {online ? <Wifi size={16} className="text-[#22C55E]" /> : <WifiOff size={16} className="text-[#EF4444]" />}
         <span className={online ? "text-[#22C55E]" : "text-[#EF4444]"}>{online ? "Online" : "Offline"}</span>
       </div>
+      {cacheAt && (
+        <div className="mt-1 text-[10px] text-white/40 flex items-center gap-1" data-testid="cache-time">
+          <Database size={10} /> Data ter-cache {new Date(cacheAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+        </div>
+      )}
       {pendingCount > 0 && (
         <div className="mt-2 flex items-center justify-between gap-2 bg-[#F59E0B]/20 rounded-lg px-2 py-1.5" data-testid="pending-sync">
-          <span className="text-[11px] font-bold text-[#FBBF24] flex items-center gap-1"><CloudOff size={13} /> {pendingCount} belum sinkron</span>
+          <button onClick={onOpenQueue} data-testid="open-queue-btn" className="text-[11px] font-bold text-[#FBBF24] flex items-center gap-1 hover:underline">
+            <CloudOff size={13} /> {pendingCount} belum sinkron
+          </button>
           {online && (
             <button data-testid="sync-now-btn" onClick={syncNow} disabled={syncing} className="tap text-[11px] font-bold bg-white/15 hover:bg-white/25 rounded px-2 py-1 flex items-center gap-1">
               <RefreshCw size={11} className={syncing ? "animate-spin" : ""} /> Sinkron
@@ -42,9 +53,51 @@ function OfflineStatus() {
   );
 }
 
+function SyncQueueDialog({ open, onClose }) {
+  const { pending, online, syncNow, retryOne, syncing } = useOffline();
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Antrean Sinkronisasi Offline</DialogTitle></DialogHeader>
+        {pending.length === 0 ? (
+          <p className="text-sm text-[#52525B] py-6 text-center">Tidak ada transaksi menunggu sinkron.</p>
+        ) : (
+          <>
+            <div className="max-h-[50vh] overflow-y-auto space-y-2">
+              {pending.map((p) => (
+                <div key={p.temp_id} data-testid={`queue-item-${p.temp_id}`} className="rounded-xl border p-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="overflow-hidden">
+                      <div className="font-bold text-sm">{ORDER_TYPE_LABEL[p.meta?.order_type] || p.meta?.order_type} · {rupiah(p.meta?.total || 0)}</div>
+                      <div className="text-xs text-[#52525B] truncate">{p.meta?.preview}</div>
+                      <div className="text-[11px] text-[#a1a1aa] font-num">{new Date(p.created_at).toLocaleString("id-ID")}</div>
+                      {p.error && <div className="text-[11px] text-[#EF4444] font-bold mt-1">Gagal: {p.error}</div>}
+                    </div>
+                    {online && (
+                      <button data-testid={`retry-${p.temp_id}`} onClick={() => retryOne(p.temp_id)} disabled={syncing} className="tap shrink-0 text-xs font-bold bg-[#F4F5F7] rounded-lg px-2.5 py-1.5 flex items-center gap-1">
+                        <RefreshCw size={12} className={syncing ? "animate-spin" : ""} /> Coba lagi
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {online ? (
+              <button data-testid="sync-all-btn" onClick={syncNow} disabled={syncing} className="tap w-full h-11 rounded-xl bg-[#E63946] text-white font-bold mt-3">Sinkron Semua</button>
+            ) : (
+              <p className="text-xs text-[#B45309] font-bold text-center mt-3">Masih offline — otomatis sinkron saat online kembali.</p>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const [queueOpen, setQueueOpen] = useState(false);
   return (
     <div className="flex h-screen overflow-hidden bg-[#F4F5F7]">
       <div className="rotate-guard" data-testid="rotate-guard">
@@ -67,7 +120,7 @@ export default function Layout({ children }) {
             </div>
           </div>
         </div>
-        <OfflineStatus />
+        <OfflineStatus onOpenQueue={() => setQueueOpen(true)} />
         <nav className="flex-1 overflow-y-auto no-scrollbar py-3 px-3 space-y-1">
           {NAV.filter((n) => n.roles.includes(user?.role)).map((n) => (
             <NavLink
@@ -107,6 +160,7 @@ export default function Layout({ children }) {
         </div>
       </aside>
       <main className="flex-1 overflow-hidden">{children}</main>
+      <SyncQueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} />
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Utensils, ShoppingBag, Store, Plus, Minus, Trash2, Armchair,
-  Search, Receipt, X, CheckCircle2, Layers,
+  Search, Receipt, X, CheckCircle2, Layers, Database,
 } from "lucide-react";
 
 const ORDER_TYPES = [
@@ -35,6 +35,7 @@ export default function POS() {
   const [payOpen, setPayOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);
+  const [cacheAt, setCacheAt] = useState(() => localStorage.getItem("gak_pos_cache_at"));
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +47,9 @@ export default function POS() {
       ]);
       const cached = { products: p.data, categories: c.data, tables: t.data, pms: m.data.filter((x) => x.active) };
       localStorage.setItem("gak_pos_cache", JSON.stringify(cached));
+      const at = new Date().toISOString();
+      localStorage.setItem("gak_pos_cache_at", at);
+      setCacheAt(at);
       setProducts(cached.products);
       setCategories(cached.categories);
       setTables(cached.tables);
@@ -163,7 +167,7 @@ export default function POS() {
         discount_type: discType, discount_value: Number(discVal),
         pay_now: true, payment_method: pm.id,
       };
-      addPending(payload);
+      addPending(payload, { order_type: orderType, total, item_count: cart.length, preview: cart.map((i) => `${i.qty}x ${i.name}`).join(", ") });
       const offlineReceipt = {
         order_number: `OFFLINE-${Date.now().toString().slice(-8)}`, order_type: orderType, items: cart,
         subtotal, discount, total, cashier_name: "(offline)",
@@ -207,6 +211,13 @@ export default function POS() {
           </button>
         ))}
         <div className="flex-1" />
+        {cacheAt && (
+          <div data-testid="cache-indicator" title="Waktu data produk/harga terakhir diperbarui dari server"
+            className={`h-9 px-3 rounded-lg flex items-center gap-1.5 text-xs font-bold ${online ? "bg-[#F4F5F7] text-[#52525B]" : "bg-[#FEF3C7] text-[#B45309]"}`}>
+            <Database size={13} /> Data: {new Date(cacheAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+            {!online && " (offline)"}
+          </div>
+        )}
         {orderType === "dine_in" && (
           <button
             data-testid="pick-table-btn"

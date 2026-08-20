@@ -145,6 +145,7 @@ class OrderIn(BaseModel):
     note: Optional[str] = ""
     pay_now: bool = False
     payment_method: Optional[str] = None
+    client_ref: Optional[str] = None
 
 class ItemsUpdate(BaseModel):
     items: List[OrderItem]
@@ -465,6 +466,10 @@ async def _finalize_payment(order, payment_method, amount_paid, user):
 async def create_order(body: OrderIn, user: dict = Depends(get_current_user)):
     if not body.items:
         raise HTTPException(400, "Keranjang kosong")
+    if body.client_ref:
+        dup = await db.orders.find_one({"client_ref": body.client_ref}, {"_id": 0})
+        if dup:
+            return dup  # idempotent: offline sync retry won't duplicate
     items = await _resolve_items(body.items)
     await _validate_order_rules(body.order_type, body.table_id, items)
     subtotal, discount, total = compute_totals(items, body.discount_type, body.discount_value)
@@ -474,6 +479,7 @@ async def create_order(body: OrderIn, user: dict = Depends(get_current_user)):
         "subtotal": subtotal, "discount_type": body.discount_type, "discount_value": body.discount_value,
         "discount": discount, "total": total, "note": body.note,
         "status": "open", "cashier_id": user["id"], "cashier_name": user["name"],
+        "client_ref": body.client_ref,
         "created_at": now_utc().isoformat(),
     }
     await db.orders.insert_one(doc)
@@ -750,6 +756,34 @@ async def list_cash(date_str: Optional[str] = Query(None, alias="date"), user: d
     return {"date": d, "movements": moves, "cash_in": round(cin, 2), "cash_out": round(cout, 2),
             "cash_net": round(cin - cout, 2)}
 
+# ================================================================== SYNC (local outlet server <-> cloud)
+class SyncPushIn(BaseModel):
+    orders: List[OrderIn]
+
+@api.get("/sync/master")
+async def sync_master(user: dict = Depends(get_current_user)):
+    """Pull master data snapshot for a local outlet server / offline client."""
+    products = await db.products.find({}, {"_id": 0}).to_list(5000)
+    categories = await db.categories.find({}, {"_id": 0}).to_list(500)
+    tables = await db.tables.find({"deleted": {"$ne": True}}, {"_id": 0}).to_list(500)
+    pms = await db.payment_methods.find({}, {"_id": 0}).to_list(100)
+    return {"server_time": now_utc().isoformat(), "products": products, "categories": categories,
+            "tables": tables, "payment_methods": pms}
+
+@api.post("/sync/push")
+async def sync_push(body: SyncPushIn, user: dict = Depends(get_current_user)):
+    """Push a batch of offline orders to cloud. Idempotent via client_ref."""
+    results = []
+    synced = 0
+    for o in body.orders:
+        try:
+            res = await create_order(o, user)
+            synced += 1
+            results.append({"client_ref": o.client_ref, "status": "ok", "order_number": res.get("order_number")})
+        except HTTPException as e:
+            results.append({"client_ref": o.client_ref, "status": "error", "detail": e.detail})
+    return {"synced": synced, "total": len(body.orders), "results": results, "server_time": now_utc().isoformat()}
+
 # ================================================================== AI
 def _get_chat(session, system, model):
     from emergentintegrations.llm.chat import LlmChat
@@ -956,6 +990,7 @@ async def import_logs(admin: dict = Depends(require_admin)):
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.products.create_index("sku", unique=True)
+    await db.orders.create_index("client_ref", sparse=True)
     admin_email = os.environ["ADMIN_EMAIL"].lower()
     admin_pw = os.environ["ADMIN_PASSWORD"]
     existing = await db.users.find_one({"email": admin_email})
