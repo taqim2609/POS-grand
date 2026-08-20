@@ -144,7 +144,7 @@ export default function POS() {
     e.preventDefault();
     const code = barcode.trim();
     if (!code) return;
-    const found = products.find((p) => p.type === "retail" && (p.sku || "").toLowerCase() === code.toLowerCase());
+    const found = products.find((p) => (p.sku || "").toLowerCase() === code.toLowerCase());
     if (found) { addItem(found); setBarcode(""); }
     else { toast.error(`Produk kode "${code}" tidak ditemukan`); setBarcode(""); }
   };
@@ -312,20 +312,18 @@ export default function POS() {
         {/* product grid */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-3 border-b bg-white space-y-2">
-            {orderType === "retail" && (
-              <div className="relative">
-                <ScanLine size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#E63946]" />
-                <input
-                  data-testid="barcode-input"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  onKeyDown={handleBarcode}
-                  placeholder="Scan / ketik kode produk lalu Enter"
-                  className="w-full h-12 pl-10 pr-3 rounded-xl border-2 border-[#E63946] outline-none font-num"
-                  autoFocus
-                />
-              </div>
-            )}
+            <div className="relative">
+              <ScanLine size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#E63946]" />
+              <input
+                data-testid="barcode-input"
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                onKeyDown={handleBarcode}
+                placeholder="Scan / ketik kode produk (SKU) lalu Enter"
+                className="w-full h-12 pl-10 pr-3 rounded-xl border-2 border-[#E63946] outline-none font-num"
+                autoFocus
+              />
+            </div>
             <div className="relative">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#a1a1aa]" />
               <input
