@@ -916,9 +916,13 @@ async def _gemini_text(system, prompt, feature="description"):
             r = client.chat.completions.create(
                 model=cfg["model"],
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-                temperature=0.5, max_tokens=800,
+                temperature=0.5, max_tokens=4000,
             )
-            return (r.choices[0].message.content or "").strip()
+            msg = r.choices[0].message
+            content = (msg.content or "").strip()
+            if not content:  # some reasoning models return text in reasoning_content
+                content = (getattr(msg, "reasoning_content", "") or "").strip()
+            return content
         return await asyncio.to_thread(run)
     if GEMINI_API_KEY:
         from google import genai

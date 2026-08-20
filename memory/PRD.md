@@ -76,6 +76,11 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - eslint exhaustive-deps: justifikasi disable pada efek mount/filter (Products/Orders/Tables/Users/Shift/POS).
 - .gitignore: hapus blok .env agar file env aman-deploy ikut ter-deploy.
 
+## AI AKTIF (2026-06)
+- Key AI baru dipasang (sk-...GkcQ) di .env OPENAI_COMPAT_API_KEY + DB per-fitur. Provider https://www.chenzk.top/v1.
+- Model: teks/analisis/vision = `deepseek-v4-flash` (reasoning model — butuh max_tokens tinggi; _gemini_text set 4000 + fallback reasoning_content). Image-gen = `gpt-image-2`.
+- Terverifikasi jalan: deskripsi produk ✅, Laporan AI ✅ (laporan rapi ~2.5k char), image-gen ✅. Vision (baca faktur) BELUM tervalidasi (deepseek adalah model teks; jika gagal baca gambar, ganti ke model vision di Pengaturan AI).
+
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 
