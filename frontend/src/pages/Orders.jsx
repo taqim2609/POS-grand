@@ -52,7 +52,10 @@ export default function Orders() {
             {orders.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-[#a1a1aa]">Tidak ada transaksi</td></tr>}
             {orders.map((o) => (
               <tr key={o.id} data-testid={`order-row-${o.id}`} className="border-t">
-                <td className="p-3 font-num font-bold">{o.order_number}</td>
+                <td className="p-3 font-num font-bold">
+                  {o.order_number}
+                  {o.client_ref && <span data-testid={`offline-tag-${o.id}`} className="ml-1.5 align-middle text-[9px] font-bold bg-[#FEF3C7] text-[#B45309] px-1.5 py-0.5 rounded" title="Transaksi ini dibuat offline lalu tersinkron">EKS-OFFLINE</span>}
+                </td>
                 <td className="p-3"><span className={`ot-${o.order_type} text-xs font-bold px-2 py-0.5 rounded border`}>{ORDER_TYPE_LABEL[o.order_type]}</span></td>
                 <td className="p-3 text-[#52525B]">{new Date(o.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}</td>
                 <td className="p-3">{o.cashier_name}</td>
@@ -60,7 +63,7 @@ export default function Orders() {
                 <td className="p-3 text-center"><span className={`text-xs font-bold px-2 py-1 rounded ${STATUS_STYLE[o.status]}`}>{o.status.toUpperCase()}</span></td>
                 <td className="p-3">
                   <div className="flex gap-1 justify-end">
-                    {o.status === "paid" && <button onClick={() => printReceipt(o)} className="tap h-8 w-8 rounded-lg bg-[#F4F5F7] grid place-items-center" title="Cetak"><Receipt size={14} /></button>}
+                    {o.status === "paid" && <button data-testid={`reprint-btn-${o.id}`} onClick={() => printReceipt(o)} className="tap h-8 px-3 rounded-lg bg-[#0A0A0A] text-white grid place-items-center" title="Cetak ulang struk (nomor resmi)"><span className="flex items-center gap-1 text-xs font-bold"><Receipt size={13} /> Cetak Ulang</span></button>}
                     {(o.status === "paid" || o.status === "open") && (
                       <button data-testid={`void-btn-${o.id}`} onClick={() => { setVoidTarget(o); setAction(o.status === "paid" ? "refund" : "void"); }} className="tap h-8 w-8 rounded-lg bg-[#FEE2E2] text-[#EF4444] grid place-items-center" title="Void/Refund">
                         {o.status === "paid" ? <RotateCcw size={14} /> : <Ban size={14} />}
