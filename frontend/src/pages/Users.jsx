@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
-import { Users, Plus, Power, ShieldCheck } from "lucide-react";
+import { Users, Plus, Power, ShieldCheck, KeyRound } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const empty = { name: "", email: "", password: "", role: "kasir" };
@@ -10,6 +10,8 @@ export default function UsersPage() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
+  const [resetTarget, setResetTarget] = useState(null);
+  const [newPw, setNewPw] = useState("");
 
   const load = () => api.get("/users").then((r) => setItems(r.data));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
@@ -21,6 +23,14 @@ export default function UsersPage() {
     catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
   const toggle = async (u) => { try { await api.patch(`/users/${u.id}/toggle`); load(); } catch (e) { toast.error(apiError(e.response?.data?.detail)); } };
+  const resetPw = async () => {
+    if (newPw.length < 6) return toast.error("Password minimal 6 karakter");
+    try {
+      await api.post(`/users/${resetTarget.id}/reset-password`, { new_password: newPw });
+      toast.success(`Password ${resetTarget.name} berhasil direset`);
+      setResetTarget(null); setNewPw("");
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
 
   return (
     <div className="h-full overflow-y-auto p-8">
@@ -39,7 +49,8 @@ export default function UsersPage() {
                 {u.role === "admin" && <ShieldCheck size={11} />}{u.role}
               </span>
             </div>
-            <button onClick={() => toggle(u)} className="tap h-9 w-9 rounded-lg bg-[#F4F5F7] grid place-items-center"><Power size={15} /></button>
+            <button data-testid={`reset-pw-${u.id}`} onClick={() => { setResetTarget(u); setNewPw(""); }} title="Reset password" className="tap h-9 w-9 rounded-lg bg-[#F4F5F7] grid place-items-center"><KeyRound size={15} /></button>
+            <button onClick={() => toggle(u)} title="Aktif/Nonaktif" className="tap h-9 w-9 rounded-lg bg-[#F4F5F7] grid place-items-center"><Power size={15} /></button>
           </div>
         ))}
       </div>
@@ -58,6 +69,17 @@ export default function UsersPage() {
             </Field>
           </div>
           <DialogFooter><button data-testid="save-user-btn" onClick={save} className="tap w-full h-12 rounded-xl bg-[#E63946] text-white font-bold">Simpan</button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resetTarget} onOpenChange={(o) => { if (!o) setResetTarget(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reset Password — {resetTarget?.name}</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-[#52525B]">Tetapkan password baru untuk <b>{resetTarget?.email}</b>. Pengguna akan memakai password ini saat login berikutnya.</p>
+            <input data-testid="reset-pw-input" type="password" placeholder="Password baru (min. 6 karakter)" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="w-full h-11 rounded-xl border px-3" />
+          </div>
+          <DialogFooter><button data-testid="save-reset-pw-btn" onClick={resetPw} className="tap w-full h-12 rounded-xl bg-[#E63946] text-white font-bold">Simpan Password</button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

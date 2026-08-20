@@ -3,12 +3,49 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
 import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import api, { apiError } from "@/lib/api";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound,
 } from "lucide-react";
+
+function ChangePasswordDialog({ open, onClose }) {
+  const [cur, setCur] = useState("");
+  const [nw, setNw] = useState("");
+  const [nw2, setNw2] = useState("");
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (!cur) return toast.error("Masukkan password lama");
+    if (nw.length < 6) return toast.error("Password baru minimal 6 karakter");
+    if (nw !== nw2) return toast.error("Konfirmasi password tidak cocok");
+    setSaving(true);
+    try {
+      await api.post("/auth/change-password", { current_password: cur, new_password: nw });
+      toast.success("Password berhasil diganti");
+      setCur(""); setNw(""); setNw2(""); onClose();
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setSaving(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Ganti Password</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <input data-testid="cur-password" type="password" placeholder="Password lama" value={cur} onChange={(e) => setCur(e.target.value)} className="w-full h-11 rounded-xl border px-3" />
+          <input data-testid="new-password" type="password" placeholder="Password baru (min. 6 karakter)" value={nw} onChange={(e) => setNw(e.target.value)} className="w-full h-11 rounded-xl border px-3" />
+          <input data-testid="confirm-password" type="password" placeholder="Ulangi password baru" value={nw2} onChange={(e) => setNw2(e.target.value)} className="w-full h-11 rounded-xl border px-3" />
+        </div>
+        <DialogFooter>
+          <button data-testid="save-password-btn" onClick={submit} disabled={saving} className="tap w-full h-12 rounded-xl bg-[#E63946] text-white font-bold disabled:opacity-50">
+            {saving ? "Menyimpan..." : "Simpan"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const NAV = [
   { to: "/pos", label: "POS Kasir", icon: ShoppingCart, roles: ["admin", "kasir"] },
@@ -130,6 +167,7 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
   return (
     <div className="flex h-screen overflow-hidden bg-[#F4F5F7]">
       <div className="rotate-guard" data-testid="rotate-guard">
@@ -183,6 +221,13 @@ export default function Layout({ children }) {
             </div>
           </div>
           <button
+            data-testid="change-password-btn"
+            onClick={() => setPwOpen(true)}
+            className="tap w-full flex items-center justify-center gap-2 h-11 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold mb-2"
+          >
+            <KeyRound size={16} /> Ganti Password
+          </button>
+          <button
             data-testid="logout-btn"
             onClick={logout}
             className="tap w-full flex items-center justify-center gap-2 h-11 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold"
@@ -192,6 +237,7 @@ export default function Layout({ children }) {
         </div>
       </aside>
       <main className="flex-1 overflow-hidden">{children}</main>
+      <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
       <SyncQueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} />
     </div>
   );

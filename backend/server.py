@@ -109,6 +109,13 @@ class UserCreate(BaseModel):
     password: str
     role: Literal["admin", "kasir"] = "kasir"
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+class ResetPasswordIn(BaseModel):
+    new_password: str
+
 class CategoryIn(BaseModel):
     name: str
     type: Literal["makanan", "minuman", "retail"]
@@ -252,6 +259,26 @@ async def toggle_user(uid: str, admin: dict = Depends(require_admin)):
         raise HTTPException(404, "User tidak ditemukan")
     await db.users.update_one({"id": uid}, {"$set": {"active": not u.get("active", True)}})
     return {"active": not u.get("active", True)}
+
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordIn, user: dict = Depends(get_current_user)):
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "Password baru minimal 6 karakter")
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(body.current_password, full["password_hash"]):
+        raise HTTPException(400, "Password lama salah")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": hash_password(body.new_password)}})
+    return {"ok": True}
+
+@api.post("/users/{uid}/reset-password")
+async def reset_user_password(uid: str, body: ResetPasswordIn, admin: dict = Depends(require_admin)):
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "Password minimal 6 karakter")
+    u = await db.users.find_one({"id": uid})
+    if not u:
+        raise HTTPException(404, "User tidak ditemukan")
+    await db.users.update_one({"id": uid}, {"$set": {"password_hash": hash_password(body.new_password)}})
+    return {"ok": True}
 
 # ================================================================== CATEGORIES
 @api.get("/categories")
