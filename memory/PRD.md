@@ -83,6 +83,11 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Backlog AI: simpan gambar AI sebagai aset lokal (URL provider bisa kadaluarsa).
 - 2026-06-21 Scan Faktur → Pembelian Massal: alur 2 langkah (Edit/cocokkan → KONFIRMASI ringkasan → simpan). Endpoint atomik `POST /api/purchases/bulk` (items: existing product_id ATAU create_new+name+category_id+price; validasi semua dulu baru tulis; auto-buat produk retail SKU AI-xxxx; increment stok; return {saved, created_products, total_cost, items}). Frontend InvoiceScan (Inventory.jsx) pakai state `step` edit/confirm; testid: invoice-confirm-btn, invoice-confirm-panel, invoice-back-btn, invoice-save-btn, invoice-grand-total. Verified curl + UI e2e (total Rp105.000 tampil benar).
 
+## PERBAIKAN 2026-06-21 (batch 2)
+- SIMPAN GAMBAR AI LOKAL: `_save_image_local(src)` (server.py) decode base64/download URL → tulis ke UPLOAD_DIR (env UPLOAD_DIR, default backend/uploads) → return `/api/uploads/{id}.ext`. Route `GET /api/uploads/{fname}` (FileResponse). ai_image kini return path lokal stabil (tak kadaluarsa). Verified: data-url & remote URL tersimpan; GET 200 image/png via localhost & URL publik (ingress meneruskan /api/*). CATATAN: image gen provider (gpt-image-2) sedang 503 model_not_found — masalah provider terpisah; simpan-lokal aktif begitu gambar berhasil dibuat.
+- CEGAH KATEGORI DUPLIKAT: create/update_category cek nama (case-insensitive, per type) → 400 "sudah ada". Verified.
+- CORS KETAT: backend/.env CORS_ORIGINS = preview + prod host; kode strip+filter. Verified di localhost:8001 (allowed → ACAO echo; evil → tanpa ACAO). Via URL publik proxy preview tetap tampil `*` (override proxy), tapi backend enforce benar untuk prod/Pi.
+
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 

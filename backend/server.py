@@ -5,15 +5,18 @@ import os
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR') or (ROOT_DIR / 'uploads'))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, date, timedelta
-import logging, uuid, io, bcrypt, jwt, asyncio
+import logging, uuid, io, bcrypt, jwt, asyncio, re
 
 # ------------------------------------------------------------------ DB
 mongo_url = os.environ['MONGO_URL']
@@ -316,6 +319,8 @@ async def list_categories(include_inactive: bool = True, user: dict = Depends(ge
 
 @api.post("/categories")
 async def create_category(body: CategoryIn, admin: dict = Depends(admin_or_input)):
+    if await db.categories.find_one({"name": {"$regex": f"^{re.escape(body.name.strip())}$", "$options": "i"}, "type": body.type}):
+        raise HTTPException(400, f"Kategori '{body.name}' sudah ada untuk tipe ini")
     doc = body.model_dump()
     doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
     await db.categories.insert_one(doc)
@@ -326,6 +331,8 @@ async def create_category(body: CategoryIn, admin: dict = Depends(admin_or_input
 async def update_category(cid: str, body: CategoryIn, admin: dict = Depends(admin_or_input)):
     if not await db.categories.find_one({"id": cid}):
         raise HTTPException(404, "Kategori tidak ditemukan")
+    if await db.categories.find_one({"name": {"$regex": f"^{re.escape(body.name.strip())}$", "$options": "i"}, "type": body.type, "id": {"$ne": cid}}):
+        raise HTTPException(400, f"Kategori '{body.name}' sudah ada untuk tipe ini")
     await db.categories.update_one({"id": cid}, {"$set": body.model_dump()})
     return await db.categories.find_one({"id": cid}, {"_id": 0})
 
@@ -1052,6 +1059,37 @@ async def _gemini_image(prompt):
         return f"data:{img['mime_type']};base64,{img['data']}"
     return None
 
+async def _save_image_local(src: str) -> str:
+    """Persist an AI image (base64 data URL or remote URL) to local disk; return stable /api/uploads path so it never expires."""
+    if not src:
+        return src
+
+    def run():
+        import base64 as _b64, urllib.request
+        if src.startswith("data:"):
+            header, _, b64data = src.partition(",")
+            mime = header[5:].split(";")[0] or "image/png"
+            raw = _b64.b64decode(b64data)
+        elif src.startswith("http"):
+            req = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read()
+                mime = resp.headers.get_content_type() or "image/png"
+        else:
+            return src
+        ext = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp"}.get(mime, "png")
+        fname = f"{new_id()}.{ext}"
+        (UPLOAD_DIR / fname).write_bytes(raw)
+        return f"/api/uploads/{fname}"
+    return await asyncio.to_thread(run)
+
+@api.get("/uploads/{fname}")
+async def get_upload(fname: str):
+    fp = UPLOAD_DIR / os.path.basename(fname)
+    if not fp.exists():
+        raise HTTPException(404, "File tidak ditemukan")
+    return FileResponse(str(fp))
+
 class AISettingsIn(BaseModel):
     feature: Literal["description", "image", "summary"]
     base_url: Optional[str] = None
@@ -1208,7 +1246,8 @@ async def ai_image(body: AIImageIn, admin: dict = Depends(admin_or_input)):
         image = await _gemini_image(prompt)
         if not image:
             raise HTTPException(500, "Tidak ada gambar dihasilkan")
-        return {"image": image}
+        stored = await _save_image_local(image)
+        return {"image": stored or image}
     except HTTPException:
         raise
     except Exception as e:
@@ -1643,7 +1682,7 @@ app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=[o.strip() for o in os.environ.get('CORS_ORIGINS', '*').split(',') if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )
