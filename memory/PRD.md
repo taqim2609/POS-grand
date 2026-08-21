@@ -164,3 +164,10 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - RBAC 3 peran: admin (full), kasir (POS/Kas/Shift, landing /pos), input/Staf Input (Produk+Kategori+Persediaan+AI desc/image/parse-invoice+import/export produk; landing /products; DENIED users/settings/reports/POS/reset → 403). Backend `admin_or_input=require_roles("admin","input")` di endpoints data-input. ProtectedRoute pakai `roles` array + `homeFor(role)`. Verified curl 200/200/403/403/403.
 - Scan Faktur: opsi KAMERA perangkat (getUserMedia facingMode environment → canvas → dataURL). Tombol "Buka Kamera" + view live + "Ambil Foto"/"Tutup". testid: invoice-camera-btn, invoice-camera-video, invoice-capture-btn, invoice-cam-close-btn. (capture tak bisa e2e di headless; UI+logika terpasang, jalan di perangkat asli.)
 - PORTRAIT: rotate-guard (blok "Putar Perangkat") DIHAPUS. Layout sidebar jadi drawer off-canvas di <1024px (hamburger sidebar-toggle + backdrop + close), statis di lg. main pt-14 lg:pt-0.
+
+## FIX (2026-06-21) — Unduh Folder Proyek/Backup macet di "Menyiapkan..."
+- Root cause: service worker (`frontend/public/sw.js`) meng-intercept & `clone()`+cache respons `/api` pada setup SATU-ORIGIN (nginx proxy /api = origin sama, juga di preview). Body zip besar (2,7 MB) dibuffer 2x → unduhan macet, progres tak jalan.
+- Fix: sw.js bump CACHE v1→v2, bypass semua `/api/` (network-only, no cache), hapus cache lama saat activate. Disalin ke android assets/public/sw.js.
+- UX: `SettingsInstaller.jsx` tambah indikator progres MB/% (onDownloadProgress) di tombol Unduh Folder Proyek & Backup Sekarang.
+- Backend: `installers/project-zip` compresslevel=1 (lebih ringan di CPU Pi). Server kirim zip 2,7MB ~0,47s (curl). Verified via screenshot: unduhan lanjut ke "Mengunduh..." (tidak macet).
+- Catatan: prasyarat Installer sudah menampilkan `sudo systemctl enable docker` untuk auto-start di Pi.
