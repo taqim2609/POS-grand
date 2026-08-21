@@ -144,7 +144,7 @@ sudo systemctl enable docker`}</Code>
               "Akses http://IP-server di POS komputer / atur di APK Android.",
               "Rutin backup (backup-*.sh/.bat) & update saat ada versi baru (update-*.sh/.bat).",
             ].map((s, i) => (
-              <li key={i} className="flex gap-2"><span className="font-bold text-[#E63946]">{i + 1}.</span><span>{s}</span></li>
+              <li key={s} className="flex gap-2"><span className="font-bold text-[#E63946]">{i + 1}.</span><span>{s}</span></li>
             ))}
           </ol>
         </div>
