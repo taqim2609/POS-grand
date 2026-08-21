@@ -130,6 +130,9 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Frontend SettingsInstaller: bagian 3 Backup "Cara cepat (dalam aplikasi)" tombol inapp-backup (unduh) & inapp-restore (upload .zip, konfirmasi window.confirm, reload) + skrip server; bagian 4 Restart Server (download-restart-windows/-pi). Verified UI + compiled.
 - CATATAN penting untuk user: INSTALL pertama/UPDATE/RESTART TIDAK bisa jadi tombol in-app (butuh kontrol Docker host / app harus sudah ada) → tetap via skrip. BACKUP/RESTORE bisa in-app (backend akses Mongo langsung).
 
+## BACKUP OTOMATIS RASPBERRY PI (2026-06-21)
+- /setup-autobackup-pi.sh: pasang cron harian 23:00 → ./backup-pi.sh, log ke backups/autobackup.log, idempoten (hapus baris lama dulu). Embedded SETUP_AUTOBACKUP_PI_SH di installers.js. Kartu unduh "Backup Otomatis Harian (Raspberry Pi)" (testid download-autobackup-pi) di bagian 3 Backup. Verified bash -n root+embedded.
+
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.

@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import {
   INSTALL_WINDOWS_BAT, INSTALL_PI_SH, UPDATE_WINDOWS_BAT, UPDATE_PI_SH,
   BACKUP_WINDOWS_BAT, BACKUP_PI_SH, RESTORE_WINDOWS_BAT, RESTORE_PI_SH,
-  RESTART_WINDOWS_BAT, RESTART_PI_SH, downloadText,
+  RESTART_WINDOWS_BAT, RESTART_PI_SH, SETUP_AUTOBACKUP_PI_SH, downloadText,
 } from "@/lib/installers";
 
 const dl = (name, text) => { downloadText(name, text); toast.success(`Skrip ${name} diunduh`); };
@@ -162,6 +162,11 @@ sudo systemctl enable docker`}</Code>
               subtitle="Seret file .gz ke atas skrip ini." file="restore-windows.bat" text={RESTORE_WINDOWS_BAT} />
             <DlCard testid="download-restore-pi" icon={Cpu} title="Restore (Pi/Linux)"
               subtitle="./restore-pi.sh backups/xxx.gz" file="restore-pi.sh" text={RESTORE_PI_SH} />
+          </div>
+          <div className="mt-2">
+            <DlCard testid="download-autobackup-pi" icon={Cpu} title="Backup Otomatis Harian (Raspberry Pi)"
+              subtitle="Pasang sekali via SSH: ./setup-autobackup-pi.sh — backup tiap malam 23:00 tanpa perlu diingat."
+              file="setup-autobackup-pi.sh" text={SETUP_AUTOBACKUP_PI_SH} />
           </div>
           <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46] space-y-2">
             <div><b>Backup</b> — jalankan skrip; file tersimpan di folder <code>backups/</code> (mis. <code>gak-backup-20260621-0930.gz</code>). Salin file ini ke flashdisk/cloud untuk aman.</div>
