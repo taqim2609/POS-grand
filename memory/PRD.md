@@ -81,6 +81,7 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Model per-fitur: teks/analisis/deskripsi = `deepseek-v4-flash` (key ...GkcQ). Image-gen = `gpt-image-2` (key ...GkcQ).
 - VISION (Scan Faktur) DIPERBAIKI 2026-06-21: key ...F3Q3JdU (sk-jnW9v...) + model `claude-sonnet-5`. Verified via URL publik ~7dtk, parsing sempurna, tanpa 502. Provider chenzk.top TIDAK punya model vision di key ...GkcQ; gpt-5.x bisa vision tapi lambat 26-252dtk (sering 502) → dihindari. claude-sonnet-5/4-6 (key ...JdU) tercepat (~5-7dtk).
 - Backlog AI: simpan gambar AI sebagai aset lokal (URL provider bisa kadaluarsa).
+- 2026-06-21 Scan Faktur → Pembelian Massal: alur 2 langkah (Edit/cocokkan → KONFIRMASI ringkasan → simpan). Endpoint atomik `POST /api/purchases/bulk` (items: existing product_id ATAU create_new+name+category_id+price; validasi semua dulu baru tulis; auto-buat produk retail SKU AI-xxxx; increment stok; return {saved, created_products, total_cost, items}). Frontend InvoiceScan (Inventory.jsx) pakai state `step` edit/confirm; testid: invoice-confirm-btn, invoice-confirm-panel, invoice-back-btn, invoice-save-btn, invoice-grand-total. Verified curl + UI e2e (total Rp105.000 tampil benar).
 
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.

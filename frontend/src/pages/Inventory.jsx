@@ -191,10 +191,11 @@ function InvoiceScan({ open, onClose, onDone }) {
   const [products, setProducts] = useState([]);
   const [cats, setCats] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState("edit");
 
   useEffect(() => {
     if (!open) return;
-    setImage(""); setRows([]);
+    setImage(""); setRows([]); setStep("edit");
     api.get("/products", { params: { type: "retail" } }).then((r) => setProducts(r.data)).catch(() => {});
     api.get("/categories").then((r) => setCats(r.data.filter((c) => c.type === "retail"))).catch(() => {});
   }, [open]);
@@ -220,34 +221,32 @@ function InvoiceScan({ open, onClose, onDone }) {
     try {
       const { data } = await api.post("/ai/parse-invoice", { image });
       if (!data.items?.length) { toast.error("AI tidak menemukan item pada faktur"); setRows([]); }
-      else setRows(data.items.map((it) => ({ ...it, match: autoMatch(it.name), newCat: cats[0]?.id || "", newPrice: it.unit_cost })));
+      else { setRows(data.items.map((it) => ({ ...it, match: autoMatch(it.name), newCat: cats[0]?.id || "", newPrice: it.unit_cost }))); setStep("edit"); }
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
   };
 
   const upd = (i, patch) => setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
 
+  const included = rows.filter((r) => r.match && r.match !== "skip");
+  const grandTotal = included.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unit_cost) || 0), 0);
+  const newCount = included.filter((r) => r.match === "new").length;
+  const nameOf = (r) => (r.match === "new" ? "＋ Produk baru" : (products.find((p) => p.id === r.match)?.name || "?"));
+
+  const goConfirm = () => {
+    if (!included.length) return toast.error("Pilih minimal satu item untuk disimpan");
+    const missingCat = included.find((r) => r.match === "new" && !r.newCat);
+    if (missingCat) return toast.error(`Pilih kategori untuk produk baru "${missingCat.name}"`);
+    setStep("confirm");
+  };
+
   const save = async () => {
-    const valid = rows.filter((r) => r.match && r.match !== "skip");
-    if (!valid.length) return toast.error("Pilih minimal satu item untuk disimpan");
     setSaving(true);
-    let ok = 0;
     try {
-      for (const r of rows) {
-        if (!r.match || r.match === "skip") continue;
-        let pid = r.match;
-        if (r.match === "new") {
-          if (!r.newCat) { toast.error(`Pilih kategori untuk "${r.name}"`); continue; }
-          const sku = "AI-" + Date.now().toString(36).slice(-5) + ok;
-          const { data: np } = await api.post("/products", {
-            name: r.name, sku, category_id: r.newCat, type: "retail",
-            price: Number(r.newPrice || r.unit_cost), cost: Number(r.unit_cost), stock: 0, min_stock: 10,
-          });
-          pid = np.id;
-        }
-        await api.post("/purchases", { product_id: pid, qty: Number(r.qty), unit_cost: Number(r.unit_cost), note: "Faktur AI" });
-        ok += 1;
-      }
-      toast.success(`${ok} item pembelian tersimpan, stok bertambah`);
+      const items = included.map((r) => r.match === "new"
+        ? { create_new: true, name: r.name, category_id: r.newCat, price: Number(r.newPrice || r.unit_cost), qty: Number(r.qty), unit_cost: Number(r.unit_cost) }
+        : { product_id: r.match, qty: Number(r.qty), unit_cost: Number(r.unit_cost) });
+      const { data } = await api.post("/purchases/bulk", { items, note: "Faktur AI" });
+      toast.success(`${data.saved} pembelian tersimpan${data.created_products ? `, ${data.created_products} produk baru dibuat` : ""}. Stok diperbarui.`);
       onDone(); onClose();
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setSaving(false); }
   };
@@ -269,9 +268,9 @@ function InvoiceScan({ open, onClose, onDone }) {
           </div>
           {image && <img src={image} alt="faktur" className="max-h-48 rounded-xl border" />}
 
-          {rows.length > 0 && (
+          {rows.length > 0 && step === "edit" && (
             <div className="space-y-2">
-              <div className="text-xs font-bold text-[#52525B]">Cocokkan tiap item ke produk retail, lalu simpan:</div>
+              <div className="text-xs font-bold text-[#52525B]">Cocokkan tiap item ke produk retail, lalu lanjut ke konfirmasi:</div>
               {rows.map((r, i) => (
                 <div key={i} data-testid={`invoice-row-${i}`} className="rounded-xl border p-3 grid md:grid-cols-12 gap-2 items-center">
                   <input value={r.name} onChange={(e) => upd(i, { name: e.target.value })} className="md:col-span-4 h-10 rounded-lg border px-2 text-sm" />
@@ -293,10 +292,47 @@ function InvoiceScan({ open, onClose, onDone }) {
                   )}
                 </div>
               ))}
-              <button data-testid="invoice-save-btn" onClick={save} disabled={saving}
-                className="tap w-full h-12 rounded-xl bg-[#E63946] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Simpan Semua Pembelian
+              <button data-testid="invoice-confirm-btn" onClick={goConfirm}
+                className="tap w-full h-12 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center justify-center gap-2">
+                <ClipboardCheck size={16} /> Lanjut: Konfirmasi Pembelian
               </button>
+            </div>
+          )}
+
+          {rows.length > 0 && step === "confirm" && (
+            <div className="space-y-3" data-testid="invoice-confirm-panel">
+              <div className="text-sm font-bold text-[#0A0A0A]">Periksa kembali sebelum menyimpan. Stok akan bertambah sesuai jumlah di bawah:</div>
+              <div className="rounded-xl border overflow-hidden">
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-[#F4F5F7] text-xs font-bold uppercase tracking-wider text-[#52525B]">
+                  <div className="col-span-5">Barang → Produk</div>
+                  <div className="col-span-2 text-right">Qty</div>
+                  <div className="col-span-2 text-right">Harga/Unit</div>
+                  <div className="col-span-3 text-right">Subtotal</div>
+                </div>
+                {included.map((r, i) => (
+                  <div key={i} data-testid={`invoice-confirm-row-${i}`} className="grid grid-cols-12 gap-2 px-3 py-2.5 border-t text-sm items-center">
+                    <div className="col-span-5">
+                      <div className="font-bold">{r.name}</div>
+                      <div className={`text-xs ${r.match === "new" ? "text-[#E63946] font-bold" : "text-[#52525B]"}`}>{nameOf(r)}</div>
+                    </div>
+                    <div className="col-span-2 text-right font-num font-bold">{Number(r.qty) || 0}</div>
+                    <div className="col-span-2 text-right font-num">{rupiah(Number(r.unit_cost) || 0)}</div>
+                    <div className="col-span-3 text-right font-num font-bold">{rupiah((Number(r.qty) || 0) * (Number(r.unit_cost) || 0))}</div>
+                  </div>
+                ))}
+                <div className="grid grid-cols-12 gap-2 px-3 py-3 border-t bg-[#FFF7F8] text-sm items-center">
+                  <div className="col-span-9 font-bold">Total ({included.length} item{newCount ? `, ${newCount} produk baru` : ""})</div>
+                  <div className="col-span-3 text-right font-num font-extrabold text-[#E63946]" data-testid="invoice-grand-total">{rupiah(grandTotal)}</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button data-testid="invoice-back-btn" onClick={() => setStep("edit")} disabled={saving}
+                  className="tap h-12 px-5 rounded-xl bg-[#F4F5F7] border font-bold disabled:opacity-50">← Kembali Edit</button>
+                <button data-testid="invoice-save-btn" onClick={save} disabled={saving}
+                  className="tap flex-1 h-12 rounded-xl bg-[#E63946] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Konfirmasi & Simpan Semua
+                </button>
+              </div>
             </div>
           )}
         </div>

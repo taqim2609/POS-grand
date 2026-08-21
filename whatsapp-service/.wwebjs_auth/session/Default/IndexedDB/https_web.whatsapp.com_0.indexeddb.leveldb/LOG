@@ -309,3 +309,11 @@
 2026/08/21-04:32:34.189 1bb Level-0 table #1992: started
 2026/08/21-04:32:34.207 1bb Level-0 table #1992: 881099 bytes OK
 2026/08/21-04:32:34.210 1bb Delete type=0 #1969
+2026/08/21-04:37:38.711 1bb Compacting 1@0 + 1@1 files
+2026/08/21-04:37:38.720 1bb Generated table #1993@0: 10485 keys, 108938 bytes
+2026/08/21-04:37:38.727 1bb Generated table #1994@0: 4412 keys, 276646 bytes
+2026/08/21-04:37:38.730 1bb Generated table #1995@0: 493 keys, 31774 bytes
+2026/08/21-04:37:38.730 1bb Compacted 1@0 + 1@1 files => 417358 bytes
+2026/08/21-04:37:38.733 1bb compacted to: files[ 0 3 30 0 0 0 0 ]
+2026/08/21-04:37:38.734 1bb Delete type=2 #1973
+2026/08/21-04:37:38.734 1bb Delete type=2 #1992

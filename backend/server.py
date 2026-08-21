@@ -794,6 +794,63 @@ async def create_purchase(body: PurchaseIn, admin: dict = Depends(require_admin)
     doc.pop("_id", None)
     return {**doc, "new_stock": p.get("stock", 0) + body.qty}
 
+class BulkPurchaseItemIn(BaseModel):
+    product_id: Optional[str] = None
+    create_new: bool = False
+    name: Optional[str] = None
+    category_id: Optional[str] = None
+    price: Optional[float] = None
+    qty: int = Field(gt=0)
+    unit_cost: float = Field(ge=0)
+
+class BulkPurchaseIn(BaseModel):
+    items: List[BulkPurchaseItemIn]
+    note: Optional[str] = "Faktur AI"
+
+@api.post("/purchases/bulk")
+async def create_purchases_bulk(body: BulkPurchaseIn, admin: dict = Depends(require_admin)):
+    if not body.items:
+        raise HTTPException(400, "Tidak ada item untuk disimpan")
+    # Validate all items before writing anything
+    for it in body.items:
+        if it.create_new:
+            if not (it.name and it.name.strip()) or not it.category_id:
+                raise HTTPException(400, f"Produk baru '{it.name or '?'}' butuh nama & kategori")
+            if not await db.categories.find_one({"id": it.category_id}):
+                raise HTTPException(400, f"Kategori untuk '{it.name}' tidak valid")
+        else:
+            if not it.product_id:
+                raise HTTPException(400, "Item lama butuh product_id")
+            p = await db.products.find_one({"id": it.product_id}, {"_id": 0})
+            if not p:
+                raise HTTPException(404, f"Produk '{it.name or it.product_id}' tidak ditemukan")
+            if not p.get("track_stock"):
+                raise HTTPException(400, f"'{p['name']}' bukan produk retail (tidak melacak stok)")
+    saved, created_products = [], 0
+    for it in body.items:
+        if it.create_new:
+            prod = {"id": new_id(), "name": it.name.strip(), "sku": "AI-" + new_id()[:6],
+                    "category_id": it.category_id, "type": "retail",
+                    "price": float(it.price if it.price is not None else it.unit_cost),
+                    "cost": float(it.unit_cost), "description": "", "image": "", "active": True,
+                    "sold_out": False, "stock": 0, "min_stock": 10, "track_stock": True,
+                    "created_at": now_utc().isoformat()}
+            await db.products.insert_one(prod)
+            pid, pname, psku, base_stock = prod["id"], prod["name"], prod["sku"], 0
+            created_products += 1
+        else:
+            p = await db.products.find_one({"id": it.product_id}, {"_id": 0})
+            pid, pname, psku, base_stock = p["id"], p["name"], p["sku"], p.get("stock", 0)
+        await db.products.update_one({"id": pid}, {"$inc": {"stock": it.qty}, "$set": {"cost": it.unit_cost}})
+        doc = {"id": new_id(), "product_id": pid, "product_name": pname, "sku": psku,
+               "qty": it.qty, "unit_cost": it.unit_cost, "total_cost": round(it.qty * it.unit_cost, 2),
+               "note": body.note, "by": admin["name"], "created_at": now_utc().isoformat()}
+        await db.purchases.insert_one(doc)
+        doc.pop("_id", None)
+        saved.append({**doc, "new_stock": base_stock + it.qty})
+    return {"saved": len(saved), "created_products": created_products,
+            "total_cost": round(sum(s["total_cost"] for s in saved), 2), "items": saved}
+
 @api.get("/purchases")
 async def list_purchases(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(require_admin)):
     q = {}
