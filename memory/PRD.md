@@ -121,6 +121,9 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Frontend api.js: `discoverServer(onProgress)` memindai PARALEL kandidat: current origin + mDNS (pos.local/grandaceh.local/raspberrypi.local) + IP umum (192.168.1/0/100, 10.0.0 → oktet 1/2/10/11/100/200/50); probe `${base}/api/health` timeout 1.5s; first valid wins → setServerUrl + reload.
 - Login.jsx: tombol "Cari Server Otomatis" (testid server-scan-btn) + "Atur Server Manual (LAN)". Verified: health 200, button render, compiled successfully. Catatan: butuh CORS_ORIGINS=* di server LAN (sudah default di .env.docker) agar probe lintas-origin dari APK bisa baca JSON.
 
+## PINTASAN KLIEN (2026-06-21)
+- /Buka-POS-Windows.url (InternetShortcut → http://pos.local) & /Buka-POS-Linux.desktop (xdg-open http://pos.local). Ikut otomatis di project-zip (verified). Dobel-klik di komputer klien = buka aplikasi tanpa ketik alamat; edit ganti pos.local→IP bila perlu. Panduan di MULAI-DISINI.txt.
+
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.

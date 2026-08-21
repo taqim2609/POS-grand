@@ -50,5 +50,15 @@ PERAWATAN
                         (hasil ada di folder backups/, salin ke flashdisk)
   * RESTORE data      : restore-windows.bat <file.gz>  /  ./restore-pi.sh <file.gz>
 
+========================================================
+PINTASAN CEPAT (untuk komputer KLIEN)
+========================================================
+  Dobel-klik salah satu (buka aplikasi di browser tanpa mengetik alamat):
+    * Windows : Buka-POS-Windows.url
+    * Linux   : Buka-POS-Linux.desktop
+  Keduanya mengarah ke  http://pos.local  (nama server Raspberry Pi/hostname "pos").
+  Jika server memakai IP tetap, EDIT file pintasan itu, ganti "pos.local"
+  dengan IP server, mis:  http://192.168.1.100
+
 Butuh bantuan? Baca README-DEPLOY.md di folder ini.
 ========================================================
