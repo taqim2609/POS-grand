@@ -260,7 +260,7 @@ function InvoiceScan({ open, onClose, onDone }) {
     try {
       const { data } = await api.post("/ai/parse-invoice", { image });
       if (!data.items?.length) { toast.error("AI tidak menemukan item pada faktur"); setRows([]); }
-      else { setRows(data.items.map((it) => ({ ...it, match: autoMatch(it.name, it.sku), newCat: cats[0]?.id || "", newPrice: it.unit_cost }))); setStep("edit"); }
+      else { setRows(data.items.map((it, idx) => ({ ...it, rid: `r${Date.now()}-${idx}`, match: autoMatch(it.name, it.sku), newCat: cats[0]?.id || "", newPrice: it.unit_cost }))); setStep("edit"); }
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
   };
 
@@ -323,7 +323,7 @@ function InvoiceScan({ open, onClose, onDone }) {
             <div className="space-y-2">
               <div className="text-xs font-bold text-[#52525B]">Produk sudah dicocokkan otomatis. Periksa & ubah bila ada yang salah, lalu lanjut ke konfirmasi:</div>
               {rows.map((r, i) => (
-                <div key={i} data-testid={`invoice-row-${i}`} className="rounded-xl border p-3 grid md:grid-cols-12 gap-2 items-center">
+                <div key={r.rid} data-testid={`invoice-row-${i}`} className="rounded-xl border p-3 grid md:grid-cols-12 gap-2 items-center">
                   <input value={r.name} onChange={(e) => upd(i, { name: e.target.value })} className="md:col-span-4 h-10 rounded-lg border px-2 text-sm" />
                   <input type="number" value={r.qty} onChange={(e) => upd(i, { qty: e.target.value })} className="md:col-span-1 h-10 rounded-lg border px-2 text-sm font-num" title="Qty" />
                   <input type="number" value={r.unit_cost} onChange={(e) => upd(i, { unit_cost: e.target.value })} className="md:col-span-2 h-10 rounded-lg border px-2 text-sm font-num" title="Harga beli/unit" />
@@ -361,7 +361,7 @@ function InvoiceScan({ open, onClose, onDone }) {
                   <div className="col-span-3 text-right">Subtotal</div>
                 </div>
                 {included.map((r, i) => (
-                  <div key={i} data-testid={`invoice-confirm-row-${i}`} className="grid grid-cols-12 gap-2 px-3 py-2.5 border-t text-sm items-center">
+                  <div key={r.rid} data-testid={`invoice-confirm-row-${i}`} className="grid grid-cols-12 gap-2 px-3 py-2.5 border-t text-sm items-center">
                     <div className="col-span-5">
                       <div className="font-bold">{r.name}</div>
                       <div className={`text-xs ${r.match === "new" ? "text-[#E63946] font-bold" : "text-[#52525B]"}`}>{nameOf(r)}</div>
