@@ -54,6 +54,12 @@ if [ "${NEEDS_EDIT}" = "1" ]; then
   fi
 fi
 
+# Simpan path host untuk fitur "Update Sekarang" 1-klik dari aplikasi
+touch .env
+grep -v '^HOST_PROJECT_DIR=' .env > .env.tmp 2>/dev/null || true
+echo "HOST_PROJECT_DIR=$(pwd)" >> .env.tmp
+mv .env.tmp .env
+
 echo
 echo "Membangun & menjalankan... (unduhan pertama bisa memakan waktu)"
 docker compose up -d --build

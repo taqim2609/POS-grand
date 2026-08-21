@@ -19,10 +19,14 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env.docker
+    environment:
+      - HOST_PROJECT_DIR=${HOST_PROJECT_DIR:-}
+      - UPDATER_IMAGE=${UPDATER_IMAGE:-docker:cli}
     depends_on:
       - mongo
     volumes:
       - uploads_data:/app/uploads   # gambar AI & unggahan tersimpan permanen
+      - /var/run/docker.sock:/var/run/docker.sock   # untuk tombol "Update Sekarang" (1-klik)
 
   whatsapp:
     build: ./whatsapp-service

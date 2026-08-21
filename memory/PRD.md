@@ -171,3 +171,13 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - UX: `SettingsInstaller.jsx` tambah indikator progres MB/% (onDownloadProgress) di tombol Unduh Folder Proyek & Backup Sekarang.
 - Backend: `installers/project-zip` compresslevel=1 (lebih ringan di CPU Pi). Server kirim zip 2,7MB ~0,47s (curl). Verified via screenshot: unduhan lanjut ke "Mengunduh..." (tidak macet).
 - Catatan: prasyarat Installer sudah menampilkan `sudo systemctl enable docker` untuk auto-start di Pi.
+
+## FITUR (2026-06-21) — Update 1-Klik dari aplikasi (halaman Installer) + Installer khusus GitHub
+- Installer page dirombak jadi KHUSUS GitHub: dihapus unduh ZIP proyek + kartu unduh install/update manual. Repo default: https://github.com/taqim2609/POS-grand.git
+- bootstrap-pi.sh kini clone/pull dari GitHub (auto pasang git+Docker, systemctl enable docker). One-liner: `bash <(curl -fsSL https://raw.githubusercontent.com/taqim2609/POS-grand/main/bootstrap-pi.sh)`. Cadangan: tombol unduh bootstrap-pi.sh.
+- Panduan: /app/PANDUAN-GITHUB.md (install/update/akses/backup/restart).
+- Update 1-Klik: tombol "Update Sekarang" HANYA di halaman Installer (Pengaturan → Installer, section 2).
+  - Backend: `GET /api/admin/update/status` (enabled bila /var/run/docker.sock ada + HOST_PROJECT_DIR diset), `POST /api/admin/update` (jalankan container `gak-updater` via Docker SDK python: `docker:cli` mount sock + HOST_PROJECT_DIR:/project → `git pull` + `docker compose up -d --build`, detached agar survive rebuild backend). Preview: sock tak ada → 400 pesan ramah "belum aktif". Verified curl + screenshot.
+  - Aktivasi: butuh 1x update manual (`./update-pi.sh`) — install-pi.sh & update-pi.sh kini menulis HOST_PROJECT_DIR=$(pwd) ke .env; docker-compose.yml backend menambah mount /var/run/docker.sock + env HOST_PROJECT_DIR & UPDATER_IMAGE. Setelah 1x itu, update cukup tombol.
+  - requirements.txt: +docker==7.2.0 (pip freeze).
+- CATATAN: alur Docker update 1-klik TIDAK bisa diuji penuh di preview (tak ada compose stack). Verifikasi akhir di Pi/PC user. Windows tetap pakai update-windows.bat.

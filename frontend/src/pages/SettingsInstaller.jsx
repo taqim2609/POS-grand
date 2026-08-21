@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks, Github } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -26,6 +26,27 @@ const Code = ({ children }) => (
 
 export default function SettingsInstaller() {
   const fileRef = useRef(null);
+  const [updating, setUpdating] = useState(false);
+  const [updateEnabled, setUpdateEnabled] = useState(null);
+
+  useEffect(() => {
+    api.get("/admin/update/status")
+      .then((r) => setUpdateEnabled(!!r.data?.enabled))
+      .catch(() => setUpdateEnabled(false));
+  }, []);
+
+  const updateNow = async () => {
+    if (!window.confirm("Tarik versi terbaru dari GitHub & bangun ulang sekarang? Aplikasi akan restart beberapa menit.")) return;
+    setUpdating(true);
+    const t = toast.loading("Memulai update...");
+    try {
+      const r = await api.post("/admin/update");
+      toast.success(r.data?.message || "Update dimulai.", { id: t, duration: 9000 });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Gagal memulai update", { id: t, duration: 10000 });
+      setUpdating(false);
+    }
+  };
 
   const backupNow = async () => {
     const t = toast.loading("Membuat backup...");
@@ -103,11 +124,23 @@ install-windows.bat`}</Code>
 
         {/* UPDATE */}
         <Section n="2" title="Perbarui Server (update dari GitHub)" icon={RefreshCw} desc="Saat ada versi baru di GitHub, jalankan di mesin server. Data Anda tetap aman.">
+          <div className="rounded-xl border-2 border-[#E63946] bg-[#FEF2F2] p-4 space-y-2" data-testid="update-oneclick-box">
+            <div className="flex items-center gap-2 font-extrabold"><RefreshCw size={18} className="text-[#E63946]" /> Update 1-Klik</div>
+            <p className="text-xs text-[#52525B]">Tarik versi terbaru dari GitHub &amp; bangun ulang otomatis di server — tanpa SSH. Setelah ditekan, tunggu 2–10 menit lalu muat ulang halaman ini.</p>
+            <button data-testid="inapp-update-btn" disabled={updating} onClick={updateNow}
+              className="tap h-11 px-5 rounded-xl bg-[#E63946] text-white font-bold inline-flex items-center gap-2 disabled:opacity-60">
+              <RefreshCw size={16} className={updating ? "animate-spin" : ""} /> {updating ? "Sedang update..." : "Update Sekarang"}
+            </button>
+            {updateEnabled === false && (
+              <p className="text-[11px] text-[#B91C1C]" data-testid="update-inactive-note">Fitur 1-klik belum aktif. Jalankan update manual <b>sekali</b> (perintah di bawah) untuk mengaktifkannya; setelah itu cukup tombol.</p>
+            )}
+          </div>
           <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 space-y-3 text-sm text-[#3f3f46]">
+            <div className="font-bold text-xs text-[#52525B]">Alternatif via SSH (juga dipakai untuk mengaktifkan tombol 1-klik pertama kali):</div>
             <div>
               <div className="font-bold flex items-center gap-1.5 mb-1"><Cpu size={14} /> Raspberry Pi (SSH)</div>
               <Code>{`cd ${APP_DIR} && ./update-pi.sh`}</Code>
-              <div className="text-[11px] text-[#52525B] mt-1">Otomatis <code>git pull</code> + bangun ulang + restart. Atau jalankan ulang perintah bootstrap di atas.</div>
+              <div className="text-[11px] text-[#52525B] mt-1">Otomatis <code>git pull</code> + bangun ulang + restart.</div>
             </div>
             <div>
               <div className="font-bold flex items-center gap-1.5 mb-1"><Monitor size={14} /> Windows</div>

@@ -1166,6 +1166,62 @@ async def backup_import(file: UploadFile = File(...), admin: dict = Depends(requ
         restored += 1
     return {"restored_collections": restored}
 
+DOCKER_SOCK = "/var/run/docker.sock"
+
+def _update_enabled():
+    return os.path.exists(DOCKER_SOCK) and bool(os.environ.get("HOST_PROJECT_DIR"))
+
+@api.get("/admin/update/status")
+async def update_status(admin: dict = Depends(require_admin)):
+    running = False
+    if _update_enabled():
+        try:
+            import docker
+            cli = docker.from_env()
+            running = any(c.name == "gak-updater" for c in cli.containers.list())
+        except Exception:
+            pass
+    return {"enabled": _update_enabled(), "running": running,
+            "host_project_dir": os.environ.get("HOST_PROJECT_DIR")}
+
+@api.post("/admin/update")
+async def admin_update(admin: dict = Depends(require_admin)):
+    if not os.path.exists(DOCKER_SOCK):
+        raise HTTPException(400, "Fitur update 1-klik belum aktif. Jalankan update manual sekali (cd ~/grand-aceh-pos && ./update-pi.sh) untuk mengaktifkannya.")
+    host_dir = os.environ.get("HOST_PROJECT_DIR")
+    if not host_dir:
+        raise HTTPException(400, "HOST_PROJECT_DIR belum diset. Jalankan update manual sekali untuk mengaktifkan fitur ini.")
+    try:
+        import docker
+        cli = docker.from_env()
+    except Exception as e:
+        raise HTTPException(500, f"Docker tidak tersedia dari aplikasi: {e}")
+    try:
+        for c in cli.containers.list(all=True, filters={"name": "gak-updater"}):
+            try:
+                c.remove(force=True)
+            except Exception:
+                pass
+        image = os.environ.get("UPDATER_IMAGE", "docker:cli")
+        cmd = ("apk add --no-cache git >/dev/null 2>&1; "
+               "git config --global --add safe.directory /project; "
+               "git -C /project pull --ff-only; "
+               "cd /project && docker compose up -d --build")
+        cli.containers.run(
+            image,
+            command=["sh", "-c", cmd],
+            detach=True, remove=True, name="gak-updater",
+            volumes={
+                DOCKER_SOCK: {"bind": DOCKER_SOCK, "mode": "rw"},
+                host_dir: {"bind": "/project", "mode": "rw"},
+            },
+            working_dir="/project",
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Gagal memulai update: {e}")
+    return {"started": True, "message": "Update dimulai. Tunggu 2-10 menit, lalu muat ulang halaman."}
+
+
 class AISettingsIn(BaseModel):
     feature: Literal["description", "image", "summary"]
     base_url: Optional[str] = None
