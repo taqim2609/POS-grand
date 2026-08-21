@@ -17,6 +17,56 @@ export function setServerUrl(url) {
   else localStorage.removeItem("gak_server_url");
 }
 
+// Probe one base URL for the POS server health endpoint (short timeout).
+async function probe(base, timeoutMs = 1500) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${base}/api/health`, { signal: ctrl.signal });
+    if (!res.ok) return false;
+    const j = await res.json();
+    return j && j.app === "gak-pos";
+  } catch (e) {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Auto-discover the POS server on the local network.
+// Tries mDNS hostnames + common gateway IPs. Returns the base URL or null.
+export async function discoverServer(onProgress) {
+  const hosts = [
+    "pos.local", "grandaceh.local", "raspberrypi.local",
+  ];
+  const subnets = ["192.168.1", "192.168.0", "192.168.100", "10.0.0"];
+  const lastOctets = ["1", "2", "10", "11", "100", "200", "50"];
+  const candidates = [];
+  // current origin first (app served from server)
+  if (typeof window !== "undefined" && window.location?.origin?.startsWith("http")) {
+    candidates.push(window.location.origin);
+  }
+  hosts.forEach((h) => candidates.push(`http://${h}`));
+  subnets.forEach((s) => lastOctets.forEach((o) => candidates.push(`http://${s}.${o}`)));
+
+  let done = 0;
+  const total = candidates.length;
+  // Probe all candidates in parallel; first valid POS server wins (much faster than sequential).
+  return await new Promise((resolve) => {
+    let remaining = total;
+    let settled = false;
+    candidates.forEach((base) => {
+      probe(base).then((ok) => {
+        done += 1;
+        if (onProgress) onProgress(done, total, base);
+        if (ok && !settled) { settled = true; resolve(base); }
+        remaining -= 1;
+        if (remaining === 0 && !settled) resolve(null);
+      });
+    });
+  });
+}
+
 const api = axios.create({
   baseURL: `${getServerUrl()}/api`,
 });

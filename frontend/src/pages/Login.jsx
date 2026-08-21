@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiError, getServerUrl, setServerUrl } from "@/lib/api";
+import { apiError, getServerUrl, setServerUrl, discoverServer } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail, Server } from "lucide-react";
+import { Loader2, Lock, Mail, Server, Radar } from "lucide-react";
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -13,11 +13,32 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showSrv, setShowSrv] = useState(false);
   const [srv, setSrv] = useState(getServerUrl());
+  const [scanning, setScanning] = useState(false);
 
   const saveSrv = () => {
     setServerUrl(srv);
     toast.success("Alamat server disimpan. Memuat ulang...");
     setTimeout(() => window.location.reload(), 700);
+  };
+
+  const scan = async () => {
+    setScanning(true);
+    const t = toast.loading("Mencari server di jaringan...");
+    try {
+      const found = await discoverServer((done, total) => {
+        toast.loading(`Memindai jaringan... (${done}/${total})`, { id: t });
+      });
+      if (found) {
+        setServerUrl(found);
+        toast.success(`Server ditemukan: ${found}. Menghubungkan...`, { id: t });
+        setTimeout(() => window.location.reload(), 900);
+      } else {
+        toast.error("Server tidak ditemukan otomatis. Isi alamat manual di Pengaturan Server.", { id: t });
+        setShowSrv(true);
+      }
+    } finally {
+      setScanning(false);
+    }
   };
 
   useEffect(() => {
@@ -96,10 +117,17 @@ export default function Login() {
           </button>
 
           <button
-            type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
-            className="mt-5 mx-auto flex items-center gap-1.5 text-xs font-bold text-[#a1a1aa] hover:text-[#52525B]"
+            type="button" data-testid="server-scan-btn" onClick={scan} disabled={scanning}
+            className="tap mt-4 w-full h-11 rounded-xl border-2 border-[#E63946] text-[#E63946] font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            <Server size={13} /> Pengaturan Server (LAN)
+            {scanning ? <Loader2 size={16} className="animate-spin" /> : <Radar size={16} />} Cari Server Otomatis
+          </button>
+
+          <button
+            type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
+            className="mt-3 mx-auto flex items-center gap-1.5 text-xs font-bold text-[#a1a1aa] hover:text-[#52525B]"
+          >
+            <Server size={13} /> Atur Server Manual (LAN)
           </button>
           {showSrv && (
             <div className="mt-3 rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] p-3" data-testid="server-config-panel">

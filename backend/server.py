@@ -1090,6 +1090,10 @@ async def _save_image_local(src: str) -> str:
         return f"/api/uploads/{fname}"
     return await asyncio.to_thread(run)
 
+@api.get("/health")
+async def health():
+    return {"app": "gak-pos", "ok": True}
+
 @api.get("/uploads/{fname}")
 async def get_upload(fname: str):
     fp = UPLOAD_DIR / os.path.basename(fname)
