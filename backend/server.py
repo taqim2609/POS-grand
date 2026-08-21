@@ -1174,14 +1174,21 @@ def _update_enabled():
 @api.get("/admin/update/status")
 async def update_status(admin: dict = Depends(require_admin)):
     running = False
+    log = ""
     if _update_enabled():
         try:
             import docker
             cli = docker.from_env()
-            running = any(c.name == "gak-updater" for c in cli.containers.list())
+            try:
+                c = cli.containers.get("gak-updater")
+                c.reload()
+                running = c.status == "running"
+                log = c.logs(tail=20).decode("utf-8", "ignore")[-1800:]
+            except Exception:
+                running = False
         except Exception:
             pass
-    return {"enabled": _update_enabled(), "running": running,
+    return {"enabled": _update_enabled(), "running": running, "log": log,
             "host_project_dir": os.environ.get("HOST_PROJECT_DIR")}
 
 @api.post("/admin/update")

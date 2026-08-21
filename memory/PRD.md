@@ -181,3 +181,9 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
   - Aktivasi: butuh 1x update manual (`./update-pi.sh`) — install-pi.sh & update-pi.sh kini menulis HOST_PROJECT_DIR=$(pwd) ke .env; docker-compose.yml backend menambah mount /var/run/docker.sock + env HOST_PROJECT_DIR & UPDATER_IMAGE. Setelah 1x itu, update cukup tombol.
   - requirements.txt: +docker==7.2.0 (pip freeze).
 - CATATAN: alur Docker update 1-klik TIDAK bisa diuji penuh di preview (tak ada compose stack). Verifikasi akhir di Pi/PC user. Windows tetap pakai update-windows.bat.
+
+## FITUR (2026-06-21 lanjut) — Status update live + Bootstrap Windows
+- Update 1-klik kini punya PROGRES REAL-TIME: setelah POST /api/admin/update, frontend polling GET /api/admin/update/status tiap 4s → tampilkan fase ("Membangun ulang...", "Server restart...", "Selesai! Memuat ulang..."), timer elapsed, dan cuplikan log updater (docker logs gak-updater via SDK). Deteksi selesai: updater running true→false ATAU backend sempat down lalu up. Auto window.location.reload() saat selesai. Safety timeout 15 menit. testid: update-progress, update-phase, update-log.
+- Backend GET /admin/update/status kini kembalikan field `log` (tail 20 baris updater container).
+- Bootstrap Windows: /app/bootstrap-windows.bat (cek git+Docker → git clone/pull repo → call install-windows.bat). Diexport di installers.js (BOOTSTRAP_WINDOWS_BAT), tombol unduh di Installer (download-bootstrap-windows) + panduan diperbarui.
+- Verified: compile bersih, tombol & panel tampil (screenshot), status endpoint balikkan log. Alur Docker sebenarnya tetap perlu verifikasi di Pi/PC user.

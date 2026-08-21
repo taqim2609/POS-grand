@@ -47,7 +47,10 @@ chmod +x bootstrap-pi.sh
 
 Prasyarat: pasang **Docker Desktop** (aktifkan WSL2) dan **Git for Windows**.
 
-Di PowerShell / CMD:
+**Cara termudah:** unduh `bootstrap-windows.bat` dari aplikasi (Pengaturan → Installer),
+lalu **dobel-klik**. Skrip otomatis: cek git+Docker → `git clone` repo → jalankan installer.
+
+**Atau manual** di PowerShell / CMD:
 ```bat
 git clone https://github.com/taqim2609/POS-grand.git grand-aceh-pos
 cd grand-aceh-pos

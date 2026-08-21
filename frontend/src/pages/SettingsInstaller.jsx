@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks, Github } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { BOOTSTRAP_PI_SH, downloadText } from "@/lib/installers";
+import { BOOTSTRAP_PI_SH, BOOTSTRAP_WINDOWS_BAT, downloadText } from "@/lib/installers";
 
 const REPO_URL = "https://github.com/taqim2609/POS-grand.git";
 const RAW_BOOTSTRAP = "https://raw.githubusercontent.com/taqim2609/POS-grand/main/bootstrap-pi.sh";
@@ -28,23 +28,65 @@ export default function SettingsInstaller() {
   const fileRef = useRef(null);
   const [updating, setUpdating] = useState(false);
   const [updateEnabled, setUpdateEnabled] = useState(null);
+  const [phase, setPhase] = useState("");
+  const [log, setLog] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const pollRef = useRef(null);
+  const tickRef = useRef(null);
 
   useEffect(() => {
     api.get("/admin/update/status")
       .then((r) => setUpdateEnabled(!!r.data?.enabled))
       .catch(() => setUpdateEnabled(false));
+    return () => { clearInterval(pollRef.current); clearInterval(tickRef.current); };
   }, []);
+
+  const finishUpdate = (ok) => {
+    clearInterval(pollRef.current); clearInterval(tickRef.current);
+    if (ok) {
+      setPhase("Selesai! Memuat ulang halaman...");
+      setTimeout(() => window.location.reload(), 2500);
+    } else {
+      setUpdating(false); setPhase("");
+    }
+  };
+
+  const startPolling = () => {
+    let sawRunning = false, sawDown = false;
+    const started = Date.now();
+    setElapsed(0);
+    tickRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - started > 15 * 60 * 1000) { finishUpdate(true); return; }
+      try {
+        const r = await api.get("/admin/update/status");
+        if (r.data?.log) setLog(r.data.log);
+        if (r.data?.running) {
+          sawRunning = true;
+          setPhase("Membangun ulang aplikasi di server...");
+        } else if (sawRunning || sawDown) {
+          finishUpdate(true);
+        } else {
+          setPhase("Menyiapkan update...");
+        }
+      } catch (e) {
+        sawDown = true;
+        setPhase("Server sedang restart (membangun ulang)...");
+      }
+    }, 4000);
+  };
 
   const updateNow = async () => {
     if (!window.confirm("Tarik versi terbaru dari GitHub & bangun ulang sekarang? Aplikasi akan restart beberapa menit.")) return;
-    setUpdating(true);
+    setUpdating(true); setLog(""); setPhase("Memulai update...");
     const t = toast.loading("Memulai update...");
     try {
       const r = await api.post("/admin/update");
-      toast.success(r.data?.message || "Update dimulai.", { id: t, duration: 9000 });
+      toast.success(r.data?.message || "Update dimulai.", { id: t, duration: 8000 });
+      startPolling();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Gagal memulai update", { id: t, duration: 10000 });
-      setUpdating(false);
+      setUpdating(false); setPhase("");
     }
   };
 
@@ -115,7 +157,12 @@ export default function SettingsInstaller() {
           </div>
           <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 space-y-2 text-sm text-[#3f3f46]">
             <div className="font-bold flex items-center gap-1.5"><Monitor size={14} /> Komputer Windows</div>
-            <p className="text-xs text-[#52525B]">Pastikan Docker Desktop &amp; Git terpasang, lalu di PowerShell:</p>
+            <p className="text-xs text-[#52525B]">Pastikan <b>Docker Desktop</b> &amp; <b>Git for Windows</b> terpasang. Cara termudah: unduh skrip bootstrap lalu <b>dobel-klik</b> — otomatis clone dari GitHub + install.</p>
+            <button data-testid="download-bootstrap-windows" onClick={() => { downloadText("bootstrap-windows.bat", BOOTSTRAP_WINDOWS_BAT); toast.success("bootstrap-windows.bat diunduh"); }}
+              className="tap h-9 px-3 rounded-lg bg-white border border-[#0A0A0A] text-[#0A0A0A] font-bold text-xs inline-flex items-center gap-1.5">
+              <Download size={13} /> Unduh bootstrap-windows.bat
+            </button>
+            <div className="text-[11px] text-[#52525B] mt-1">Atau manual di PowerShell:</div>
             <Code>{`git clone ${REPO_URL} grand-aceh-pos
 cd grand-aceh-pos
 install-windows.bat`}</Code>
@@ -131,7 +178,18 @@ install-windows.bat`}</Code>
               className="tap h-11 px-5 rounded-xl bg-[#E63946] text-white font-bold inline-flex items-center gap-2 disabled:opacity-60">
               <RefreshCw size={16} className={updating ? "animate-spin" : ""} /> {updating ? "Sedang update..." : "Update Sekarang"}
             </button>
-            {updateEnabled === false && (
+            {updating && (
+              <div className="mt-2 rounded-lg border border-[#E4E4E7] bg-white p-3 space-y-2" data-testid="update-progress">
+                <div className="flex items-center gap-2 text-sm font-bold text-[#0A0A0A]">
+                  <RefreshCw size={14} className="animate-spin text-[#E63946]" />
+                  <span data-testid="update-phase">{phase || "Memproses..."}</span>
+                  <span className="ml-auto text-xs text-[#52525B] font-mono">{Math.floor(elapsed / 60)}m {elapsed % 60}s</span>
+                </div>
+                {log ? <pre className="bg-[#0A0A0A] text-[#E4E4E7] text-[10px] rounded p-2 max-h-32 overflow-auto font-mono whitespace-pre-wrap" data-testid="update-log">{log}</pre> : null}
+                <p className="text-[11px] text-[#52525B]">Jangan tutup halaman ini. Akan dimuat ulang otomatis saat selesai (±2–10 menit).</p>
+              </div>
+            )}
+            {!updating && updateEnabled === false && (
               <p className="text-[11px] text-[#B91C1C]" data-testid="update-inactive-note">Fitur 1-klik belum aktif. Jalankan update manual <b>sekali</b> (perintah di bawah) untuk mengaktifkannya; setelah itu cukup tombol.</p>
             )}
           </div>
