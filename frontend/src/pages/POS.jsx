@@ -480,16 +480,16 @@ function TableDialog({ open, onClose, tables, onSelect }) {
           {areas.map((area) => (
             <div key={area}>
               <div className="text-xs uppercase tracking-wider font-bold text-[#52525B] mb-2">{area}</div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-2">
                 {tables.filter((t) => t.active && t.area === area).map((t) => (
                   <button
                     key={t.id} data-testid={`table-opt-${t.id}`} onClick={() => onSelect(t)}
-                    className={`tap h-20 rounded-xl border-2 font-bold flex flex-col items-center justify-center ${
+                    className={`tap h-14 rounded-lg border-2 font-bold flex flex-col items-center justify-center ${
                       t.status === "open_bill" ? "tbl-open_bill" : "tbl-empty"
                     }`}
                   >
-                    <span className="text-base">{t.name}</span>
-                    <span className="text-[10px] mt-1">{t.status === "open_bill" ? "OPEN BILL" : `${t.capacity} kursi`}</span>
+                    <span className="text-sm">{t.name}</span>
+                    <span className="text-[9px] mt-0.5">{t.status === "open_bill" ? "OPEN BILL" : `${t.capacity} kursi`}</span>
                   </button>
                 ))}
               </div>

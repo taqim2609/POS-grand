@@ -77,10 +77,10 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - .gitignore: hapus blok .env agar file env aman-deploy ikut ter-deploy.
 
 ## AI AKTIF (2026-06)
-- Key AI baru dipasang (sk-...GkcQ) di .env OPENAI_COMPAT_API_KEY + DB per-fitur. Provider https://www.chenzk.top/v1.
-- Model: teks/analisis/vision = `deepseek-v4-flash` (reasoning model — butuh max_tokens tinggi; _gemini_text set 4000 + fallback reasoning_content). Image-gen = `gpt-image-2`.
-- Verified testing agent iteration_9 (100% AI flows): deskripsi ✅, Laporan AI ✅ (~2k char), image-gen ✅. Vision (baca faktur) gagal by-design (deepseek text-only) tapi graceful; pesan error kini ramah bahasa Indonesia. Markdown laporan AI dibersihkan saat tampil. Data TEST_* dibersihkan (19 produk, 17 kategori).
-- Backlog AI: model vision khusus untuk Baca Faktur; simpan gambar AI sebagai aset lokal (URL provider bisa kadaluarsa).
+- Provider https://www.chenzk.top/v1 (agregator; daftar model berubah-ubah tiap request).
+- Model per-fitur: teks/analisis/deskripsi = `deepseek-v4-flash` (key ...GkcQ). Image-gen = `gpt-image-2` (key ...GkcQ).
+- VISION (Scan Faktur) DIPERBAIKI 2026-06-21: key ...F3Q3JdU (sk-jnW9v...) + model `claude-sonnet-5`. Verified via URL publik ~7dtk, parsing sempurna, tanpa 502. Provider chenzk.top TIDAK punya model vision di key ...GkcQ; gpt-5.x bisa vision tapi lambat 26-252dtk (sering 502) → dihindari. claude-sonnet-5/4-6 (key ...JdU) tercepat (~5-7dtk).
+- Backlog AI: simpan gambar AI sebagai aset lokal (URL provider bisa kadaluarsa).
 
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
