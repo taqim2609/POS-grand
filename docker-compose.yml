@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Grand Aceh Kuliner POS — paket server lokal (LAN).
 # Jalankan semua di 1 komputer:  docker compose up -d --build
 # Akses dari POS komputer / Android:  http://<IP-KOMPUTER-SERVER>

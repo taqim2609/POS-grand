@@ -1,3 +1,6 @@
 2026/08/21-12:05:45.569 2e1 Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/Local Storage/leveldb/MANIFEST-000001
 2026/08/21-12:05:45.572 2e1 Recovering log #10
 2026/08/21-12:05:45.573 2e1 Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/Local Storage/leveldb/000010.log 
+2026/08/21-14:05:43.101 2e2 Level-0 table #14: started
+2026/08/21-14:05:43.104 2e2 Level-0 table #14: 13775 bytes OK
+2026/08/21-14:05:43.106 2e2 Delete type=0 #10
