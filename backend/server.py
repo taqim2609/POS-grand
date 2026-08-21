@@ -1114,7 +1114,7 @@ async def download_project_zip(admin: dict = Depends(require_admin)):
 
     def build():
         buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
             for root, dirs, files in os.walk(PROJECT_ROOT):
                 dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
                 for f in files:

@@ -43,7 +43,13 @@ export default function SettingsInstaller() {
   const backupNow = async () => {
     const t = toast.loading("Membuat backup...");
     try {
-      const res = await api.get("/backup/export", { responseType: "blob" });
+      const res = await api.get("/backup/export", {
+        responseType: "blob",
+        onDownloadProgress: (e) => {
+          const mb = (e.loaded / 1048576).toFixed(1);
+          toast.loading(`Mengunduh backup... ${mb} MB`, { id: t });
+        },
+      });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url; a.download = `gak-backup-${new Date().toISOString().slice(0, 10)}.zip`;
@@ -68,7 +74,14 @@ export default function SettingsInstaller() {
   const dlProject = async () => {
     const t = toast.loading("Menyiapkan folder proyek (.zip)...");
     try {
-      const res = await api.get("/installers/project-zip", { responseType: "blob" });
+      const res = await api.get("/installers/project-zip", {
+        responseType: "blob",
+        onDownloadProgress: (e) => {
+          const mb = (e.loaded / 1048576).toFixed(1);
+          const pct = e.total ? ` (${Math.round((e.loaded / e.total) * 100)}%)` : "";
+          toast.loading(`Mengunduh folder proyek... ${mb} MB${pct}`, { id: t });
+        },
+      });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url; a.download = "grand-aceh-pos.zip";
