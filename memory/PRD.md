@@ -99,6 +99,11 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Isi: Identitas Outlet (nama/alamat/footer struk), Printer (mode auto|sunmi|epson|browser, IP+port Epson, toggle buka laci kasir), Alamat Server LAN (getServerUrl/setServerUrl + reload). Tombol Simpan + Cetak Struk Uji (sampleOrder).
 - `lib/receipt.js` di-refactor: baca deviceConfig → header/footer outlet dinamis; mode routing. Sunmi (cutPaper + openDrawer bergantung cashDrawer). EPSON jaringan via ePOS-Print HTTP (`printViaEpson`: POST XML SOAP ke http://IP:port/cgi-bin/epos/service.cgi, <cut>+<pulse drawer>); fallback browserPrint bila gagal. Browser fallback tetap ada. Verified UI via screenshot (kasir). CATATAN: Epson & Sunmi cetak sesungguhnya belum diuji (butuh hardware); ePOS-Print harus diaktifkan di printer Epson.
 
+## TANPA EMERGENT (2026-06-21)
+- Frontend: `@emergentbase/visual-edits` hanya di-load saat isDevServer (craco.config.js), TIDAK ikut build produksi; index.html tanpa telemetri. Jadi app deploy = 0 koneksi Emergent di frontend.
+- Backend: fallback Emergent di `_gemini_text`, `_gemini_image`, `_get_chat` kini dipagari `if not EMERGENT_LLM_KEY: raise HTTPException(400, "AI belum dikonfigurasi...")`. Import emergentintegrations yang tak terpakai di ai_summary dihapus. Dengan EMERGENT_LLM_KEY kosong di .env.docker → AI HANYA pakai provider user (OPENAI_COMPAT_*) / GEMINI_API_KEY; tak pernah menyentuh Emergent. Verified: AI description hit provider chenzk (bukan Emergent). README-DEPLOY punya bagian "Tanpa ketergantungan Emergent".
+- CATATAN: provider chenzk.top agregator intermiten (model list berubah tiap request; deepseek-v4-flash kadang 503 model_not_found). Pertimbangkan ganti model teks ke gpt-5.5/claude-sonnet-5 (key sk-jnW9v) bila sering gagal.
+
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 

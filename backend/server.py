@@ -962,6 +962,8 @@ async def sync_push(body: SyncPushIn, user: dict = Depends(get_current_user)):
 
 # ================================================================== AI
 def _get_chat(session, system, model):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(400, "AI belum dikonfigurasi. Isi API key & endpoint provider Anda di Pengaturan AI.")
     from emergentintegrations.llm.chat import LlmChat
     return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
 
@@ -1009,6 +1011,8 @@ async def _gemini_text(system, prompt, feature="description"):
             )
             return (r.text or "").strip()
         return await asyncio.to_thread(run)
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(400, "AI belum dikonfigurasi. Isi API key & endpoint provider Anda di Pengaturan AI.")
     from emergentintegrations.llm.chat import UserMessage
     chat = _get_chat(new_id(), system, "gemini-2.5-flash")
     return (await chat.send_message(UserMessage(text=prompt))).strip()
@@ -1050,6 +1054,8 @@ async def _gemini_image(prompt):
                         return f"data:{inline.mime_type or 'image/png'};base64,{b64}"
             return None
         return await asyncio.to_thread(run)
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(400, "Generator gambar AI belum dikonfigurasi. Isi provider gambar Anda di Pengaturan AI, atau unggah gambar manual.")
     from emergentintegrations.llm.chat import UserMessage
     chat = _get_chat(new_id(), "You are a professional food & product photographer.",
                      "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
@@ -1259,7 +1265,6 @@ async def ai_image(body: AIImageIn, admin: dict = Depends(admin_or_input)):
 
 @api.post("/reports/ai-summary")
 async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
-    from emergentintegrations.llm.chat import UserMessage
     d = body.date or now_utc().strftime("%Y-%m-%d")
     summary = await report_summary(date_str=d, admin=admin)
     try:

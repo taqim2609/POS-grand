@@ -84,6 +84,13 @@ docker cp $(docker compose ps -q mongo):/data/db/backup.gz ./backup-$(date +%F).
 
 ---
 
+## Tanpa ketergantungan Emergent
+Aplikasi yang di-deploy **tidak terhubung ke Emergent**:
+- Frontend: alat "visual edits" hanya aktif saat pengembangan (dev), TIDAK ikut di build produksi. Tidak ada skrip telemetri.
+- Backend: biarkan `EMERGENT_LLM_KEY` **kosong** di `backend/.env.docker`. AI memakai provider Anda sendiri
+  (`OPENAI_COMPAT_*`) atau `GEMINI_API_KEY` Anda. Bila keduanya kosong, fitur AI menampilkan pesan
+  "AI belum dikonfigurasi" — bukan menghubungi Emergent.
+
 ## Printer (status)
 - **Sunmi T2+ (Android):** printer bawaan 80mm, **auto-cut & buka laci kasir** sudah didukung di
   `frontend/src/lib/receipt.js` (fungsi `cutPaper()` & `openDrawer()` lewat SunmiInnerPrinter).
