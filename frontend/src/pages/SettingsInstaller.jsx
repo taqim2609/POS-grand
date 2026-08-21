@@ -1,9 +1,11 @@
+import { useRef } from "react";
 import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks, FolderDown } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import {
   INSTALL_WINDOWS_BAT, INSTALL_PI_SH, UPDATE_WINDOWS_BAT, UPDATE_PI_SH,
-  BACKUP_WINDOWS_BAT, BACKUP_PI_SH, RESTORE_WINDOWS_BAT, RESTORE_PI_SH, downloadText,
+  BACKUP_WINDOWS_BAT, BACKUP_PI_SH, RESTORE_WINDOWS_BAT, RESTORE_PI_SH,
+  RESTART_WINDOWS_BAT, RESTART_PI_SH, downloadText,
 } from "@/lib/installers";
 
 const dl = (name, text) => { downloadText(name, text); toast.success(`Skrip ${name} diunduh`); };
@@ -37,6 +39,32 @@ const Code = ({ children }) => (
 );
 
 export default function SettingsInstaller() {
+  const fileRef = useRef(null);
+  const backupNow = async () => {
+    const t = toast.loading("Membuat backup...");
+    try {
+      const res = await api.get("/backup/export", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = `gak-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success("Backup terunduh", { id: t });
+    } catch (e) { toast.error("Gagal membuat backup", { id: t }); }
+  };
+  const restoreFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!window.confirm("Restore akan MENIMPA SEMUA data saat ini dengan isi file. Lanjutkan?")) { e.target.value = ""; return; }
+    const t = toast.loading("Memulihkan data...");
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      await api.post("/backup/import", fd);
+      toast.success("Data dipulihkan. Memuat ulang...", { id: t });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err) { toast.error("Gagal memulihkan data", { id: t }); }
+    finally { e.target.value = ""; }
+  };
   const dlProject = async () => {
     const t = toast.loading("Menyiapkan folder proyek (.zip)...");
     try {
@@ -114,7 +142,17 @@ sudo systemctl enable docker`}</Code>
         </Section>
 
         {/* BACKUP */}
-        <Section n="3" title="Backup & Restore Data" icon={DatabaseBackup} desc="Simpan salinan database bertanggal. Sangat disarankan rutin, terutama di Raspberry Pi (kartu SD bisa rusak).">
+        <Section n="3" title="Backup & Restore Data" icon={DatabaseBackup} desc="Simpan salinan seluruh data. Sangat disarankan rutin, terutama di Raspberry Pi (kartu SD bisa rusak).">
+          <div className="rounded-xl border-2 border-[#10B981] bg-[#F0FDF4] p-4 space-y-2">
+            <div className="font-bold text-sm">Cara cepat (langsung dari aplikasi)</div>
+            <div className="flex flex-wrap gap-2">
+              <button data-testid="inapp-backup" onClick={backupNow} className="tap h-10 px-4 rounded-lg bg-[#10B981] text-white font-bold text-sm inline-flex items-center gap-2"><DatabaseBackup size={15} /> Backup Sekarang</button>
+              <button data-testid="inapp-restore" onClick={() => fileRef.current?.click()} className="tap h-10 px-4 rounded-lg bg-white border font-bold text-sm">Restore dari File...</button>
+              <input ref={fileRef} type="file" accept=".zip" className="hidden" onChange={restoreFile} data-testid="inapp-restore-input" />
+            </div>
+            <p className="text-[11px] text-[#52525B]">Backup mengunduh seluruh data ke satu file <b>.zip</b>. Restore menimpa data saat ini dengan isi file.</p>
+          </div>
+          <div className="text-xs font-bold text-[#52525B] mt-3">Atau lewat skrip di mesin server:</div>
           <div className="grid sm:grid-cols-2 gap-4">
             <DlCard testid="download-backup-windows" icon={Monitor} title="Backup (Windows)"
               subtitle="Simpan ke folder backups\\ bertanggal." file="backup-windows.bat" text={BACKUP_WINDOWS_BAT} />
@@ -129,6 +167,14 @@ sudo systemctl enable docker`}</Code>
             <div><b>Backup</b> — jalankan skrip; file tersimpan di folder <code>backups/</code> (mis. <code>gak-backup-20260621-0930.gz</code>). Salin file ini ke flashdisk/cloud untuk aman.</div>
             <div><b>Restore</b> (memulihkan) — Pi: <code>./restore-pi.sh backups/namafile.gz</code>. Windows: seret file <code>.gz</code> ke atas <code>restore-windows.bat</code>. Ketik <b>YA</b> saat konfirmasi.</div>
             <div className="text-[#B91C1C]"><b>Perhatian:</b> restore akan MENIMPA seluruh data saat ini dengan isi backup.</div>
+          </div>
+        </Section>
+
+        {/* RESTART */}
+        <Section n="4" title="Restart Server" icon={RefreshCw} desc="Jalankan di mesin server bila perlu memuat ulang aplikasi.">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <DlCard testid="download-restart-windows" icon={Monitor} title="Restart (Windows)" subtitle="Dobel-klik restart-windows.bat" file="restart-windows.bat" text={RESTART_WINDOWS_BAT} />
+            <DlCard testid="download-restart-pi" icon={Cpu} title="Restart (Pi/Linux)" subtitle="./restart-pi.sh" file="restart-pi.sh" text={RESTART_PI_SH} />
           </div>
         </Section>
 

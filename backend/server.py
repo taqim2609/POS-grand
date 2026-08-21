@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, date, timedelta
 import logging, uuid, io, bcrypt, jwt, asyncio, re, zipfile
+from bson import json_util
 
 # ------------------------------------------------------------------ DB
 mongo_url = os.environ['MONGO_URL']
@@ -1130,6 +1131,40 @@ async def download_project_zip(admin: dict = Depends(require_admin)):
     data = await asyncio.to_thread(build)
     return Response(content=data, media_type="application/zip",
                     headers={"Content-Disposition": "attachment; filename=grand-aceh-pos.zip"})
+
+@api.get("/backup/export")
+async def backup_export(admin: dict = Depends(require_admin)):
+    names = await db.list_collection_names()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in names:
+            if name.startswith("system."):
+                continue
+            docs = await db[name].find({}).to_list(200000)
+            zf.writestr(f"{name}.json", json_util.dumps(docs))
+    buf.seek(0)
+    ts = now_utc().strftime("%Y%m%d-%H%M%S")
+    return Response(content=buf.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f"attachment; filename=gak-backup-{ts}.zip"})
+
+@api.post("/backup/import")
+async def backup_import(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    raw = await file.read()
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except Exception:
+        raise HTTPException(400, "File backup tidak valid (.zip)")
+    restored = 0
+    for nm in zf.namelist():
+        if not nm.endswith(".json"):
+            continue
+        coll = nm[:-5]
+        docs = json_util.loads(zf.read(nm).decode("utf-8"))
+        await db[coll].delete_many({})
+        if docs:
+            await db[coll].insert_many(docs)
+        restored += 1
+    return {"restored_collections": restored}
 
 class AISettingsIn(BaseModel):
     feature: Literal["description", "image", "summary"]

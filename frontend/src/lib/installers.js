@@ -202,6 +202,21 @@ docker compose exec -T mongo sh -c 'mongorestore --archive --gzip --drop' < "$FI
 echo "Restore selesai."
 `;
 
+export const RESTART_WINDOWS_BAT = `@echo off
+cd /d "%~dp0"
+echo Memuat ulang server...
+docker compose restart
+echo Server dimuat ulang.
+pause
+`;
+
+export const RESTART_PI_SH = `#!/usr/bin/env bash
+cd "$(dirname "$0")"
+echo "Memuat ulang server..."
+docker compose restart
+echo "Server dimuat ulang."
+`;
+
 export function downloadText(filename, text) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);

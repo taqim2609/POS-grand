@@ -124,6 +124,12 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 ## PINTASAN KLIEN (2026-06-21)
 - /Buka-POS-Windows.url (InternetShortcut → http://pos.local) & /Buka-POS-Linux.desktop (xdg-open http://pos.local). Ikut otomatis di project-zip (verified). Dobel-klik di komputer klien = buka aplikasi tanpa ketik alamat; edit ganti pos.local→IP bila perlu. Panduan di MULAI-DISINI.txt.
 
+## BACKUP/RESTORE IN-APP + RESTART (2026-06-21)
+- Backend: GET /api/backup/export (admin) → zip semua koleksi via bson.json_util.dumps (round-trip _id string/ObjectId aman). POST /api/backup/import (admin, UploadFile) → per file .json: delete_many + insert_many (json_util.loads). Verified round-trip 14 koleksi, produk tetap 3.
+- Restart: /restart-windows.bat & /restart-pi.sh (docker compose restart) + embedded di installers.js.
+- Frontend SettingsInstaller: bagian 3 Backup "Cara cepat (dalam aplikasi)" tombol inapp-backup (unduh) & inapp-restore (upload .zip, konfirmasi window.confirm, reload) + skrip server; bagian 4 Restart Server (download-restart-windows/-pi). Verified UI + compiled.
+- CATATAN penting untuk user: INSTALL pertama/UPDATE/RESTART TIDAK bisa jadi tombol in-app (butuh kontrol Docker host / app harus sudah ada) → tetap via skrip. BACKUP/RESTORE bisa in-app (backend akses Mongo langsung).
+
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
