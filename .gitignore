@@ -88,3 +88,7 @@ frontend/node_modules/.cache/default-development/4.pack
 .env
 .env.*
 *.env
+
+# Selalu sertakan template contoh env (dibutuhkan installer dari GitHub)
+!*.example
+!backend/.env.docker.example
