@@ -187,3 +187,10 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Backend GET /admin/update/status kini kembalikan field `log` (tail 20 baris updater container).
 - Bootstrap Windows: /app/bootstrap-windows.bat (cek git+Docker → git clone/pull repo → call install-windows.bat). Diexport di installers.js (BOOTSTRAP_WINDOWS_BAT), tombol unduh di Installer (download-bootstrap-windows) + panduan diperbarui.
 - Verified: compile bersih, tombol & panel tampil (screenshot), status endpoint balikkan log. Alur Docker sebenarnya tetap perlu verifikasi di Pi/PC user.
+
+## FIX (2026-06-21) — Build frontend gagal di Raspberry Pi (network/CPU)
+- Root cause: build React (yarn install + webpack) di Pi berat & gagal saat internet lambat ("trouble with your network connection... aborted").
+- Solusi: frontend disajikan sebagai STATIC PREBUILT. frontend/Dockerfile kini nginx-only (COPY build → nginx), tanpa node/yarn di Pi. frontend/build/ di-commit (di-un-ignore di .gitignore root+frontend; dihapus dari .dockerignore). Build dihasilkan sebelum push: `cd frontend && REACT_APP_BACKEND_URL="" yarn build`.
+- PENTING (workflow): setiap ada perubahan kode frontend, WAJIB rebuild `yarn build` lalu commit build/ sebelum push, agar Pi dapat versi terbaru.
+- Dockerfile frontend sebelumnya sudah dibuat COPY yarn.lock* opsional; kini tak relevan karena tak build di Pi.
+- Backend tetap build via pip (lebih ringan/andal).
