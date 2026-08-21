@@ -37,7 +37,7 @@ async function probe(base, timeoutMs = 1500) {
 // Tries mDNS hostnames + common gateway IPs. Returns the base URL or null.
 export async function discoverServer(onProgress) {
   const hosts = [
-    "pos.local", "grandaceh.local", "raspberrypi.local",
+    "grandpos.local", "pos.local", "grandaceh.local", "raspberrypi.local",
   ];
   const subnets = ["192.168.1", "192.168.0", "192.168.100", "10.0.0"];
   const lastOctets = ["1", "2", "10", "11", "100", "200", "50"];

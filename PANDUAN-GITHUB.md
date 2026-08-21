@@ -82,7 +82,7 @@ Update otomatis `git pull` + build ulang + restart. **Data Anda tetap aman**
 Pastikan semua perangkat di **WiFi yang sama**, lalu buka browser:
 
 - Dari server sendiri: `http://localhost`
-- Dari perangkat lain: `http://<IP-server>` (mis. `http://192.168.1.50`) atau `http://pos.local`
+- Dari perangkat lain: `http://<IP-server>` (mis. `http://192.168.1.50`) atau `http://grandpos.local`
 - Cari IP Pi: jalankan `hostname -I` di SSH. Atau pakai tombol **"Cari Server Otomatis"** di layar Login.
 
 ---
