@@ -194,3 +194,9 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - PENTING (workflow): setiap ada perubahan kode frontend, WAJIB rebuild `yarn build` lalu commit build/ sebelum push, agar Pi dapat versi terbaru.
 - Dockerfile frontend sebelumnya sudah dibuat COPY yarn.lock* opsional; kini tak relevan karena tak build di Pi.
 - Backend tetap build via pip (lebih ringan/andal).
+
+## FIX (2026-06-21) — Rampingkan requirements.txt (build Pi lebih cepat/andal)
+- Masalah: pip freeze sebelumnya membengkakkan requirements ke 137 paket + konflik litellm URL ganda → build backend di Pi lama & sempat gagal.
+- Solusi: requirements.txt dipangkas ke 18 top-level yang benar-benar dipakai server.py; pip menarik dependency turunan otomatis. Dihapus: dev tools (black/flake8/mypy/isort/pytest/pytest-xdist), boto3/botocore/s3transfer/s5cmd, stripe, twilio, pandas, numpy, dan baris litellm URL ganda.
+- Dipakai: fastapi, uvicorn, python-multipart, email-validator, motor, pymongo, pydantic, python-dotenv, bcrypt, PyJWT, emergentintegrations, openai, google-genai, httpx, openpyxl, fpdf2, pillow, docker.
+- Verified: pip install --dry-run resolusi EXIT=0 (tanpa konflik); backend lokal /api/health ok. Perlu verifikasi build akhir di Pi.
