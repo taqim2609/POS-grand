@@ -137,8 +137,10 @@ sudo systemctl enable docker`}</Code>
               subtitle="Via SSH; editor config terbuka otomatis." file="install-pi.sh" text={INSTALL_PI_SH} />
           </div>
           <div className="rounded-xl border-2 border-[#E63946] bg-[#FEF2F2] p-4">
-            <div className="flex items-center gap-2 font-extrabold"><Cpu size={18} className="text-[#E63946]" /> Pi baru (belum ada Docker)? Pakai Bootstrap</div>
-            <p className="text-xs text-[#52525B] mt-1">Skrip ini memasang Docker DAN menjalankan installer sekaligus — cocok untuk Raspberry Pi baru (headless). Jalankan via SSH: <code>chmod +x bootstrap-pi.sh &amp;&amp; ./bootstrap-pi.sh</code></p>
+            <div className="flex items-center gap-2 font-extrabold"><Cpu size={18} className="text-[#E63946]" /> Install dari GitHub (Raspberry Pi, 1 perintah)</div>
+            <p className="text-xs text-[#52525B] mt-1">Skrip <b>bootstrap-pi.sh</b> memasang <b>git + Docker</b>, meng-<b>clone repo GitHub</b> Anda, lalu menjalankan installer — semua otomatis. Cocok untuk Pi baru (headless). Jalankan via SSH:</p>
+            <Code>{`bash <(curl -fsSL https://raw.githubusercontent.com/taqim2609/POS-grand/main/bootstrap-pi.sh)`}</Code>
+            <p className="text-[11px] text-[#52525B] mt-1">Perintah di atas menaruh proyek di <code>~/grand-aceh-pos</code> dan menjalankannya. Alternatif: unduh skripnya lalu jalankan manual.</p>
             <button data-testid="download-bootstrap-pi" onClick={() => dl("bootstrap-pi.sh", BOOTSTRAP_PI_SH)} className="tap mt-2 h-10 px-4 rounded-lg bg-[#E63946] text-white font-bold text-sm inline-flex items-center gap-2"><Download size={15} /> Unduh bootstrap-pi.sh</button>
           </div>
           <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46]">
@@ -150,7 +152,12 @@ sudo systemctl enable docker`}</Code>
         </Section>
 
         {/* UPDATE */}
-        <Section n="2" title="Perbarui Server (update)" icon={RefreshCw} desc="Saat ada versi baru, jalankan di mesin server. Data Anda tetap aman.">
+        <Section n="2" title="Perbarui Server (update dari GitHub)" icon={RefreshCw} desc="Saat ada versi baru di GitHub, jalankan di mesin server. Data Anda tetap aman.">
+          <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46]">
+            <div className="font-bold mb-1">Raspberry Pi (SSH) — tarik versi terbaru dari GitHub &amp; bangun ulang:</div>
+            <Code>{`cd ~/grand-aceh-pos && ./update-pi.sh`}</Code>
+            <div className="mt-1 text-[#52525B]">Atau jalankan ulang perintah bootstrap di atas — otomatis <code>git pull</code> jika proyek sudah ada.</div>
+          </div>
           <div className="grid sm:grid-cols-2 gap-4">
             <DlCard testid="download-update-windows" icon={Monitor} title="Update di Desktop (Windows)"
               subtitle="Tarik versi baru & bangun ulang." file="update-windows.bat" text={UPDATE_WINDOWS_BAT} />
