@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
-  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, Menu, X,
+  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, Menu, X, Printer,
   Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings, MessageCircle,
 } from "lucide-react";
 
@@ -57,6 +57,7 @@ const NAV = [
   { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin", "input"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, roles: ["admin"] },
+  { to: "/device", label: "Perangkat", icon: Printer, roles: ["admin", "kasir", "input"] },
   { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
 ];
 

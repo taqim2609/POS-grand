@@ -94,6 +94,11 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - ALAMAT SERVER RUNTIME: frontend/src/lib/api.js kini baca `localStorage.gak_server_url` dulu (fallback REACT_APP_BACKEND_URL, lalu relatif /api). getServerUrl/setServerUrl. Login.jsx punya panel "Pengaturan Server (LAN)" (testid server-config-toggle/panel, server-url-input, server-url-save) → APK/browser bisa arahkan ke IP server tanpa rebuild. Verified: compose valid, login render + panel muncul, app tetap kompilasi.
 - PRINTER (belum): Sunmi T2+ cut+laci SUDAH ada di receipt.js (cutPaper/openDrawer). Epson jaringan (POS komputer, ePOS/9100) BELUM — fase berikut, butuh IP/model printer & uji di lokasi.
 
+## PENGATURAN PERANGKAT (2026-06-21) — /device
+- Halaman `pages/DeviceSettings.jsx` (rute /device, semua role: admin/kasir/input; nav "Perangkat" ikon Printer). Config PER-PERANGKAT di localStorage `gak_device_cfg` via `lib/device.js` (getDeviceConfig/setDeviceConfig).
+- Isi: Identitas Outlet (nama/alamat/footer struk), Printer (mode auto|sunmi|epson|browser, IP+port Epson, toggle buka laci kasir), Alamat Server LAN (getServerUrl/setServerUrl + reload). Tombol Simpan + Cetak Struk Uji (sampleOrder).
+- `lib/receipt.js` di-refactor: baca deviceConfig → header/footer outlet dinamis; mode routing. Sunmi (cutPaper + openDrawer bergantung cashDrawer). EPSON jaringan via ePOS-Print HTTP (`printViaEpson`: POST XML SOAP ke http://IP:port/cgi-bin/epos/service.cgi, <cut>+<pulse drawer>); fallback browserPrint bila gagal. Browser fallback tetap ada. Verified UI via screenshot (kasir). CATATAN: Epson & Sunmi cetak sesungguhnya belum diuji (butuh hardware); ePOS-Print harus diaktifkan di printer Epson.
+
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 

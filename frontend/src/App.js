@@ -20,6 +20,7 @@ import SettingsAI from "@/pages/SettingsAI";
 import SettingsData from "@/pages/SettingsData";
 import Settings from "@/pages/Settings";
 import WhatsApp from "@/pages/WhatsApp";
+import DeviceSettings from "@/pages/DeviceSettings";
 
 const wrap = (el, roles) => (
   <ProtectedRoute roles={roles}>
@@ -50,6 +51,7 @@ function App() {
               <Route path="/settings-data" element={wrap(<SettingsData />, ["admin"])} />
               <Route path="/settings" element={wrap(<Settings />, ["admin"])} />
               <Route path="/whatsapp" element={wrap(<WhatsApp />, ["admin"])} />
+              <Route path="/device" element={wrap(<DeviceSettings />)} />
               <Route path="/" element={<Navigate to="/pos" replace />} />
               <Route path="*" element={<Navigate to="/pos" replace />} />
             </Routes>
