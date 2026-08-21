@@ -1,3 +1,2 @@
-2026/08/21-12:05:45.821 321 Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/Site Characteristics Database/MANIFEST-000001
-2026/08/21-12:05:45.821 321 Recovering log #3
-2026/08/21-12:05:45.822 321 Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/Site Characteristics Database/000003.log 
+2026/08/21-23:16:25.205 2ad Creating DB /app/whatsapp-service/.wwebjs_auth/session/Default/Site Characteristics Database since it was missing.
+2026/08/21-23:16:25.211 2ad Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/Site Characteristics Database/MANIFEST-000001

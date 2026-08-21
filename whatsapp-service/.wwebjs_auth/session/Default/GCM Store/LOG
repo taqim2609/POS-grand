@@ -1,3 +1,2 @@
-2026/08/21-12:05:51.196 41d Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/GCM Store/MANIFEST-000001
-2026/08/21-12:05:51.197 41d Recovering log #3
-2026/08/21-12:05:51.197 41d Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/GCM Store/000003.log 
+2026/08/21-23:16:34.810 284 Creating DB /app/whatsapp-service/.wwebjs_auth/session/Default/GCM Store since it was missing.
+2026/08/21-23:16:34.814 284 Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/GCM Store/MANIFEST-000001
