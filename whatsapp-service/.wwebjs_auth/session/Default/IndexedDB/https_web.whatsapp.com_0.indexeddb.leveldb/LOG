@@ -2700,3 +2700,32 @@
 2026/08/21-15:31:38.566 321 Level-0 table #3888: started
 2026/08/21-15:31:38.580 321 Level-0 table #3888: 917169 bytes OK
 2026/08/21-15:31:38.582 321 Delete type=0 #3865
+2026/08/21-15:35:49.320 2e2 Compacting 1@0 + 0@1 files
+2026/08/21-15:35:49.329 2e2 Generated table #3889@0: 8761 keys, 124719 bytes
+2026/08/21-15:35:49.335 2e2 Generated table #3890@0: 5021 keys, 276595 bytes
+2026/08/21-15:35:49.336 2e2 Compacted 1@0 + 0@1 files => 401314 bytes
+2026/08/21-15:35:49.338 2e2 compacted to: files[ 0 3 30 0 0 0 0 ]
+2026/08/21-15:35:49.339 2e2 Delete type=2 #3888
+2026/08/21-15:37:22.736 2e1 Compacting 1@1 + 5@2 files
+2026/08/21-15:37:22.775 2e1 Generated table #3891@1: 84032 keys, 2232931 bytes
+2026/08/21-15:37:22.805 2e1 Generated table #3892@1: 58973 keys, 2272110 bytes
+2026/08/21-15:37:22.837 2e1 Generated table #3893@1: 51547 keys, 2211296 bytes
+2026/08/21-15:37:22.869 2e1 Generated table #3894@1: 50292 keys, 2217251 bytes
+2026/08/21-15:37:22.888 2e1 Generated table #3895@1: 15350 keys, 2165182 bytes
+2026/08/21-15:37:22.891 2e1 Generated table #3896@1: 28 keys, 55581 bytes
+2026/08/21-15:37:22.891 2e1 Compacted 1@1 + 5@2 files => 11154351 bytes
+2026/08/21-15:37:22.893 2e1 compacted to: files[ 0 2 31 0 0 0 0 ]
+2026/08/21-15:37:22.894 2e1 Delete type=2 #3885
+2026/08/21-15:37:22.894 2e1 Delete type=2 #3884
+2026/08/21-15:37:22.894 2e1 Delete type=2 #3882
+2026/08/21-15:37:22.894 2e1 Delete type=2 #3889
+2026/08/21-15:37:22.894 2e1 Delete type=2 #3883
+2026/08/21-15:37:22.894 2e1 Delete type=2 #3881
+2026/08/21-15:38:57.073 2e2 Compacting 1@1 + 2@2 files
+2026/08/21-15:38:57.106 2e2 Generated table #3897@1: 23735 keys, 2234467 bytes
+2026/08/21-15:38:57.125 2e2 Generated table #3898@1: 16834 keys, 2156686 bytes
+2026/08/21-15:38:57.125 2e2 Compacted 1@1 + 2@2 files => 4391153 bytes
+2026/08/21-15:38:57.127 2e2 compacted to: files[ 0 1 31 0 0 0 0 ]
+2026/08/21-15:38:57.127 2e2 Delete type=2 #3890
+2026/08/21-15:38:57.127 2e2 Delete type=2 #3873
+2026/08/21-15:38:57.127 2e2 Delete type=2 #3874
