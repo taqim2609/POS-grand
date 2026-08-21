@@ -1,7 +1,8 @@
-import { Download, Monitor, Cpu, CheckCircle2, RefreshCw } from "lucide-react";
+import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import {
-  INSTALL_WINDOWS_BAT, INSTALL_PI_SH, UPDATE_WINDOWS_BAT, UPDATE_PI_SH, downloadText,
+  INSTALL_WINDOWS_BAT, INSTALL_PI_SH, UPDATE_WINDOWS_BAT, UPDATE_PI_SH,
+  BACKUP_WINDOWS_BAT, BACKUP_PI_SH, RESTORE_WINDOWS_BAT, RESTORE_PI_SH, downloadText,
 } from "@/lib/installers";
 
 const dl = (name, text) => { downloadText(name, text); toast.success(`Skrip ${name} diunduh`); };
@@ -18,55 +19,107 @@ const DlCard = ({ icon: Icon, title, subtitle, file, text, testid }) => (
   </button>
 );
 
+const Section = ({ n, title, icon: Icon, desc, children }) => (
+  <div className="space-y-3">
+    <div>
+      <h2 className="text-xl font-extrabold flex items-center gap-2">
+        {Icon ? <Icon size={18} className="text-[#E63946]" /> : null}{n ? `${n}. ` : ""}{title}
+      </h2>
+      {desc ? <p className="text-[#52525B] text-sm mt-1">{desc}</p> : null}
+    </div>
+    {children}
+  </div>
+);
+
+const Code = ({ children }) => (
+  <pre className="bg-[#0A0A0A] text-[#E4E4E7] text-xs rounded-lg p-3 overflow-x-auto font-mono whitespace-pre-wrap">{children}</pre>
+);
+
 export default function SettingsInstaller() {
   return (
     <div className="h-full overflow-y-auto p-6 lg:p-8" data-testid="settings-installer">
       <div className="max-w-2xl space-y-8">
+        {/* PRASYARAT */}
+        <Section title="Prasyarat" icon={ListChecks} desc="Yang perlu disiapkan sebelum memasang server.">
+          <div className="rounded-2xl border border-[#E4E4E7] bg-white p-5 space-y-3 text-sm text-[#3f3f46]">
+            <div><b>1. Folder proyek</b> — berisi <code>docker-compose.yml</code>, folder <code>backend/</code>, <code>frontend/</code>, <code>whatsapp-service/</code> (dari GitHub atau salinan yang saya berikan).</div>
+            <div><b>2. Docker</b> terpasang di mesin server:</div>
+            <div className="pl-3">
+              <div className="font-bold flex items-center gap-1.5"><Monitor size={14} /> Windows</div>
+              <div className="text-[#52525B]">Pasang <b>Docker Desktop</b> → aktifkan WSL2 → restart. Unduh: docker.com/products/docker-desktop</div>
+            </div>
+            <div className="pl-3">
+              <div className="font-bold flex items-center gap-1.5"><Cpu size={14} /> Raspberry Pi (OS 64-bit) / Linux</div>
+              <Code>{`curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+sudo systemctl enable docker`}</Code>
+            </div>
+            <div><b>3. Jaringan</b> — semua perangkat (server + POS + Android) di <b>WiFi yang sama</b>. Disarankan set <b>IP statis</b> untuk server di router.</div>
+          </div>
+        </Section>
+
         <div className="rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-4 text-sm text-[#92400E]">
-          <b>Penting:</b> jadikan <b>SATU</b> mesin sebagai server (Desktop <i>atau</i> Raspberry Pi).
-          Perangkat lain (POS komputer & Android) cukup menjadi klien yang mengakses IP server.
-          Prasyarat: <b>Docker</b> sudah terpasang di mesin server.
+          <b>Penting:</b> jadikan <b>SATU</b> mesin sebagai server (Desktop <i>atau</i> Raspberry Pi). Perangkat lain cukup mengakses IP server.
         </div>
 
-        {/* 1. INSTALL */}
-        <div className="space-y-3">
-          <div>
-            <h2 className="text-xl font-extrabold">1. Instal Server (pertama kali)</h2>
-            <p className="text-[#52525B] text-sm mt-1">Pilih lokasi server, unduh skripnya, taruh di folder proyek di mesin itu, lalu jalankan.</p>
-          </div>
+        {/* INSTALL */}
+        <Section n="1" title="Instal Server (pertama kali)" desc="Pilih lokasi server, unduh skripnya, taruh di dalam folder proyek di mesin itu, lalu jalankan.">
           <div className="grid sm:grid-cols-2 gap-4">
             <DlCard testid="download-windows-installer" icon={Monitor} title="Komputer Desktop (Windows)"
-              subtitle="Dobel-klik untuk memasang server di PC Windows." file="install-windows.bat" text={INSTALL_WINDOWS_BAT} />
+              subtitle="Dobel-klik untuk memasang." file="install-windows.bat" text={INSTALL_WINDOWS_BAT} />
             <DlCard testid="download-pi-installer" icon={Cpu} title="Raspberry Pi (headless)"
-              subtitle="Jalankan lewat SSH; editor config terbuka otomatis." file="install-pi.sh" text={INSTALL_PI_SH} />
+              subtitle="Via SSH; editor config terbuka otomatis." file="install-pi.sh" text={INSTALL_PI_SH} />
           </div>
-        </div>
+          <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46]">
+            <div className="font-bold mb-1">Menjalankan di Raspberry Pi (SSH):</div>
+            <Code>{`chmod +x install-pi.sh
+./install-pi.sh`}</Code>
+            <div className="mt-2 text-[#52525B]">Windows: cukup <b>dobel-klik</b> <code>install-windows.bat</code>.</div>
+          </div>
+        </Section>
 
-        {/* 2. UPDATE */}
-        <div className="space-y-3">
-          <div>
-            <h2 className="text-xl font-extrabold flex items-center gap-2"><RefreshCw size={18} className="text-[#E63946]" /> 2. Perbarui Server (update)</h2>
-            <p className="text-[#52525B] text-sm mt-1">Saat ada versi baru, jalankan skrip ini <b>di mesin server</b>. Data Anda tetap aman (tersimpan di volume Docker).</p>
-          </div>
+        {/* UPDATE */}
+        <Section n="2" title="Perbarui Server (update)" icon={RefreshCw} desc="Saat ada versi baru, jalankan di mesin server. Data Anda tetap aman.">
           <div className="grid sm:grid-cols-2 gap-4">
             <DlCard testid="download-update-windows" icon={Monitor} title="Update di Desktop (Windows)"
-              subtitle="Tarik versi baru lalu bangun ulang otomatis." file="update-windows.bat" text={UPDATE_WINDOWS_BAT} />
+              subtitle="Tarik versi baru & bangun ulang." file="update-windows.bat" text={UPDATE_WINDOWS_BAT} />
             <DlCard testid="download-update-pi" icon={Cpu} title="Update di Raspberry Pi"
-              subtitle="Jalankan via SSH: ./update-pi.sh" file="update-pi.sh" text={UPDATE_PI_SH} />
+              subtitle="Via SSH: ./update-pi.sh" file="update-pi.sh" text={UPDATE_PI_SH} />
           </div>
-        </div>
+        </Section>
 
+        {/* BACKUP */}
+        <Section n="3" title="Backup & Restore Data" icon={DatabaseBackup} desc="Simpan salinan database bertanggal. Sangat disarankan rutin, terutama di Raspberry Pi (kartu SD bisa rusak).">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <DlCard testid="download-backup-windows" icon={Monitor} title="Backup (Windows)"
+              subtitle="Simpan ke folder backups\\ bertanggal." file="backup-windows.bat" text={BACKUP_WINDOWS_BAT} />
+            <DlCard testid="download-backup-pi" icon={Cpu} title="Backup (Pi/Linux)"
+              subtitle="./backup-pi.sh — auto hapus >30 hari." file="backup-pi.sh" text={BACKUP_PI_SH} />
+            <DlCard testid="download-restore-windows" icon={Monitor} title="Restore (Windows)"
+              subtitle="Seret file .gz ke atas skrip ini." file="restore-windows.bat" text={RESTORE_WINDOWS_BAT} />
+            <DlCard testid="download-restore-pi" icon={Cpu} title="Restore (Pi/Linux)"
+              subtitle="./restore-pi.sh backups/xxx.gz" file="restore-pi.sh" text={RESTORE_PI_SH} />
+          </div>
+          <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46] space-y-2">
+            <div><b>Backup</b> — jalankan skrip; file tersimpan di folder <code>backups/</code> (mis. <code>gak-backup-20260621-0930.gz</code>). Salin file ini ke flashdisk/cloud untuk aman.</div>
+            <div><b>Restore</b> (memulihkan) — Pi: <code>./restore-pi.sh backups/namafile.gz</code>. Windows: seret file <code>.gz</code> ke atas <code>restore-windows.bat</code>. Ketik <b>YA</b> saat konfirmasi.</div>
+            <div className="text-[#B91C1C]"><b>Perhatian:</b> restore akan MENIMPA seluruh data saat ini dengan isi backup.</div>
+          </div>
+        </Section>
+
+        {/* STEPS */}
         <div className="rounded-2xl border border-[#E4E4E7] bg-white p-5">
-          <div className="font-extrabold mb-2">Langkah singkat</div>
+          <div className="font-extrabold mb-2 flex items-center gap-2"><CheckCircle2 size={16} className="text-[#10B981]" /> Ringkasan alur</div>
           <ol className="space-y-2 text-sm text-[#3f3f46]">
             {[
-              "Salin folder proyek ke mesin server (Desktop atau Pi), taruh skrip di dalamnya.",
-              "Instal: Windows dobel-klik .bat • Pi via SSH: chmod +x install-pi.sh && ./install-pi.sh",
-              "Isi backend/.env.docker saat diminta (di Pi, nano terbuka otomatis), simpan.",
+              "Pasang Docker di mesin server (lihat Prasyarat).",
+              "Salin folder proyek ke mesin server, taruh skrip di dalamnya.",
+              "Instal: Windows dobel-klik install-windows.bat • Pi via SSH ./install-pi.sh.",
+              "Isi backend/.env.docker saat diminta (di Pi, editor terbuka otomatis), simpan.",
               "Akses http://IP-server di POS komputer / atur di APK Android.",
-              "Update nanti: cukup jalankan update-windows.bat / update-pi.sh di mesin server.",
+              "Rutin backup (backup-*.sh/.bat) & update saat ada versi baru (update-*.sh/.bat).",
             ].map((s, i) => (
-              <li key={i} className="flex gap-2"><CheckCircle2 size={16} className="text-[#10B981] mt-0.5 shrink-0" /> <span>{s}</span></li>
+              <li key={i} className="flex gap-2"><span className="font-bold text-[#E63946]">{i + 1}.</span><span>{s}</span></li>
             ))}
           </ol>
         </div>

@@ -142,6 +142,66 @@ docker image prune -f >/dev/null 2>&1 || true
 echo "Selesai. Aplikasi sudah versi terbaru."
 `;
 
+export const BACKUP_WINDOWS_BAT = `@echo off
+cd /d "%~dp0"
+if not exist backups mkdir backups
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set dt=%%a
+set TS=%dt:~0,8%-%dt:~8,6%
+set FILE=backups\\gak-backup-%TS%.gz
+echo Membuat backup database -^> %FILE%
+docker compose exec -T mongo sh -c "mongodump --archive --gzip" > "%FILE%"
+echo Selesai. Backup tersimpan di %FILE%
+pause
+`;
+
+export const BACKUP_PI_SH = `#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+mkdir -p backups
+TS="$(date +%Y%m%d-%H%M%S)"
+FILE="backups/gak-backup-$TS.gz"
+echo "Membuat backup database -> $FILE"
+docker compose exec -T mongo sh -c 'mongodump --archive --gzip' > "$FILE"
+echo "Selesai. Backup tersimpan di $FILE"
+find backups -name 'gak-backup-*.gz' -mtime +30 -delete 2>/dev/null || true
+`;
+
+export const RESTORE_WINDOWS_BAT = `@echo off
+cd /d "%~dp0"
+if "%~1"=="" (
+  echo Pemakaian: seret file backup .gz ke atas skrip ini,
+  echo atau jalankan: restore-windows.bat backups\\gak-backup-XXXX.gz
+  echo.
+  echo Daftar backup tersedia:
+  dir /b backups\\*.gz 2>nul
+  pause
+  exit /b 1
+)
+echo PERINGATAN: ini akan MENIMPA seluruh data saat ini dengan isi %~1
+set /p ok="Ketik YA untuk lanjut: "
+if /i not "%ok%"=="YA" (echo Dibatalkan. ^& pause ^& exit /b 1)
+docker compose exec -T mongo sh -c "mongorestore --archive --gzip --drop" < "%~1"
+echo Restore selesai.
+pause
+`;
+
+export const RESTORE_PI_SH = `#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+FILE="$1"
+if [ -z "$FILE" ]; then
+  echo "Pemakaian: ./restore-pi.sh backups/gak-backup-XXXX.gz"
+  echo "Daftar backup tersedia:"
+  ls -1 backups/*.gz 2>/dev/null || echo "(belum ada backup)"
+  exit 1
+fi
+echo "PERINGATAN: ini akan MENIMPA seluruh data saat ini dengan isi $FILE"
+read -p "Ketik YA untuk lanjut: " ok
+[ "$ok" = "YA" ] || { echo "Dibatalkan."; exit 1; }
+docker compose exec -T mongo sh -c 'mongorestore --archive --gzip --drop' < "$FILE"
+echo "Restore selesai."
+`;
+
 export function downloadText(filename, text) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);

@@ -108,6 +108,10 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Skrip root: install-windows.bat, install-pi.sh, update-windows.bat, update-pi.sh. Install: cek Docker, copy .env.docker, ARM→mongo:4.4, compose up --build. install-pi.sh headless: auto buka $EDITOR/nano/vi bila .env.docker belum diisi (grep GANTI_DENGAN_ACAK). Update: git pull --ff-only (bila .git) + docker compose up -d --build + image prune (data aman di volume).
 - Pengaturan → tab "Installer" (SettingsInstaller.jsx): Bagian 1 Instal Server (pilih Desktop Windows / Raspberry Pi headless), Bagian 2 Perbarui Server (update Desktop / Pi). Semua skrip embedded di lib/installers.js (Blob download). testid: download-windows-installer, download-pi-installer, download-update-windows, download-update-pi. Verified bash -n (root+embedded) & UI screenshot.
 
+## BACKUP & PANDUAN LENGKAP (2026-06-21)
+- Skrip root: backup-windows.bat, backup-pi.sh, restore-windows.bat, restore-pi.sh. Backup: docker compose exec -T mongo mongodump --archive --gzip > backups/gak-backup-<TS>.gz (Pi auto-hapus >30 hari). Restore: mongorestore --archive --gzip --drop < file (konfirmasi "YA"). Data di volume mongo_data.
+- Tab Installer (SettingsInstaller.jsx) diperluas: bagian Prasyarat (pasang Docker Windows/Pi + perintah, jaringan/IP statis), 1 Instal (Desktop/Pi), 2 Update, 3 Backup&Restore (4 tombol), Ringkasan alur. Semua skrip embedded di lib/installers.js (7 skrip). testid tambahan: download-backup-windows/-pi, download-restore-windows/-pi. Verified bash -n (root+embedded) & UI screenshot; icons DatabaseBackup/ListChecks ada; compiled successfully.
+
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
