@@ -104,10 +104,9 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Backend: fallback Emergent di `_gemini_text`, `_gemini_image`, `_get_chat` kini dipagari `if not EMERGENT_LLM_KEY: raise HTTPException(400, "AI belum dikonfigurasi...")`. Import emergentintegrations yang tak terpakai di ai_summary dihapus. Dengan EMERGENT_LLM_KEY kosong di .env.docker → AI HANYA pakai provider user (OPENAI_COMPAT_*) / GEMINI_API_KEY; tak pernah menyentuh Emergent. Verified: AI description hit provider chenzk (bukan Emergent). README-DEPLOY punya bagian "Tanpa ketergantungan Emergent".
 - CATATAN: provider chenzk.top agregator intermiten (model list berubah tiap request; deepseek-v4-flash kadang 503 model_not_found). Pertimbangkan ganti model teks ke gpt-5.5/claude-sonnet-5 (key sk-jnW9v) bila sering gagal.
 
-## INSTALLER 1-KLIK (2026-06-21)
-- Skrip: /install-windows.bat & /install-pi.sh (repo root) — auto: cek Docker, copy .env.docker dari example, deteksi ARM→mongo:4.4 (Pi), docker compose up -d --build, tampilkan IP.
-- install-pi.sh HEADLESS-friendly: bila .env.docker belum ada / masih placeholder (grep "GANTI_DENGAN_ACAK") → otomatis buka editor ($EDITOR/nano/vi) untuk diisi, lalu validasi ulang. Verified bash -n (root + versi embedded yang di-generate aplikasi).
-- Di aplikasi: Pengaturan → tab "Installer" (pages/SettingsInstaller.jsx) unduh kedua skrip (embedded di lib/installers.js via Blob; escaping \${ } di template literal). testid download-windows-installer/download-pi-installer.
+## INSTALLER + UPDATE 1-KLIK (2026-06-21)
+- Skrip root: install-windows.bat, install-pi.sh, update-windows.bat, update-pi.sh. Install: cek Docker, copy .env.docker, ARM→mongo:4.4, compose up --build. install-pi.sh headless: auto buka $EDITOR/nano/vi bila .env.docker belum diisi (grep GANTI_DENGAN_ACAK). Update: git pull --ff-only (bila .git) + docker compose up -d --build + image prune (data aman di volume).
+- Pengaturan → tab "Installer" (SettingsInstaller.jsx): Bagian 1 Instal Server (pilih Desktop Windows / Raspberry Pi headless), Bagian 2 Perbarui Server (update Desktop / Pi). Semua skrip embedded di lib/installers.js (Blob download). testid: download-windows-installer, download-pi-installer, download-update-windows, download-update-pi. Verified bash -n (root+embedded) & UI screenshot.
 
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).

@@ -113,6 +113,35 @@ echo "Buka di browser:   http://\${IP:-IP-KOMPUTER-INI}"
 echo "==========================================="
 `;
 
+export const UPDATE_WINDOWS_BAT = `@echo off
+cd /d "%~dp0"
+echo === Update Grand Aceh Kuliner POS (Windows) ===
+if exist ".git" (
+  echo Menarik pembaruan terbaru dari Git...
+  git pull --ff-only
+)
+echo Membangun ulang dan menjalankan versi terbaru...
+docker compose up -d --build
+docker image prune -f >nul 2>nul
+echo.
+echo Selesai. Aplikasi sudah versi terbaru.
+pause
+`;
+
+export const UPDATE_PI_SH = `#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+echo "=== Update Grand Aceh Kuliner POS (Pi/Linux) ==="
+if [ -d .git ]; then
+  echo "Menarik pembaruan terbaru dari Git..."
+  git pull --ff-only || echo "(git pull dilewati)"
+fi
+echo "Membangun ulang & menjalankan versi terbaru..."
+docker compose up -d --build
+docker image prune -f >/dev/null 2>&1 || true
+echo "Selesai. Aplikasi sudah versi terbaru."
+`;
+
 export function downloadText(filename, text) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
