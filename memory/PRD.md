@@ -106,7 +106,8 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 
 ## INSTALLER 1-KLIK (2026-06-21)
 - Skrip: /install-windows.bat & /install-pi.sh (repo root) — auto: cek Docker, copy .env.docker dari example, deteksi ARM→mongo:4.4 (Pi), docker compose up -d --build, tampilkan IP.
-- Di aplikasi: Pengaturan → tab "Installer" (pages/SettingsInstaller.jsx) unduh kedua skrip (embedded di lib/installers.js via Blob, testid download-windows-installer/download-pi-installer). Verified UI (admin) + compiled successfully.
+- install-pi.sh HEADLESS-friendly: bila .env.docker belum ada / masih placeholder (grep "GANTI_DENGAN_ACAK") → otomatis buka editor ($EDITOR/nano/vi) untuk diisi, lalu validasi ulang. Verified bash -n (root + versi embedded yang di-generate aplikasi).
+- Di aplikasi: Pengaturan → tab "Installer" (pages/SettingsInstaller.jsx) unduh kedua skrip (embedded di lib/installers.js via Blob; escaping \${ } di template literal). testid download-windows-installer/download-pi-installer.
 
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).

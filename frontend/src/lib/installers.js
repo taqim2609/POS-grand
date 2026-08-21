@@ -73,13 +73,33 @@ if [ ! -f .env ]; then
   esac
 fi
 
+NEEDS_EDIT=0
 if [ ! -f backend/.env.docker ]; then
   cp backend/.env.docker.example backend/.env.docker
   echo "[OK] Dibuat file backend/.env.docker"
-  echo
-  echo "PENTING: edit backend/.env.docker -> ganti JWT_SECRET, isi email/password admin,"
-  echo "dan kunci AI Anda (EMERGENT_LLM_KEY biarkan kosong). Lalu jalankan ulang skrip ini."
-  exit 0
+  NEEDS_EDIT=1
+fi
+if grep -q "GANTI_DENGAN_ACAK" backend/.env.docker; then
+  NEEDS_EDIT=1
+fi
+if [ "\${NEEDS_EDIT}" = "1" ]; then
+  echo "Membuka editor untuk mengisi konfigurasi (JWT_SECRET, email/password admin, kunci AI)..."
+  EDITOR_BIN="\${EDITOR:-}"
+  if [ -z "\${EDITOR_BIN}" ]; then
+    if command -v nano >/dev/null 2>&1; then EDITOR_BIN=nano
+    elif command -v vi >/dev/null 2>&1; then EDITOR_BIN=vi
+    fi
+  fi
+  if [ -n "\${EDITOR_BIN}" ]; then
+    "\${EDITOR_BIN}" backend/.env.docker
+  else
+    echo "Editor teks tidak ditemukan. Edit manual backend/.env.docker lalu jalankan ulang."
+    exit 0
+  fi
+  if grep -q "GANTI_DENGAN_ACAK" backend/.env.docker; then
+    echo "[PERINGATAN] JWT_SECRET masih placeholder. Edit backend/.env.docker lalu jalankan ulang skrip ini."
+    exit 1
+  fi
 fi
 
 echo
