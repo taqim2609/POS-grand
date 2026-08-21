@@ -1,3 +1,3 @@
-2026/08/20-15:55:23.797 210 Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/shared_proto_db/metadata/MANIFEST-000001
-2026/08/20-15:55:23.799 210 Recovering log #3
-2026/08/20-15:55:23.800 210 Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/shared_proto_db/metadata/000003.log 
+2026/08/20-23:25:00.827 1d1 Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/shared_proto_db/metadata/MANIFEST-000001
+2026/08/20-23:25:00.827 1d1 Recovering log #3
+2026/08/20-23:25:00.828 1d1 Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/shared_proto_db/metadata/000003.log 

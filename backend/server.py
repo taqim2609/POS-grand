@@ -1120,7 +1120,8 @@ async def ai_parse_invoice(body: AIInvoiceIn, admin: dict = Depends(require_admi
     try:
         raw = await asyncio.to_thread(run)
     except Exception as e:
-        raise HTTPException(400, f"Gagal memanggil AI Vision: {e}")
+        logger.error(f"parse-invoice AI error: {e}")
+        raise HTTPException(400, "Model AI yang dipilih tidak mendukung pembacaan gambar. Ganti model Vision di Pengaturan AI.")
     return {"items": _extract_json_list(raw)}
 
 @api.post("/ai/product-description")
@@ -1540,6 +1541,10 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.products.create_index("sku", unique=True)
     await db.orders.create_index("client_ref", sparse=True)
+    await db.orders.create_index([("order_type", 1), ("status", 1)])
+    await db.orders.create_index([("created_at", -1)])
+    await db.products.create_index([("type", 1), ("active", 1)])
+    await db.products.create_index([("category_id", 1)])
     try:
         await db.orders.create_index("order_number", unique=True)
     except Exception as e:

@@ -255,7 +255,7 @@ export default function Dashboard() {
           <h3 className="font-extrabold flex items-center gap-2 mb-2"><Sparkles size={18} className="text-[#E63946]" /> Laporan AI</h3>
           <p className="text-xs text-white/50 mb-4">Laporan penjualan harian dibuat oleh AI</p>
           <div data-testid="ai-summary-text" className="flex-1 text-sm whitespace-pre-wrap overflow-y-auto no-scrollbar min-h-[120px]">
-            {ai || <span className="text-white/40">Klik tombol untuk membuat laporan analitik.</span>}
+            {ai ? ai.replace(/\*\*(.*?)\*\*/g, "$1").replace(/^#{1,6}\s*/gm, "").replace(/^\s*---\s*$/gm, "") : <span className="text-white/40">Klik tombol untuk membuat laporan analitik.</span>}
           </div>
           <div className="flex gap-2 mt-4">
             <button data-testid="ai-summary-btn" onClick={genAi} disabled={aiLoading} className="tap flex-1 h-11 rounded-xl bg-[#E63946] hover:bg-[#BE123C] font-bold flex items-center justify-center gap-2">

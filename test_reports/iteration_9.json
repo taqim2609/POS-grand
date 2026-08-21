@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 9 focused verification of the 4 AI features with the live OpenAI-compatible key (https://www.chenzk.top/v1). Backend: new pytest suite /app/backend/tests/test_ai_features.py — 5/5 passed (AI settings config, product-description, reports/ai-summary, product-image, parse-invoice graceful-failure check). Frontend (admin login taqim2609@gmail.com): Dashboard 'Laporan AI' generated a 1966-char structured Indonesian report in ~20s with 'Salin' button appearing; Products form AI description filled in ~5s with success toast 'Deskripsi AI dibuat'; AI image generated in ~35s and preview thumbnail rendered in the dialog; Inventory > Pembelian > Scan Faktur (AI) failed as expected (deepseek-v4-flash is text-only) but failed GRACEFULLY — error toast shown, dialog and page remained functional, no crash.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/ai/parse-invoice", "issue": "Returns 400 with the raw provider error string leaked to the client: \"Gagal memanggil AI Vision: Error code: 400 - {'error': {'message': 'Failed to deserialize the JSON body ... unknown variant `image_url`, expected `text`'}}\". Expected — vision feature is configured with the text-only model deepseek-v4-flash. Recommend (a) configuring a real vision model for features.vision and (b) sanitizing the message to a friendly Indonesian text (e.g. 'Model AI yang dipilih tidak mendukung pembacaan gambar. Ganti model Vision di Pengaturan AI.')."},
+      {"endpoint": "POST /api/ai/product-image", "issue": "Returns the provider-hosted URL (https://mianyunai.com/generated-cy/...jpg) which is stored on the product. If the provider expires/rotates those URLs, product images will break permanently. Consider downloading and persisting as base64/local asset (the b64_json branch already exists but this provider returns url)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Dashboard Laporan AI", "issue": "AI text is rendered as raw markdown (**bold**, ### headings, --- rules) inside a whitespace-pre-wrap div, so users see literal asterisks/hashes. Render markdown or ask the model for plain text.", "selector": "[data-testid=\"ai-summary-text\"]", "priority": "LOW"},
+      {"component": "Products form AI description button", "issue": "The 'AI' button is absolutely positioned bottom-right inside the textarea and overlaps the generated description text (see screenshot), obscuring the last line.", "selector": "[data-testid=\"ai-desc-btn\"]", "priority": "LOW"},
+      {"component": "InvoiceScan dialog", "issue": "Error toast displays the raw provider JSON/stack-like message to the end user (non-Indonesian, technical). Handled without crash, but message should be user friendly.", "selector": "[data-testid=\"invoice-parse-btn\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Date picker uses the browser-native <input type=date> (08/21/2026 mm/dd/yyyy format) instead of a shadcn Calendar — inconsistent with the rest of the Indonesian UI and shows US date format."]},
+      {"screen": "Produk list", "issues": ["Large amount of leftover TEST_* seed products from previous iterations (TEST_Mie_*, TEST_Rokok_*, TEST_PSTK_*, TEST_KAT2_* category) still in DB — should be cleaned before handover."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_features.py", "/app/test_reports/pytest/iteration9_ai.xml"],
+  "action_items": [
+    "Configure a vision-capable model for features.vision (deepseek-v4-flash is text-only) OR hide/disable the 'Scan Faktur (AI)' button when the configured vision model lacks image support.",
+    "Sanitize AI error messages surfaced to the UI (parse-invoice) into friendly Indonesian text instead of raw provider JSON.",
+    "Render the AI summary markdown (or request plain text) so users don't see ** and ###.",
+    "Persist AI-generated images locally instead of storing the third-party provider URL.",
+    "Reposition the ai-desc-btn so it does not cover textarea text.",
+    "Clean up leftover TEST_* products/categories from the database."
+  ],
+  "critical_code_review_comments": [
+    "server.py ai_parse_invoice: wrap provider exception and return a generic user-facing message; log the raw error server-side only.",
+    "server.py _gemini_image: when provider returns a URL, fetch bytes and store as data URI/asset to avoid dead links.",
+    "server.py is 1583 lines — exceeds the 700-line guideline; consider splitting AI, reports, and POS routers into modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_ai_features.py"],
+  "success_rate": {"backend": "100% (5/5 AI tests; vision documented as expected 400)", "frontend": "100% of AI flows behaved as specified (3 working + 1 graceful failure)"},
+  "seed_data_creation": "None persisted. A product form was filled with 'TEST_AI Mie Aceh Kepiting' but never saved.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin taqim2609@gmail.com / GrandAceh#2026 (from /app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "AI config in DB settings _id='ai': description/summary/vision = deepseek-v4-flash, image = gpt-image-2, base https://www.chenzk.top/v1, key set for all 4. Description ~5s, image ~35s, summary ~20s — use >=60s waits. Vision (parse-invoice) returns 400 by design because deepseek is text-only. Reusable suite: /app/backend/tests/test_ai_features.py (run with `pytest tests/test_ai_features.py -n 0` since pytest.ini forces xdist). Login lands on /pos, so navigate to Dashboard explicitly before testing ai-summary-btn.",
+  "rca_of_the_issue": "parse-invoice 400 root cause: the provider rejects the OpenAI multimodal content array ('unknown variant image_url') because the configured model deepseek-v4-flash accepts text-only messages. Not a code bug — a model configuration limitation. Frontend handles it gracefully (toast, no crash)."
+}

@@ -79,13 +79,16 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 ## AI AKTIF (2026-06)
 - Key AI baru dipasang (sk-...GkcQ) di .env OPENAI_COMPAT_API_KEY + DB per-fitur. Provider https://www.chenzk.top/v1.
 - Model: teks/analisis/vision = `deepseek-v4-flash` (reasoning model — butuh max_tokens tinggi; _gemini_text set 4000 + fallback reasoning_content). Image-gen = `gpt-image-2`.
-- Terverifikasi jalan: deskripsi produk ✅, Laporan AI ✅ (laporan rapi ~2.5k char), image-gen ✅. Vision (baca faktur) BELUM tervalidasi (deepseek adalah model teks; jika gagal baca gambar, ganti ke model vision di Pengaturan AI).
+- Verified testing agent iteration_9 (100% AI flows): deskripsi ✅, Laporan AI ✅ (~2k char), image-gen ✅. Vision (baca faktur) gagal by-design (deepseek text-only) tapi graceful; pesan error kini ramah bahasa Indonesia. Markdown laporan AI dibersihkan saat tampil. Data TEST_* dibersihkan (19 produk, 17 kategori).
+- Backlog AI: model vision khusus untuk Baca Faktur; simpan gambar AI sebagai aset lokal (URL provider bisa kadaluarsa).
 
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 
 ## Deployment
 - Deployed to production: https://hybrid-pos-aceh.emergent.host (health check PASS).
+- Build 8 health check: teknis LULUS (kompilasi/env/CORS/crons valid). Satu-satunya flag = fitur Reset Data (disengaja, proteksi admin+password+ketik RESET) — user memilih tetap dipertahankan.
+- Index DB ditambahkan di startup: orders {order_type,status} & {created_at desc}; products {type,active} & {category_id}. Verified created + queries 200.
 
 ## Backlog (prioritas)
 - P1: Rate limiting / lockout login (±5 gagal).
