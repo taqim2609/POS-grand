@@ -105,6 +105,7 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - CATATAN: provider chenzk.top agregator intermiten (model list berubah tiap request; deepseek-v4-flash kadang 503 model_not_found). Pertimbangkan ganti model teks ke gpt-5.5/claude-sonnet-5 (key sk-jnW9v) bila sering gagal.
 
 ## KNOWN ISSUE (user action)
+- 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 
 ## Deployment

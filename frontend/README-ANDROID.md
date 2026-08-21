@@ -11,20 +11,21 @@ Anda tinggal membuka & build di **Android Studio** di komputer Anda.
 ## Ringkasan konfigurasi
 - App ID / package: `host.emergent.hybridposaceh`
 - Nama app: **Grand Aceh Kuliner POS**
-- Orientasi: **landscape** (dikunci)
+- Orientasi: **bebas** (landscape & portrait — mendukung tablet & HP)
 - minSdk 22, target/compile SDK 34
-- Aset web di-*bundle* dari folder `build/` → aplikasi buka cepat & tetap panggil backend produksi.
-- Backend yang dipakai APK: **https://hybrid-pos-aceh.emergent.host** (di-bake saat build web).
+- Aset web di-*bundle* dari folder `build/`.
+- **Alamat server diatur SAAT PEMAKAIAN (runtime), bukan di-bake.** Setelah pasang APK, buka
+  layar Login → **"Pengaturan Server (LAN)"** → isi `http://IP-komputer-server`. Jadi 1 APK bisa
+  dipakai di banyak toko/IP tanpa build ulang. TIDAK ada koneksi ke Emergent.
 
 ## Langkah build APK
 1. Salin/clone folder `frontend/` ini ke komputer Anda.
 2. (Opsional, bila ada perubahan kode web) build ulang aset lalu sync:
    ```bash
-   # dari folder frontend/
-   REACT_APP_BACKEND_URL=https://hybrid-pos-aceh.emergent.host yarn build
+   # dari folder frontend/  — alamat server dibiarkan kosong (diisi di aplikasi saat runtime)
+   yarn build
    npx cap sync android
    ```
-   > Windows (PowerShell): `set "REACT_APP_BACKEND_URL=https://hybrid-pos-aceh.emergent.host" && yarn build && npx cap sync android`
 3. Buka proyek Android:
    ```bash
    npx cap open android
