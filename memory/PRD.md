@@ -112,6 +112,10 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Skrip root: backup-windows.bat, backup-pi.sh, restore-windows.bat, restore-pi.sh. Backup: docker compose exec -T mongo mongodump --archive --gzip > backups/gak-backup-<TS>.gz (Pi auto-hapus >30 hari). Restore: mongorestore --archive --gzip --drop < file (konfirmasi "YA"). Data di volume mongo_data.
 - Tab Installer (SettingsInstaller.jsx) diperluas: bagian Prasyarat (pasang Docker Windows/Pi + perintah, jaringan/IP statis), 1 Instal (Desktop/Pi), 2 Update, 3 Backup&Restore (4 tombol), Ringkasan alur. Semua skrip embedded di lib/installers.js (7 skrip). testid tambahan: download-backup-windows/-pi, download-restore-windows/-pi. Verified bash -n (root+embedded) & UI screenshot; icons DatabaseBackup/ListChecks ada; compiled successfully.
 
+## UNDUH FOLDER PROYEK (2026-06-21)
+- Endpoint `GET /api/installers/project-zip` (admin) → zip PROJECT_ROOT (ROOT_DIR.parent) via zipfile in-memory, top folder "grand-aceh-pos/". Exclude dirs: node_modules/.git/build/__pycache__/venv/uploads/backups/.wwebjs_*/.emergent/dist/.pytest_cache/test_reports/memory/.gradle/.idea/.vscode/coverage. Exclude files: .env/.env.docker/.env.local/.DS_Store (rahasia). Guard: 404 bila docker-compose.yml tak ada di root (hindari walk / di container backend prod).
+- Frontend: tombol "Unduh grand-aceh-pos.zip" di tab Installer (testid download-project-zip) via api.get blob. Verified: http 200 application/zip 2.6MB/228 entri; tanpa .env/node_modules/.git; compiled successfully.
+
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.

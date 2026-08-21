@@ -1,5 +1,6 @@
-import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks } from "lucide-react";
+import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks, FolderDown } from "lucide-react";
 import { toast } from "sonner";
+import api from "@/lib/api";
 import {
   INSTALL_WINDOWS_BAT, INSTALL_PI_SH, UPDATE_WINDOWS_BAT, UPDATE_PI_SH,
   BACKUP_WINDOWS_BAT, BACKUP_PI_SH, RESTORE_WINDOWS_BAT, RESTORE_PI_SH, downloadText,
@@ -36,9 +37,33 @@ const Code = ({ children }) => (
 );
 
 export default function SettingsInstaller() {
+  const dlProject = async () => {
+    const t = toast.loading("Menyiapkan folder proyek (.zip)...");
+    try {
+      const res = await api.get("/installers/project-zip", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = "grand-aceh-pos.zip";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success("Folder proyek terunduh", { id: t });
+    } catch (e) {
+      toast.error("Gagal mengunduh folder proyek", { id: t });
+    }
+  };
   return (
     <div className="h-full overflow-y-auto p-6 lg:p-8" data-testid="settings-installer">
       <div className="max-w-2xl space-y-8">
+        {/* DOWNLOAD PROYEK */}
+        <div className="rounded-2xl border-2 border-[#E63946] bg-[#FEF2F2] p-5">
+          <div className="flex items-center gap-2 font-extrabold text-[#0A0A0A]"><FolderDown size={20} className="text-[#E63946]" /> Unduh Folder Proyek</div>
+          <p className="text-sm text-[#52525B] mt-1">Unduh seluruh berkas aplikasi (tanpa file rahasia) sebagai satu <b>.zip</b>. Ekstrak di komputer server, lalu jalankan skrip installer dari dalamnya.</p>
+          <button data-testid="download-project-zip" onClick={dlProject}
+            className="tap mt-3 h-11 px-5 rounded-xl bg-[#E63946] text-white font-bold inline-flex items-center gap-2">
+            <FolderDown size={16} /> Unduh grand-aceh-pos.zip
+          </button>
+        </div>
+
         {/* PRASYARAT */}
         <Section title="Prasyarat" icon={ListChecks} desc="Yang perlu disiapkan sebelum memasang server.">
           <div className="rounded-2xl border border-[#E4E4E7] bg-white p-5 space-y-3 text-sm text-[#3f3f46]">

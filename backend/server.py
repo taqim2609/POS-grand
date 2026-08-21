@@ -7,16 +7,17 @@ load_dotenv(ROOT_DIR / '.env')
 
 UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR') or (ROOT_DIR / 'uploads'))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+PROJECT_ROOT = ROOT_DIR.parent
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, UploadFile, File, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, Response
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, date, timedelta
-import logging, uuid, io, bcrypt, jwt, asyncio, re
+import logging, uuid, io, bcrypt, jwt, asyncio, re, zipfile
 
 # ------------------------------------------------------------------ DB
 mongo_url = os.environ['MONGO_URL']
@@ -1095,6 +1096,36 @@ async def get_upload(fname: str):
     if not fp.exists():
         raise HTTPException(404, "File tidak ditemukan")
     return FileResponse(str(fp))
+
+@api.get("/installers/project-zip")
+async def download_project_zip(admin: dict = Depends(require_admin)):
+    if not (PROJECT_ROOT / "docker-compose.yml").exists():
+        raise HTTPException(404, "Folder proyek tidak tersedia di lingkungan ini.")
+    EXCLUDE_DIRS = {"node_modules", ".git", "build", "__pycache__", ".venv", "venv",
+                    "uploads", "backups", ".wwebjs_auth", ".wwebjs_cache", ".emergent",
+                    "dist", ".pytest_cache", "test_reports", "memory", ".gradle",
+                    ".idea", ".vscode", "coverage"}
+    EXCLUDE_FILES = {".env", ".env.docker", ".env.local", ".DS_Store"}
+
+    def build():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(PROJECT_ROOT):
+                dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+                for f in files:
+                    if f in EXCLUDE_FILES or f.endswith(".env.local"):
+                        continue
+                    fp = os.path.join(root, f)
+                    if os.path.islink(fp) or not os.path.isfile(fp):
+                        continue
+                    rel = os.path.relpath(fp, PROJECT_ROOT)
+                    zf.write(fp, os.path.join("grand-aceh-pos", rel))
+        buf.seek(0)
+        return buf.read()
+
+    data = await asyncio.to_thread(build)
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": "attachment; filename=grand-aceh-pos.zip"})
 
 class AISettingsIn(BaseModel):
     feature: Literal["description", "image", "summary"]
