@@ -26,6 +26,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // ignore backend/API & cross-origin
   if (url.pathname.startsWith("/api/")) return;     // API is always network-only (no SW caching)
+  if (url.pathname.startsWith("/ota/")) return;     // OTA update files: always network-only
 
   if (req.mode === "navigate") {
     event.respondWith(

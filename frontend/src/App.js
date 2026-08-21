@@ -1,6 +1,8 @@
 import "@/App.css";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
+import { checkOtaUpdate } from "@/lib/ota";
 import { AuthProvider } from "@/context/AuthContext";
 import { OfflineProvider } from "@/context/OfflineContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -29,6 +31,7 @@ const wrap = (el, roles) => (
 );
 
 function App() {
+  useEffect(() => { checkOtaUpdate(); }, []);
   return (
     <div className="App">
       <AuthProvider>

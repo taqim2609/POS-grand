@@ -200,3 +200,11 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Solusi: requirements.txt dipangkas ke 18 top-level yang benar-benar dipakai server.py; pip menarik dependency turunan otomatis. Dihapus: dev tools (black/flake8/mypy/isort/pytest/pytest-xdist), boto3/botocore/s3transfer/s5cmd, stripe, twilio, pandas, numpy, dan baris litellm URL ganda.
 - Dipakai: fastapi, uvicorn, python-multipart, email-validator, motor, pymongo, pydantic, python-dotenv, bcrypt, PyJWT, emergentintegrations, openai, google-genai, httpx, openpyxl, fpdf2, pillow, docker.
 - Verified: pip install --dry-run resolusi EXIT=0 (tanpa konflik); backend lokal /api/health ok. Perlu verifikasi build akhir di Pi.
+
+## FITUR (2026-06-21) — OTA update APK Android via Pi (LAN)
+- Plugin @capgo/capacitor-updater (Cap 6). capacitor.config: plugins.CapacitorUpdater autoUpdate=false, resetWhenUpdate=true; android.allowMixedContent=true.
+- frontend/scripts/make-ota.js (postbuild) membuat build/ota/bundle.zip (zip seluruh build kecuali ota/) + version.json {version:timestamp, url:/ota/bundle.zip}. Dep: archiver@^6 (devDep; v8 tidak CJS-compat).
+- frontend/src/lib/ota.js checkOtaUpdate(): hanya native; fetch {server}/ota/version.json, jika versi beda → CapacitorUpdater.download+set (reload). Dipanggil di App.js useEffect.
+- nginx menyajikan /ota/ via try_files (statis). SW (public + android) bypass /ota/ (network-only) selain /api/.
+- Verified di sini: yarn build sukses, build/ota/bundle.zip valid (24 file, index.html root), version.json OK, sw.js memuat bypass /ota/. Build/instalasi APK & alur OTA sebenarnya WAJIB diverifikasi di Android Studio + HP user (tak bisa diuji di lingkungan ini).
+- Panduan build APK + OTA ditambahkan di PANDUAN-GITHUB.md bagian 7.

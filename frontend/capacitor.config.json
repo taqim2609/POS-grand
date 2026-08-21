@@ -3,6 +3,12 @@
   "appName": "Grand Aceh Kuliner POS",
   "webDir": "build",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "resetWhenUpdate": true
+    }
   }
 }

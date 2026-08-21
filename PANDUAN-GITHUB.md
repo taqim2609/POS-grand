@@ -121,3 +121,32 @@ Windows: dobel-klik `restart-windows.bat` di dalam folder proyek.
 4. Reboot Pi sekali.
 5. Akses `http://IP-server`.
 6. Update kapan saja: `cd ~/grand-aceh-pos && ./update-pi.sh`. Backup rutin.
+
+---
+
+## 7. Aplikasi Android dengan Update Otomatis (OTA via Pi)
+
+APK Android bisa memperbarui tampilannya sendiri dari server Pi (LAN) tanpa
+Play Store & tanpa reinstall. Server menyajikan paket update di:
+`http://grandpos.local/ota/version.json` dan `/ota/bundle.zip` (otomatis dibuat
+saat build frontend).
+
+### Cara kerja
+1. Update Pi seperti biasa (`git pull` + rebuild / tombol Update 1-klik) → Pi punya `ota/` versi baru.
+2. APK saat dibuka cek `grandpos.local/ota/version.json`; jika beda, unduh `bundle.zip` dari Pi & pasang live.
+3. Selesai — tampilan baru muncul, tanpa reinstall APK.
+
+### Build APK (sekali saja, di komputer)
+Prasyarat: Node.js 20, Java JDK 17, Android Studio (+Android SDK).
+```bash
+git clone https://github.com/taqim2609/POS-grand.git
+cd POS-grand/frontend
+yarn install
+REACT_APP_BACKEND_URL="" yarn build
+npx cap sync android
+npx cap open android
+```
+Di Android Studio: tunggu Gradle sync → Build → Build APK(s) → kirim `app-debug.apk` ke HP → Install (izinkan "sumber tidak dikenal").
+
+> APK cukup dibuat 1x. Update tampilan berikutnya otomatis via OTA. Build APK lagi
+> hanya jika ada perubahan native (ganti ikon/plugin) — jarang.
