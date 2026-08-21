@@ -1,7 +1,24 @@
 import axios from "axios";
 
+// Runtime-configurable backend root so the SAME web build / Android APK can point to
+// ANY local server IP (LAN) without rebuilding.
+// Priority: saved server URL (localStorage) > build-time env > relative "" (same-origin via nginx).
+export function getServerUrl() {
+  try {
+    const s = localStorage.getItem("gak_server_url");
+    if (s) return s.replace(/\/+$/, "");
+  } catch (e) {}
+  return (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
+}
+
+export function setServerUrl(url) {
+  const clean = (url || "").trim().replace(/\/+$/, "");
+  if (clean) localStorage.setItem("gak_server_url", clean);
+  else localStorage.removeItem("gak_server_url");
+}
+
 const api = axios.create({
-  baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
+  baseURL: `${getServerUrl()}/api`,
 });
 
 api.interceptors.request.use((cfg) => {

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiError } from "@/lib/api";
+import { apiError, getServerUrl, setServerUrl } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail } from "lucide-react";
+import { Loader2, Lock, Mail, Server } from "lucide-react";
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -11,6 +11,14 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSrv, setShowSrv] = useState(false);
+  const [srv, setSrv] = useState(getServerUrl());
+
+  const saveSrv = () => {
+    setServerUrl(srv);
+    toast.success("Alamat server disimpan. Memuat ulang...");
+    setTimeout(() => window.location.reload(), 700);
+  };
 
   useEffect(() => {
     if (user) nav("/pos");
@@ -86,6 +94,32 @@ export default function Login() {
           >
             {loading && <Loader2 size={18} className="animate-spin" />} Masuk
           </button>
+
+          <button
+            type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
+            className="mt-5 mx-auto flex items-center gap-1.5 text-xs font-bold text-[#a1a1aa] hover:text-[#52525B]"
+          >
+            <Server size={13} /> Pengaturan Server (LAN)
+          </button>
+          {showSrv && (
+            <div className="mt-3 rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] p-3" data-testid="server-config-panel">
+              <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Alamat Server</label>
+              <input
+                data-testid="server-url-input" value={srv} onChange={(e) => setSrv(e.target.value)}
+                placeholder="http://192.168.1.100"
+                className="w-full h-11 px-3 mt-1.5 rounded-lg border border-[#E4E4E7] text-sm font-mono outline-none focus:border-[#E63946]"
+              />
+              <p className="text-[11px] text-[#a1a1aa] mt-1.5 leading-snug">
+                Kosongkan untuk memakai server yang sama dengan aplikasi. Isi IP komputer server saat memakai APK Android di jaringan toko.
+              </p>
+              <button
+                type="button" data-testid="server-url-save" onClick={saveSrv}
+                className="tap mt-2 w-full h-10 rounded-lg bg-[#0A0A0A] text-white font-bold text-sm"
+              >
+                Simpan &amp; Hubungkan
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

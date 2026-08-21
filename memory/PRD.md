@@ -88,6 +88,12 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - CEGAH KATEGORI DUPLIKAT: create/update_category cek nama (case-insensitive, per type) → 400 "sudah ada". Verified.
 - CORS KETAT: backend/.env CORS_ORIGINS = preview + prod host; kode strip+filter. Verified di localhost:8001 (allowed → ACAO echo; evil → tanpa ACAO). Via URL publik proxy preview tetap tampil `*` (override proxy), tapi backend enforce benar untuk prod/Pi.
 
+## DEPLOYMENT LOKAL / LAN (2026-06-21) — Fase 1
+- Target: 1 komputer server (Windows / Raspberry Pi 64-bit) jalankan Mongo+backend+frontend(+WA opsional); klien (POS komputer browser + Android APK) akses via IP LAN. LAN-only, DB mulai kosong.
+- Paket Docker: /app/docker-compose.yml (services mongo/backend/whatsapp[profile]/frontend; volumes mongo_data/uploads_data/wa_auth), backend/Dockerfile (python3.11 + emergentintegrations), frontend/Dockerfile (node build → nginx serve, nginx proxy /api→backend:8001 satu origin), whatsapp-service/Dockerfile (chromium + CHROME_BIN), backend/.env.docker.example, README-DEPLOY.md (panduan Windows/Pi, MONGO_IMAGE=mongo:4.4 utk Pi, backup, APK, troubleshooting).
+- ALAMAT SERVER RUNTIME: frontend/src/lib/api.js kini baca `localStorage.gak_server_url` dulu (fallback REACT_APP_BACKEND_URL, lalu relatif /api). getServerUrl/setServerUrl. Login.jsx punya panel "Pengaturan Server (LAN)" (testid server-config-toggle/panel, server-url-input, server-url-save) → APK/browser bisa arahkan ke IP server tanpa rebuild. Verified: compose valid, login render + panel muncul, app tetap kompilasi.
+- PRINTER (belum): Sunmi T2+ cut+laci SUDAH ada di receipt.js (cutPaper/openDrawer). Epson jaringan (POS komputer, ePOS/9100) BELUM — fase berikut, butuh IP/model printer & uji di lokasi.
+
 ## KNOWN ISSUE (user action)
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.
 
