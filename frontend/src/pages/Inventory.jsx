@@ -208,11 +208,28 @@ function InvoiceScan({ open, onClose, onDone }) {
     reader.readAsDataURL(f);
   };
 
-  const autoMatch = (name) => {
-    const n = (name || "").toLowerCase();
-    const hit = products.find((p) => p.name.toLowerCase() === n)
-      || products.find((p) => p.name.toLowerCase().includes(n) || n.includes(p.name.toLowerCase()));
-    return hit ? hit.id : "";
+  const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const autoMatch = (name, sku) => {
+    // 1) match by SKU/barcode if AI returned one
+    if (sku) { const bySku = products.find((p) => (p.sku || "").toLowerCase() === String(sku).toLowerCase()); if (bySku) return bySku.id; }
+    const n = norm(name);
+    if (!n) return "";
+    // 2) exact / substring
+    let hit = products.find((p) => norm(p.name) === n)
+      || products.find((p) => norm(p.name).includes(n) || n.includes(norm(p.name)));
+    if (hit) return hit.id;
+    // 3) token-overlap fuzzy scoring (auto-pick only when confident)
+    const nt = [...new Set(n.split(" ").filter((w) => w.length >= 2))];
+    let best = null, bestScore = 0;
+    for (const p of products) {
+      const pt = norm(p.name).split(" ").filter((w) => w.length >= 2);
+      if (!pt.length || !nt.length) continue;
+      let inter = 0;
+      for (const w of pt) if (nt.some((x) => x === w || x.includes(w) || w.includes(x))) inter += 1;
+      const score = inter / Math.max(pt.length, nt.length);
+      if (score > bestScore) { bestScore = score; best = p; }
+    }
+    return bestScore >= 0.5 && best ? best.id : "";
   };
 
   const parse = async () => {
@@ -221,7 +238,7 @@ function InvoiceScan({ open, onClose, onDone }) {
     try {
       const { data } = await api.post("/ai/parse-invoice", { image });
       if (!data.items?.length) { toast.error("AI tidak menemukan item pada faktur"); setRows([]); }
-      else { setRows(data.items.map((it) => ({ ...it, match: autoMatch(it.name), newCat: cats[0]?.id || "", newPrice: it.unit_cost }))); setStep("edit"); }
+      else { setRows(data.items.map((it) => ({ ...it, match: autoMatch(it.name, it.sku), newCat: cats[0]?.id || "", newPrice: it.unit_cost }))); setStep("edit"); }
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
   };
 
@@ -270,7 +287,7 @@ function InvoiceScan({ open, onClose, onDone }) {
 
           {rows.length > 0 && step === "edit" && (
             <div className="space-y-2">
-              <div className="text-xs font-bold text-[#52525B]">Cocokkan tiap item ke produk retail, lalu lanjut ke konfirmasi:</div>
+              <div className="text-xs font-bold text-[#52525B]">Produk sudah dicocokkan otomatis. Periksa & ubah bila ada yang salah, lalu lanjut ke konfirmasi:</div>
               {rows.map((r, i) => (
                 <div key={i} data-testid={`invoice-row-${i}`} className="rounded-xl border p-3 grid md:grid-cols-12 gap-2 items-center">
                   <input value={r.name} onChange={(e) => upd(i, { name: e.target.value })} className="md:col-span-4 h-10 rounded-lg border px-2 text-sm" />

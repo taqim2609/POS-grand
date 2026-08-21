@@ -1156,7 +1156,7 @@ async def ai_parse_invoice(body: AIInvoiceIn, admin: dict = Depends(require_admi
     img = body.image if body.image.startswith("data:") else f"data:image/jpeg;base64,{body.image}"
     system = "Anda asisten yang membaca foto faktur/nota pembelian toko."
     prompt = ('Baca foto faktur berikut dan ekstrak daftar barang. Kembalikan HANYA JSON array. '
-              'Tiap elemen: {"name": "nama barang", "qty": angka, "unit_cost": angka}. '
+              'Tiap elemen: {"name": "nama barang", "sku": "kode/barcode jika terlihat (else kosong)", "qty": angka, "unit_cost": angka}. '
               'unit_cost = harga beli per unit (Rupiah, angka saja tanpa titik/koma). Tanpa teks lain.')
     from openai import OpenAI
 

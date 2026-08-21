@@ -317,3 +317,42 @@
 2026/08/21-04:37:38.733 1bb compacted to: files[ 0 3 30 0 0 0 0 ]
 2026/08/21-04:37:38.734 1bb Delete type=2 #1973
 2026/08/21-04:37:38.734 1bb Delete type=2 #1992
+2026/08/21-04:44:26.988 1bb Compacting 1@1 + 10@2 files
+2026/08/21-04:44:27.076 1bb Generated table #1996@1: 61592 keys, 2262143 bytes
+2026/08/21-04:44:27.104 1bb Generated table #1997@1: 36331 keys, 2190259 bytes
+2026/08/21-04:44:27.140 1bb Generated table #1998@1: 58057 keys, 2226887 bytes
+2026/08/21-04:44:27.163 1bb Generated table #1999@1: 22581 keys, 2174914 bytes
+2026/08/21-04:44:27.174 1bb Generated table #2000@1: 1245 keys, 2135387 bytes
+2026/08/21-04:44:27.186 1bb Generated table #2001@1: 1551 keys, 2138427 bytes
+2026/08/21-04:44:27.200 1bb Generated table #2002@1: 2748 keys, 2149469 bytes
+2026/08/21-04:44:27.212 1bb Generated table #2003@1: 1738 keys, 2143131 bytes
+2026/08/21-04:44:27.225 1bb Generated table #2004@1: 1619 keys, 2144539 bytes
+2026/08/21-04:44:27.237 1bb Generated table #2005@1: 2639 keys, 2118779 bytes
+2026/08/21-04:44:27.237 1bb Compacted 1@1 + 10@2 files => 21683935 bytes
+2026/08/21-04:44:27.239 1bb compacted to: files[ 0 2 30 0 0 0 0 ]
+2026/08/21-04:44:27.241 1bb Delete type=2 #1989
+2026/08/21-04:44:27.241 1bb Delete type=2 #1980
+2026/08/21-04:44:27.242 1bb Delete type=2 #1993
+2026/08/21-04:44:27.242 1bb Delete type=2 #1982
+2026/08/21-04:44:27.242 1bb Delete type=2 #1985
+2026/08/21-04:44:27.242 1bb Delete type=2 #1983
+2026/08/21-04:44:27.242 1bb Delete type=2 #1986
+2026/08/21-04:44:27.242 1bb Delete type=2 #1984
+2026/08/21-04:44:27.242 1bb Delete type=2 #1988
+2026/08/21-04:44:27.242 1bb Delete type=2 #1987
+2026/08/21-04:44:27.242 1bb Delete type=2 #1981
+2026/08/21-04:45:07.443 1bb Compacting 1@1 + 5@2 files
+2026/08/21-04:45:07.466 1bb Generated table #2006@1: 20752 keys, 2190373 bytes
+2026/08/21-04:45:07.499 1bb Generated table #2007@1: 27090 keys, 2276168 bytes
+2026/08/21-04:45:07.533 1bb Generated table #2008@1: 27503 keys, 2268869 bytes
+2026/08/21-04:45:07.565 1bb Generated table #2009@1: 25086 keys, 2222235 bytes
+2026/08/21-04:45:07.586 1bb Generated table #2010@1: 16821 keys, 2159126 bytes
+2026/08/21-04:45:07.588 1bb Generated table #2011@1: 18 keys, 19235 bytes
+2026/08/21-04:45:07.588 1bb Compacted 1@1 + 5@2 files => 11136006 bytes
+2026/08/21-04:45:07.591 1bb compacted to: files[ 0 1 31 0 0 0 0 ]
+2026/08/21-04:45:07.592 1bb Delete type=2 #1977
+2026/08/21-04:45:07.592 1bb Delete type=2 #1975
+2026/08/21-04:45:07.592 1bb Delete type=2 #1978
+2026/08/21-04:45:07.592 1bb Delete type=2 #1976
+2026/08/21-04:45:07.592 1bb Delete type=2 #1994
+2026/08/21-04:45:07.592 1bb Delete type=2 #1974
