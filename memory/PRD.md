@@ -133,6 +133,11 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 ## BACKUP OTOMATIS RASPBERRY PI (2026-06-21)
 - /setup-autobackup-pi.sh: pasang cron harian 23:00 → ./backup-pi.sh, log ke backups/autobackup.log, idempoten (hapus baris lama dulu). Embedded SETUP_AUTOBACKUP_PI_SH di installers.js. Kartu unduh "Backup Otomatis Harian (Raspberry Pi)" (testid download-autobackup-pi) di bagian 3 Backup. Verified bash -n root+embedded.
 
+## BOOTSTRAP PI (2026-06-21)
+- /bootstrap-pi.sh: pasang Docker (get.docker.com) bila belum ada + usermod + sudo ./install-pi.sh. Embedded BOOTSTRAP_PI_SH; kartu "Pi baru (belum ada Docker)? Pakai Bootstrap" (testid download-bootstrap-pi) di bagian 1 Install. Verified bash -n + compiled.
+- KEPUTUSAN: tombol web→SSH install Docker DITOLAK (chicken-egg: app jalan di Docker; + risiko simpan kredensial SSH). Ganti: bootstrap-pi.sh dijalankan sekali via SSH.
+- OS Pi rekomendasi: Raspberry Pi OS Lite 64-bit (Bookworm), headless.
+
 ## KNOWN ISSUE (user action)
 - 2026-06-21: AndroidManifest orientation diubah landscape→fullSensor (dukung portrait+landscape sesuai permintaan). README-ANDROID diupdate: alamat server runtime (bukan bake Emergent), orientasi bebas. Panduan instalasi: README-DEPLOY.md (server Docker) + README-ANDROID.md (APK).
 - API Key provider AI (chenzk.top/v1) invalid (HTTP 401). Owner harus isi key valid per fungsi di Pengaturan AI agar fitur AI + cek kredit aktif.

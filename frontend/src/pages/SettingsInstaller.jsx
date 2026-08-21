@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import {
   INSTALL_WINDOWS_BAT, INSTALL_PI_SH, UPDATE_WINDOWS_BAT, UPDATE_PI_SH,
   BACKUP_WINDOWS_BAT, BACKUP_PI_SH, RESTORE_WINDOWS_BAT, RESTORE_PI_SH,
-  RESTART_WINDOWS_BAT, RESTART_PI_SH, SETUP_AUTOBACKUP_PI_SH, downloadText,
+  RESTART_WINDOWS_BAT, RESTART_PI_SH, SETUP_AUTOBACKUP_PI_SH, BOOTSTRAP_PI_SH, downloadText,
 } from "@/lib/installers";
 
 const dl = (name, text) => { downloadText(name, text); toast.success(`Skrip ${name} diunduh`); };
@@ -122,6 +122,11 @@ sudo systemctl enable docker`}</Code>
               subtitle="Dobel-klik untuk memasang." file="install-windows.bat" text={INSTALL_WINDOWS_BAT} />
             <DlCard testid="download-pi-installer" icon={Cpu} title="Raspberry Pi (headless)"
               subtitle="Via SSH; editor config terbuka otomatis." file="install-pi.sh" text={INSTALL_PI_SH} />
+          </div>
+          <div className="rounded-xl border-2 border-[#E63946] bg-[#FEF2F2] p-4">
+            <div className="flex items-center gap-2 font-extrabold"><Cpu size={18} className="text-[#E63946]" /> Pi baru (belum ada Docker)? Pakai Bootstrap</div>
+            <p className="text-xs text-[#52525B] mt-1">Skrip ini memasang Docker DAN menjalankan installer sekaligus — cocok untuk Raspberry Pi baru (headless). Jalankan via SSH: <code>chmod +x bootstrap-pi.sh &amp;&amp; ./bootstrap-pi.sh</code></p>
+            <button data-testid="download-bootstrap-pi" onClick={() => dl("bootstrap-pi.sh", BOOTSTRAP_PI_SH)} className="tap mt-2 h-10 px-4 rounded-lg bg-[#E63946] text-white font-bold text-sm inline-flex items-center gap-2"><Download size={15} /> Unduh bootstrap-pi.sh</button>
           </div>
           <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46]">
             <div className="font-bold mb-1">Menjalankan di Raspberry Pi (SSH):</div>
