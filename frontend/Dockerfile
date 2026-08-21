@@ -2,8 +2,8 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --network-timeout 600000
+COPY package.json yarn.lock* ./
+RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile --network-timeout 600000; else yarn install --network-timeout 600000; fi
 
 COPY . .
 ARG REACT_APP_BACKEND_URL=""

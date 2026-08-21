@@ -92,3 +92,9 @@ frontend/node_modules/.cache/default-development/4.pack
 # Selalu sertakan template contoh env (dibutuhkan installer dari GitHub)
 !*.example
 !backend/.env.docker.example
+
+# Data sesi WhatsApp (jangan pernah di-push ke GitHub)
+.wwebjs_auth/
+.wwebjs_cache/
+whatsapp-service/.wwebjs_auth/
+whatsapp-service/.wwebjs_cache/
