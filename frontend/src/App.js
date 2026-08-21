@@ -21,8 +21,8 @@ import SettingsData from "@/pages/SettingsData";
 import Settings from "@/pages/Settings";
 import WhatsApp from "@/pages/WhatsApp";
 
-const wrap = (el, adminOnly = false) => (
-  <ProtectedRoute adminOnly={adminOnly}>
+const wrap = (el, roles) => (
+  <ProtectedRoute roles={roles}>
     <Layout>{el}</Layout>
   </ProtectedRoute>
 );
@@ -36,20 +36,20 @@ function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/pos" element={wrap(<POS />)} />
-              <Route path="/shift" element={wrap(<Shift />)} />
-              <Route path="/cash" element={wrap(<Cash />)} />
-              <Route path="/dashboard" element={wrap(<Dashboard />, true)} />
-              <Route path="/products" element={wrap(<Products />, true)} />
-              <Route path="/inventory" element={wrap(<Inventory />, true)} />
-              <Route path="/categories" element={wrap(<Categories />, true)} />
-              <Route path="/tables" element={wrap(<Tables />, true)} />
-              <Route path="/orders" element={wrap(<Orders />, true)} />
-              <Route path="/users" element={wrap(<UsersPage />, true)} />
-              <Route path="/settings-ai" element={wrap(<SettingsAI />, true)} />
-              <Route path="/settings-data" element={wrap(<SettingsData />, true)} />
-              <Route path="/settings" element={wrap(<Settings />, true)} />
-              <Route path="/whatsapp" element={wrap(<WhatsApp />, true)} />
+              <Route path="/pos" element={wrap(<POS />, ["admin", "kasir"])} />
+              <Route path="/shift" element={wrap(<Shift />, ["admin", "kasir"])} />
+              <Route path="/cash" element={wrap(<Cash />, ["admin", "kasir"])} />
+              <Route path="/dashboard" element={wrap(<Dashboard />, ["admin"])} />
+              <Route path="/products" element={wrap(<Products />, ["admin", "input"])} />
+              <Route path="/inventory" element={wrap(<Inventory />, ["admin", "input"])} />
+              <Route path="/categories" element={wrap(<Categories />, ["admin", "input"])} />
+              <Route path="/tables" element={wrap(<Tables />, ["admin"])} />
+              <Route path="/orders" element={wrap(<Orders />, ["admin"])} />
+              <Route path="/users" element={wrap(<UsersPage />, ["admin"])} />
+              <Route path="/settings-ai" element={wrap(<SettingsAI />, ["admin"])} />
+              <Route path="/settings-data" element={wrap(<SettingsData />, ["admin"])} />
+              <Route path="/settings" element={wrap(<Settings />, ["admin"])} />
+              <Route path="/whatsapp" element={wrap(<WhatsApp />, ["admin"])} />
               <Route path="/" element={<Navigate to="/pos" replace />} />
               <Route path="*" element={<Navigate to="/pos" replace />} />
             </Routes>

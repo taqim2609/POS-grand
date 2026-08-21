@@ -22,7 +22,7 @@ export default function Login() {
     try {
       const u = await login(email.trim(), password);
       toast.success(`Selamat datang, ${u.name}`);
-      nav(u.role === "admin" ? "/dashboard" : "/pos");
+      nav(u.role === "admin" ? "/dashboard" : u.role === "input" ? "/products" : "/pos");
     } catch (err) {
       toast.error(apiError(err.response?.data?.detail) || "Gagal masuk");
     } finally {

@@ -2,7 +2,10 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
 
-export default function ProtectedRoute({ children, adminOnly }) {
+export const homeFor = (role) =>
+  role === "admin" ? "/dashboard" : role === "input" ? "/products" : "/pos";
+
+export default function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth();
   if (loading)
     return (
@@ -11,6 +14,6 @@ export default function ProtectedRoute({ children, adminOnly }) {
       </div>
     );
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/pos" replace />;
+  if (roles && !roles.includes(user.role)) return <Navigate to={homeFor(user.role)} replace />;
   return children;
 }

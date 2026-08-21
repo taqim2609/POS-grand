@@ -71,13 +71,6 @@ body {
 ::selection { background: #E63946; color: #fff; }
 
 .rotate-guard { display: none; }
-@media (orientation: portrait) and (max-width: 1024px) {
-  .rotate-guard {
-    display: flex; position: fixed; inset: 0; z-index: 9999;
-    background: #0A0A0A; color: #fff; flex-direction: column;
-    align-items: center; justify-content: center; text-align: center; padding: 32px;
-  }
-}
 
 @media print {
   body * { visibility: hidden; }

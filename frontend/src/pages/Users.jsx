@@ -45,8 +45,8 @@ export default function UsersPage() {
             <div className="flex-1 overflow-hidden">
               <div className="font-bold truncate">{u.name}</div>
               <div className="text-xs text-[#52525B] truncate">{u.email}</div>
-              <span className={`text-[11px] font-bold px-2 py-0.5 rounded inline-flex items-center gap-1 mt-1 ${u.role === "admin" ? "bg-[#FEF3C7] text-[#B45309]" : "bg-[#E0E7FF] text-[#4338CA]"}`}>
-                {u.role === "admin" && <ShieldCheck size={11} />}{u.role}
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded inline-flex items-center gap-1 mt-1 ${u.role === "admin" ? "bg-[#FEF3C7] text-[#B45309]" : u.role === "input" ? "bg-[#DCFCE7] text-[#15803D]" : "bg-[#E0E7FF] text-[#4338CA]"}`}>
+                {u.role === "admin" && <ShieldCheck size={11} />}{u.role === "input" ? "staf input" : u.role}
               </span>
             </div>
             <button data-testid={`reset-pw-${u.id}`} onClick={() => { setResetTarget(u); setNewPw(""); }} title="Reset password" className="tap h-9 w-9 rounded-lg bg-[#F4F5F7] grid place-items-center"><KeyRound size={15} /></button>
@@ -64,7 +64,7 @@ export default function UsersPage() {
             <Field label="Password"><input data-testid="user-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full h-11 rounded-xl border px-3" /></Field>
             <Field label="Role">
               <select data-testid="user-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full h-11 rounded-xl border px-3 bg-white">
-                <option value="kasir">Kasir</option><option value="admin">Admin</option>
+                <option value="kasir">Kasir</option><option value="admin">Admin</option><option value="input">Staf Input</option>
               </select>
             </Field>
           </div>

@@ -1,3 +1,3 @@
-2026/08/21-04:08:37.851 1bb Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/Sync Data/LevelDB/MANIFEST-000001
-2026/08/21-04:08:37.942 1bb Recovering log #3
-2026/08/21-04:08:37.942 1bb Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/Sync Data/LevelDB/000003.log 
+2026/08/21-05:19:33.731 1f7 Reusing MANIFEST /app/whatsapp-service/.wwebjs_auth/session/Default/Sync Data/LevelDB/MANIFEST-000001
+2026/08/21-05:19:33.731 1f7 Recovering log #3
+2026/08/21-05:19:33.732 1f7 Reusing old log /app/whatsapp-service/.wwebjs_auth/session/Default/Sync Data/LevelDB/000003.log 

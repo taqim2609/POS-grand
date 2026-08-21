@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
-  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, RotateCw,
+  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, Menu, X,
   Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings, MessageCircle,
 } from "lucide-react";
 
@@ -52,9 +52,9 @@ const NAV = [
   { to: "/pos", label: "POS Kasir", icon: ShoppingCart, roles: ["admin", "kasir"] },
   { to: "/cash", label: "Kas", icon: Wallet, roles: ["admin", "kasir"] },
   { to: "/shift", label: "Shift", icon: Clock, roles: ["admin", "kasir"] },
-  { to: "/products", label: "Produk", icon: Package, roles: ["admin"] },
-  { to: "/inventory", label: "Persediaan", icon: Boxes, roles: ["admin"] },
-  { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin"] },
+  { to: "/products", label: "Produk", icon: Package, roles: ["admin", "input"] },
+  { to: "/inventory", label: "Persediaan", icon: Boxes, roles: ["admin", "input"] },
+  { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin", "input"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, roles: ["admin"] },
   { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
@@ -167,20 +167,15 @@ export default function Layout({ children }) {
   const nav = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <div className="flex h-screen overflow-hidden bg-[#F4F5F7]">
-      <div className="rotate-guard" data-testid="rotate-guard">
-        <div className="h-16 w-16 rounded-2xl bg-[#E63946] grid place-items-center mb-5">
-          <RotateCw size={30} className="animate-pulse" />
-        </div>
-        <div className="font-heading font-extrabold text-2xl">Putar Perangkat</div>
-        <p className="text-white/60 mt-2 max-w-xs text-sm">
-          POS Grand Aceh dirancang untuk mode landscape. Putar tablet Anda ke posisi mendatar
-          untuk pengalaman kasir terbaik.
-        </p>
-      </div>
-      <aside className="w-[240px] shrink-0 bg-[#0A0A0A] text-white flex flex-col">
-        <div className="px-5 py-5 border-b border-white/10">
+      <button data-testid="sidebar-toggle" onClick={() => setSidebarOpen(true)} className="lg:hidden fixed top-3 left-3 z-30 h-11 w-11 rounded-xl bg-[#0A0A0A] text-white grid place-items-center shadow-lg">
+        <Menu size={20} />
+      </button>
+      {sidebarOpen && <div data-testid="sidebar-backdrop" onClick={() => setSidebarOpen(false)} className="lg:hidden fixed inset-0 bg-black/50 z-40" />}
+      <aside className={`fixed lg:static z-50 h-full w-[240px] shrink-0 bg-[#0A0A0A] text-white flex flex-col transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-lg bg-[#E63946] grid place-items-center font-heading font-extrabold">G</div>
             <div className="leading-tight">
@@ -188,6 +183,7 @@ export default function Layout({ children }) {
               <div className="text-[11px] text-white/50 tracking-wide">KULINER POS</div>
             </div>
           </div>
+          <button data-testid="sidebar-close" onClick={() => setSidebarOpen(false)} className="lg:hidden h-9 w-9 rounded-lg bg-white/10 grid place-items-center"><X size={18} /></button>
         </div>
         <OfflineStatus onOpenQueue={() => setQueueOpen(true)} />
         <nav className="flex-1 overflow-y-auto no-scrollbar py-3 px-3 space-y-1">
@@ -196,6 +192,7 @@ export default function Layout({ children }) {
               key={n.to}
               to={n.to}
               data-testid={`nav-${n.to.slice(1)}`}
+              onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `tap flex items-center gap-3 px-3 h-12 rounded-lg font-medium text-sm ${
                   isActive ? "bg-[#E63946] text-white" : "text-white/70 hover:bg-white/10"
@@ -235,7 +232,7 @@ export default function Layout({ children }) {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-hidden">{children}</main>
+      <main className="flex-1 overflow-hidden pt-14 lg:pt-0">{children}</main>
       <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
       <SyncQueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} />
     </div>

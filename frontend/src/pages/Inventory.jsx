@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah } from "@/lib/format";
 import { toast } from "sonner";
@@ -192,12 +192,34 @@ function InvoiceScan({ open, onClose, onDone }) {
   const [cats, setCats] = useState([]);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState("edit");
+  const [camOpen, setCamOpen] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  const stopCam = () => {
+    if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    setCamOpen(false);
+  };
+  const openCam = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = s; setCamOpen(true);
+      setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play().catch(() => {}); } }, 100);
+    } catch (e) { toast.error("Tidak bisa mengakses kamera. Izinkan akses kamera di browser atau gunakan Pilih/Foto File."); }
+  };
+  const capture = () => {
+    const v = videoRef.current; if (!v || !v.videoWidth) return;
+    const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext("2d").drawImage(v, 0, 0);
+    setImage(c.toDataURL("image/jpeg", 0.85)); stopCam();
+  };
 
   useEffect(() => {
     if (!open) return;
     setImage(""); setRows([]); setStep("edit");
     api.get("/products", { params: { type: "retail" } }).then((r) => setProducts(r.data)).catch(() => {});
     api.get("/categories").then((r) => setCats(r.data.filter((c) => c.type === "retail"))).catch(() => {});
+    return () => stopCam();
   }, [open]);
 
   const pickFile = (e) => {
@@ -278,12 +300,24 @@ function InvoiceScan({ open, onClose, onDone }) {
               <Camera size={16} /> Pilih / Foto Faktur
               <input data-testid="invoice-file" type="file" accept="image/*" capture="environment" className="hidden" onChange={pickFile} />
             </label>
+            <button type="button" data-testid="invoice-camera-btn" onClick={openCam} className="tap inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-[#F4F5F7] border font-bold text-sm">
+              <Camera size={16} /> Buka Kamera
+            </button>
             <button data-testid="invoice-parse-btn" onClick={parse} disabled={!image || loading}
               className="tap h-11 px-5 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center gap-2 disabled:opacity-50">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <ScanLine size={16} />} Baca dengan AI
             </button>
           </div>
-          {image && <img src={image} alt="faktur" className="max-h-48 rounded-xl border" />}
+          {camOpen && (
+            <div className="rounded-xl border overflow-hidden bg-black" data-testid="invoice-camera-view">
+              <video ref={videoRef} data-testid="invoice-camera-video" playsInline muted className="w-full max-h-72 object-contain bg-black" />
+              <div className="flex gap-2 p-2 bg-[#0A0A0A]">
+                <button data-testid="invoice-capture-btn" onClick={capture} className="tap flex-1 h-11 rounded-xl bg-[#E63946] text-white font-bold flex items-center justify-center gap-2"><Camera size={16} /> Ambil Foto</button>
+                <button data-testid="invoice-cam-close-btn" onClick={stopCam} className="tap h-11 px-4 rounded-xl bg-white/10 text-white font-bold">Tutup</button>
+              </div>
+            </div>
+          )}
+          {image && !camOpen && <img src={image} alt="faktur" className="max-h-48 rounded-xl border" />}
 
           {rows.length > 0 && step === "edit" && (
             <div className="space-y-2">

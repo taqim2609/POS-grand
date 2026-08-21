@@ -98,6 +98,15 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
         raise HTTPException(403, "Admin access required")
     return user
 
+def require_roles(*roles):
+    async def _dep(user: dict = Depends(get_current_user)) -> dict:
+        if user["role"] not in roles:
+            raise HTTPException(403, "Akses ditolak untuk peran ini")
+        return user
+    return _dep
+
+admin_or_input = require_roles("admin", "input")
+
 # ------------------------------------------------------------------ Models
 class LoginIn(BaseModel):
     email: EmailStr
@@ -107,7 +116,7 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: Literal["admin", "kasir"] = "kasir"
+    role: Literal["admin", "kasir", "input"] = "kasir"
 
 class ChangePasswordIn(BaseModel):
     current_password: str
@@ -306,7 +315,7 @@ async def list_categories(include_inactive: bool = True, user: dict = Depends(ge
     return await db.categories.find(q, {"_id": 0}).sort("sort_order", 1).to_list(500)
 
 @api.post("/categories")
-async def create_category(body: CategoryIn, admin: dict = Depends(require_admin)):
+async def create_category(body: CategoryIn, admin: dict = Depends(admin_or_input)):
     doc = body.model_dump()
     doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
     await db.categories.insert_one(doc)
@@ -314,14 +323,14 @@ async def create_category(body: CategoryIn, admin: dict = Depends(require_admin)
     return doc
 
 @api.put("/categories/{cid}")
-async def update_category(cid: str, body: CategoryIn, admin: dict = Depends(require_admin)):
+async def update_category(cid: str, body: CategoryIn, admin: dict = Depends(admin_or_input)):
     if not await db.categories.find_one({"id": cid}):
         raise HTTPException(404, "Kategori tidak ditemukan")
     await db.categories.update_one({"id": cid}, {"$set": body.model_dump()})
     return await db.categories.find_one({"id": cid}, {"_id": 0})
 
 @api.delete("/categories/{cid}")
-async def delete_category(cid: str, admin: dict = Depends(require_admin)):
+async def delete_category(cid: str, admin: dict = Depends(admin_or_input)):
     used = await db.products.count_documents({"category_id": cid})
     if used:
         # soft deactivate instead of hard delete
@@ -344,7 +353,7 @@ async def list_products(type: Optional[str] = None, category_id: Optional[str] =
     return await db.products.find(q, {"_id": 0}).sort("name", 1).to_list(2000)
 
 @api.post("/products")
-async def create_product(body: ProductIn, admin: dict = Depends(require_admin)):
+async def create_product(body: ProductIn, admin: dict = Depends(admin_or_input)):
     if body.price < 0 or body.cost < 0:
         raise HTTPException(400, "Harga/HPP tidak boleh negatif")
     if await db.products.find_one({"sku": body.sku}):
@@ -359,7 +368,7 @@ async def create_product(body: ProductIn, admin: dict = Depends(require_admin)):
     return doc
 
 @api.put("/products/{pid}")
-async def update_product(pid: str, body: ProductIn, admin: dict = Depends(require_admin)):
+async def update_product(pid: str, body: ProductIn, admin: dict = Depends(admin_or_input)):
     if body.price < 0 or body.cost < 0:
         raise HTTPException(400, "Harga/HPP tidak boleh negatif")
     existing = await db.products.find_one({"id": pid})
@@ -384,7 +393,7 @@ async def toggle_sold_out(pid: str, user: dict = Depends(get_current_user)):
     return {"sold_out": val}
 
 @api.delete("/products/{pid}")
-async def delete_product(pid: str, admin: dict = Depends(require_admin)):
+async def delete_product(pid: str, admin: dict = Depends(admin_or_input)):
     used = await db.orders.count_documents({"items.product_id": pid})
     if used:
         await db.products.update_one({"id": pid}, {"$set": {"active": False}})
@@ -779,7 +788,7 @@ class PurchaseIn(BaseModel):
     note: Optional[str] = ""
 
 @api.post("/purchases")
-async def create_purchase(body: PurchaseIn, admin: dict = Depends(require_admin)):
+async def create_purchase(body: PurchaseIn, admin: dict = Depends(admin_or_input)):
     p = await db.products.find_one({"id": body.product_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Produk tidak ditemukan")
@@ -808,7 +817,7 @@ class BulkPurchaseIn(BaseModel):
     note: Optional[str] = "Faktur AI"
 
 @api.post("/purchases/bulk")
-async def create_purchases_bulk(body: BulkPurchaseIn, admin: dict = Depends(require_admin)):
+async def create_purchases_bulk(body: BulkPurchaseIn, admin: dict = Depends(admin_or_input)):
     if not body.items:
         raise HTTPException(400, "Tidak ada item untuk disimpan")
     # Validate all items before writing anything
@@ -852,7 +861,7 @@ async def create_purchases_bulk(body: BulkPurchaseIn, admin: dict = Depends(requ
             "total_cost": round(sum(s["total_cost"] for s in saved), 2), "items": saved}
 
 @api.get("/purchases")
-async def list_purchases(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(require_admin)):
+async def list_purchases(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(admin_or_input)):
     q = {}
     if date_str:
         s, e = wib_day_range(date_str)
@@ -865,7 +874,7 @@ class OpnameIn(BaseModel):
     note: Optional[str] = ""
 
 @api.post("/stock-opname")
-async def create_opname(body: OpnameIn, admin: dict = Depends(require_admin)):
+async def create_opname(body: OpnameIn, admin: dict = Depends(admin_or_input)):
     p = await db.products.find_one({"id": body.product_id}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Produk tidak ditemukan")
@@ -882,7 +891,7 @@ async def create_opname(body: OpnameIn, admin: dict = Depends(require_admin)):
     return doc
 
 @api.get("/stock-opname")
-async def list_opname(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(require_admin)):
+async def list_opname(date_str: Optional[str] = Query(None, alias="date"), admin: dict = Depends(admin_or_input)):
     q = {}
     if date_str:
         s, e = wib_day_range(date_str)
@@ -1149,7 +1158,7 @@ class AIInvoiceIn(BaseModel):
     image: str
 
 @api.post("/ai/parse-invoice")
-async def ai_parse_invoice(body: AIInvoiceIn, admin: dict = Depends(require_admin)):
+async def ai_parse_invoice(body: AIInvoiceIn, admin: dict = Depends(admin_or_input)):
     cfg = await _ai_cfg("vision")
     if not (cfg["api_key"] and cfg["base_url"] and cfg["model"]):
         raise HTTPException(400, "Konfigurasi AI 'Baca Faktur (Vision)' belum lengkap di Pengaturan AI")
@@ -1182,7 +1191,7 @@ async def ai_parse_invoice(body: AIInvoiceIn, admin: dict = Depends(require_admi
     return {"items": _extract_json_list(raw)}
 
 @api.post("/ai/product-description")
-async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):
+async def ai_description(body: AIDescIn, admin: dict = Depends(admin_or_input)):
     try:
         system = "Anda copywriter menu F&B & retail Indonesia. Tulis deskripsi produk singkat, menggugah selera, maksimal 2 kalimat, bahasa Indonesia. Jangan pakai emoji."
         prompt = f"Produk: {body.name}\nTipe: {body.type}\nKategori: {body.category}\nKata kunci: {body.keywords}\nTulis deskripsi produk."
@@ -1193,7 +1202,7 @@ async def ai_description(body: AIDescIn, admin: dict = Depends(require_admin)):
         raise HTTPException(500, f"AI gagal: {e}")
 
 @api.post("/ai/product-image")
-async def ai_image(body: AIImageIn, admin: dict = Depends(require_admin)):
+async def ai_image(body: AIImageIn, admin: dict = Depends(admin_or_input)):
     try:
         prompt = f"Professional appetizing product photo of '{body.name}'. {body.description}. Clean studio background, top menu photography, high detail, no text overlay."
         image = await _gemini_image(prompt)
@@ -1550,7 +1559,7 @@ async def _parse_import(file_bytes):
     return parsed, []
 
 @api.post("/products/import/preview")
-async def import_preview(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+async def import_preview(file: UploadFile = File(...), admin: dict = Depends(admin_or_input)):
     content = await file.read()
     parsed, file_errors = await _parse_import(content)
     if file_errors:
@@ -1562,7 +1571,7 @@ async def import_preview(file: UploadFile = File(...), admin: dict = Depends(req
             "update_count": len([p for p in valid if p["exists"]])}
 
 @api.post("/products/import/commit")
-async def import_commit(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+async def import_commit(file: UploadFile = File(...), admin: dict = Depends(admin_or_input)):
     content = await file.read()
     parsed, file_errors = await _parse_import(content)
     if file_errors:

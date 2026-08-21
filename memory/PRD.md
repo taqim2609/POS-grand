@@ -102,3 +102,9 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 ## Accounts (seed) — see /app/memory/test_credentials.md
 - admin: taqim2609@gmail.com / GrandAceh#2026
 - kasir: kasir@grandaceh.com / kasir123
+- input (Staf Input): input@grandaceh.com / input123
+
+## ROLES & FITUR (2026-06-21)
+- RBAC 3 peran: admin (full), kasir (POS/Kas/Shift, landing /pos), input/Staf Input (Produk+Kategori+Persediaan+AI desc/image/parse-invoice+import/export produk; landing /products; DENIED users/settings/reports/POS/reset → 403). Backend `admin_or_input=require_roles("admin","input")` di endpoints data-input. ProtectedRoute pakai `roles` array + `homeFor(role)`. Verified curl 200/200/403/403/403.
+- Scan Faktur: opsi KAMERA perangkat (getUserMedia facingMode environment → canvas → dataURL). Tombol "Buka Kamera" + view live + "Ambil Foto"/"Tutup". testid: invoice-camera-btn, invoice-camera-video, invoice-capture-btn, invoice-cam-close-btn. (capture tak bisa e2e di headless; UI+logika terpasang, jalan di perangkat asli.)
+- PORTRAIT: rotate-guard (blok "Putar Perangkat") DIHAPUS. Layout sidebar jadi drawer off-canvas di <1024px (hamburger sidebar-toggle + backdrop + close), statis di lg. main pt-14 lg:pt-0.
