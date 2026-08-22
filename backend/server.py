@@ -1424,25 +1424,43 @@ async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
         logger.error(f"AI summary error: {e}")
         raise HTTPException(500, f"AI ringkasan gagal: {e}")
 
-# ================================================================== REPORT EXPORT & WHATSAPP
-WA_SERVICE_URL = os.environ.get('WA_SERVICE_URL')
-WA_SECRET = os.environ.get('WA_SECRET')
+# ================================================================== REPORT EXPORT & WHATSAPP (wacloud.id gateway)
 WEBHOOK_CRON_SECRET = os.environ.get('WEBHOOK_CRON_SECRET')
+WACLOUD_DEFAULT_BASE = "https://app.wacloud.id/api/v1"
 
-async def _wa_call(method, path, **kw):
+async def _wa_config():
+    return await db.settings.find_one({"_id": "wa"}, {"_id": 0}) or {}
+
+async def _wa_configured():
+    c = await _wa_config()
+    return bool(c.get("api_key") and c.get("device_id"))
+
+def _wa_normalize(num):
+    n = "".join(ch for ch in str(num) if ch.isdigit())
+    if n.startswith("0"):
+        n = "62" + n[1:]
+    return n
+
+async def _wacloud_request(method, path, **kw):
     import httpx
-    if not WA_SERVICE_URL:
-        raise HTTPException(400, "Layanan WhatsApp tidak aktif")
-    headers = {"x-wa-secret": WA_SECRET or ""}
+    cfg = await _wa_config()
+    api_key = cfg.get("api_key")
+    base = (cfg.get("base_url") or WACLOUD_DEFAULT_BASE).rstrip("/")
+    if not api_key:
+        raise HTTPException(400, "API Key WhatsApp (wacloud.id) belum diisi di Pengaturan")
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=30) as c:
-        return await c.request(method, f"{WA_SERVICE_URL.rstrip('/')}{path}", headers=headers, **kw)
+        return await c.request(method, f"{base}{path}", headers=headers, **kw)
 
-async def _wa_ready():
-    try:
-        r = await _wa_call("GET", "/status")
-        return bool(r.json().get("ready"))
-    except Exception:
-        return False
+async def _wa_send_text(to, text):
+    cfg = await _wa_config()
+    device_id = cfg.get("device_id")
+    if not device_id:
+        raise HTTPException(400, "Device WhatsApp belum dipilih di Pengaturan")
+    return await _wacloud_request("POST", "/messages", json={
+        "device_id": device_id, "to": _wa_normalize(to),
+        "message_type": "text", "text": text,
+    })
 
 def _report_lines(d, s, ai_text=None):
     cr = s.get("category_report", {})
@@ -1461,6 +1479,24 @@ def _report_lines(d, s, ai_text=None):
         L += ["", "Produk Terlaris:"] + [f"- {p['name']} (x{p['qty']})" for p in s["top_products"][:5]]
     if ai_text:
         L += ["", "Analisis AI:", ai_text]
+    return L
+
+async def _purchase_summary(d):
+    start, end = wib_day_range(d)
+    items = await db.purchases.find({"created_at": {"$gte": start, "$lt": end}}, {"_id": 0}).sort("created_at", 1).to_list(2000)
+    total = sum(float(x.get("total_cost", 0)) for x in items)
+    return items, total
+
+def _purchase_report_lines(d, items, total):
+    L = ["*Laporan Belanja Grand Aceh Kuliner*", f"Tanggal: {d}", "",
+         f"Total Belanja: Rp{total:,.0f}",
+         f"Jumlah Item: {len(items)}", ""]
+    if items:
+        L.append("Rincian:")
+        for x in items[:40]:
+            L.append(f"- {x.get('product_name', '?')} x{x.get('qty', 0)} = Rp{float(x.get('total_cost', 0)):,.0f}")
+    else:
+        L.append("Tidak ada pembelian pada tanggal ini.")
     return L
 
 def _report_excel(d, s):
@@ -1498,6 +1534,8 @@ class ReportSettingsIn(BaseModel):
     whatsapp_time: str = "22:00"
     recipients: List[str] = []
     include_ai: bool = True
+    send_sales: bool = True
+    send_purchases: bool = False
 
 @api.get("/settings/report")
 async def get_report_settings(admin: dict = Depends(require_admin)):
@@ -1507,7 +1545,9 @@ async def get_report_settings(admin: dict = Depends(require_admin)):
         "whatsapp_time": doc.get("whatsapp_time", "22:00"),
         "recipients": doc.get("recipients", []),
         "include_ai": doc.get("include_ai", True),
-        "whatsapp_configured": await _wa_ready(),
+        "send_sales": doc.get("send_sales", True),
+        "send_purchases": doc.get("send_purchases", False),
+        "whatsapp_configured": await _wa_configured(),
         "last_sent_date": doc.get("last_sent_date"),
     }
 
@@ -1516,6 +1556,7 @@ async def put_report_settings(body: ReportSettingsIn, admin: dict = Depends(requ
     await db.settings.update_one({"_id": "report"}, {"$set": {
         "whatsapp_enabled": body.whatsapp_enabled, "whatsapp_time": body.whatsapp_time,
         "recipients": [r.strip() for r in body.recipients if r.strip()], "include_ai": body.include_ai,
+        "send_sales": body.send_sales, "send_purchases": body.send_purchases,
     }}, upsert=True)
     return {"ok": True}
 
@@ -1523,11 +1564,18 @@ async def _send_whatsapp(recipients, text):
     out = []
     for to in recipients:
         try:
-            r = await _wa_call("POST", "/send", json={"to": to, "message": text})
-            if r.status_code == 200:
-                out.append({"to": to, "ok": True, "id": r.json().get("id")})
+            r = await _wa_send_text(to, text)
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            if r.status_code in (200, 201) and body.get("success", True):
+                out.append({"to": to, "ok": True, "id": (body.get("data") or {}).get("message_id")})
             else:
-                out.append({"to": to, "ok": False, "error": r.json().get("error", r.text)})
+                out.append({"to": to, "ok": False, "error": body.get("error") or body.get("message") or r.text})
+        except HTTPException as he:
+            out.append({"to": to, "ok": False, "error": he.detail})
         except Exception as e:
             out.append({"to": to, "ok": False, "error": str(e)})
     return out
@@ -1561,6 +1609,8 @@ async def _run_daily_report_job():
     doc = await db.settings.find_one({"_id": "report"}) or {}
     if not doc.get("whatsapp_enabled") or not doc.get("recipients"):
         return
+    if not await _wa_configured():
+        return
     noww = datetime.now(WIB)
     try:
         target_hour = int(str(doc.get("whatsapp_time", "22:00")).split(":")[0])
@@ -1571,17 +1621,25 @@ async def _run_daily_report_job():
     today = noww.strftime("%Y-%m-%d")
     if doc.get("last_sent_date") == today:
         return
-    s = await report_summary(date_str=today, admin={"role": "admin", "id": "cron"})
-    ai_text = None
-    if doc.get("include_ai", True):
-        try:
-            r = await ai_summary(AISummaryIn(date=today), admin={"role": "admin", "id": "cron"})
-            ai_text = r.get("summary")
-        except Exception:
-            pass
-    text = "\n".join(_report_lines(today, s, ai_text))
+    messages = []
+    if doc.get("send_sales", True):
+        s = await report_summary(date_str=today, admin={"role": "admin", "id": "cron"})
+        ai_text = None
+        if doc.get("include_ai", True):
+            try:
+                r = await ai_summary(AISummaryIn(date=today), admin={"role": "admin", "id": "cron"})
+                ai_text = r.get("summary")
+            except Exception:
+                pass
+        messages.append("\n".join(_report_lines(today, s, ai_text)))
+    if doc.get("send_purchases", False):
+        items, total = await _purchase_summary(today)
+        messages.append("\n".join(_purchase_report_lines(today, items, total)))
+    if not messages:
+        return
     try:
-        await _send_whatsapp(doc["recipients"], text)
+        for msg in messages:
+            await _send_whatsapp(doc["recipients"], msg)
         await db.settings.update_one({"_id": "report"}, {"$set": {"last_sent_date": today}}, upsert=True)
         logger.info(f"Daily WA report sent for {today}")
     except Exception as e:
@@ -1598,44 +1656,72 @@ async def cron_daily_report(request: Request, background: BackgroundTasks):
     background.add_task(_run_daily_report_job)
     return {"ok": True}
 
-# ---- WhatsApp Web (whatsapp-web.js) proxy: QR login + chat ----
-class WAChatSendIn(BaseModel):
-    to: str
-    message: str
+# ---- WhatsApp Gateway (wacloud.id) config, devices & test ----
+class WAConfigIn(BaseModel):
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    device_id: Optional[str] = None
+    device_name: Optional[str] = None
 
-@api.get("/whatsapp/status")
-async def whatsapp_status(admin: dict = Depends(require_admin)):
+@api.get("/whatsapp/config")
+async def whatsapp_get_config(admin: dict = Depends(require_admin)):
+    c = await _wa_config()
+    key = c.get("api_key") or ""
+    return {
+        "configured": bool(c.get("api_key") and c.get("device_id")),
+        "api_key_set": bool(key),
+        "api_key_masked": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("•" * len(key)),
+        "base_url": c.get("base_url") or WACLOUD_DEFAULT_BASE,
+        "device_id": c.get("device_id", ""),
+        "device_name": c.get("device_name", ""),
+    }
+
+@api.put("/whatsapp/config")
+async def whatsapp_put_config(body: WAConfigIn, admin: dict = Depends(require_admin)):
+    upd = {}
+    if body.api_key is not None and body.api_key.strip():
+        upd["api_key"] = body.api_key.strip()
+    if body.base_url is not None:
+        upd["base_url"] = body.base_url.strip() or WACLOUD_DEFAULT_BASE
+    if body.device_id is not None:
+        upd["device_id"] = body.device_id.strip()
+    if body.device_name is not None:
+        upd["device_name"] = body.device_name.strip()
+    if upd:
+        await db.settings.update_one({"_id": "wa"}, {"$set": upd}, upsert=True)
+    return {"ok": True}
+
+@api.get("/whatsapp/devices")
+async def whatsapp_devices(admin: dict = Depends(require_admin)):
     try:
-        r = await _wa_call("GET", "/status")
-        return r.json()
+        r = await _wacloud_request("GET", "/devices")
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"ready": False, "qr": None, "error": str(e)}
-
-@api.get("/whatsapp/chats")
-async def whatsapp_chats(admin: dict = Depends(require_admin)):
-    r = await _wa_call("GET", "/chats")
+        raise HTTPException(400, f"Gagal menghubungi wacloud.id: {e}")
     if r.status_code != 200:
-        raise HTTPException(r.status_code, r.json().get("error", "gagal memuat chat"))
-    return r.json()
+        try:
+            j = r.json()
+            detail = j.get("message") or j.get("error") or r.text
+        except Exception:
+            detail = r.text
+        raise HTTPException(r.status_code if r.status_code >= 400 else 400, f"wacloud.id: {detail}")
+    data = r.json()
+    devices = data.get("data", data) if isinstance(data, dict) else data
+    return {"devices": devices or []}
 
-@api.get("/whatsapp/messages")
-async def whatsapp_messages(chatId: str, admin: dict = Depends(require_admin)):
-    r = await _wa_call("GET", "/messages", params={"chatId": chatId})
-    if r.status_code != 200:
-        raise HTTPException(r.status_code, r.json().get("error", "gagal memuat pesan"))
-    return r.json()
+class WATestIn(BaseModel):
+    to: str
+    message: Optional[str] = "Tes notifikasi Grand Aceh Kuliner POS ✅"
 
-@api.post("/whatsapp/send")
-async def whatsapp_send(body: WAChatSendIn, admin: dict = Depends(require_admin)):
-    r = await _wa_call("POST", "/send", json={"to": body.to, "message": body.message})
-    if r.status_code != 200:
-        raise HTTPException(r.status_code, r.json().get("error", "gagal mengirim"))
-    return r.json()
-
-@api.post("/whatsapp/logout")
-async def whatsapp_logout(admin: dict = Depends(require_admin)):
-    r = await _wa_call("POST", "/logout")
-    return r.json()
+@api.post("/whatsapp/test")
+async def whatsapp_test(body: WATestIn, admin: dict = Depends(require_admin)):
+    if not body.to.strip():
+        raise HTTPException(400, "Nomor tujuan wajib diisi")
+    res = await _send_whatsapp([body.to.strip()], body.message or "Tes")
+    if not any(x.get("ok") for x in res):
+        raise HTTPException(400, f"Gagal kirim: {res[0].get('error') if res else 'tidak diketahui'}")
+    return {"sent": res}
 
 # ================================================================== EXCEL
 IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "harga_beli", "status_aktif", "sold_out", "deskripsi", "stok_awal"]
@@ -1811,6 +1897,18 @@ async def startup():
         for n, t in [("Cash", "cash"), ("QRIS", "qris"), ("Kartu Debit/Kredit", "card")]:
             await db.payment_methods.insert_one({"id": new_id(), "name": n, "type": t, "active": True})
     logger.info("Startup seeding complete")
+
+    # Scheduler internal untuk laporan WhatsApp harian (self-hosted; tanpa cron eksternal).
+    import asyncio as _asyncio
+
+    async def _report_scheduler():
+        while True:
+            try:
+                await _run_daily_report_job()
+            except Exception as e:
+                logger.error(f"report scheduler tick failed: {e}")
+            await _asyncio.sleep(600)  # cek tiap 10 menit
+    _asyncio.create_task(_report_scheduler())
 
 @app.on_event("shutdown")
 async def shutdown():

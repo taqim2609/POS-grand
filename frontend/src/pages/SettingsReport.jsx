@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
-import { MessageCircle, Save, Loader2, ShieldAlert } from "lucide-react";
+import { MessageCircle, Save, Loader2, ShieldAlert, ShoppingCart, TrendingUp } from "lucide-react";
 
 export default function SettingsReport() {
-  const [form, setForm] = useState({ whatsapp_enabled: false, whatsapp_time: "22:00", recipients: "", include_ai: true });
+  const [form, setForm] = useState({ whatsapp_enabled: false, whatsapp_time: "22:00", recipients: "", include_ai: true, send_sales: true, send_purchases: false });
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,6 +17,8 @@ export default function SettingsReport() {
           whatsapp_time: r.data.whatsapp_time || "22:00",
           recipients: (r.data.recipients || []).join("\n"),
           include_ai: r.data.include_ai,
+          send_sales: r.data.send_sales !== false,
+          send_purchases: !!r.data.send_purchases,
         });
         setConfigured(!!r.data.whatsapp_configured);
       })
@@ -37,15 +39,15 @@ export default function SettingsReport() {
 
   return (
     <div className="h-full overflow-y-auto p-8">
-      <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1"><MessageCircle /> Laporan & WhatsApp</h1>
-      <p className="text-sm text-[#52525B] mb-5">Kirim laporan penjualan harian otomatis ke WhatsApp, atau kirim manual dari Dashboard.</p>
+      <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1"><MessageCircle /> Laporan &amp; WhatsApp</h1>
+      <p className="text-sm text-[#52525B] mb-5">Kirim laporan harian otomatis ke WhatsApp lewat wacloud.id, atau kirim manual dari Dashboard.</p>
 
       {!configured && (
         <div data-testid="wa-not-configured" className="flex items-start gap-3 bg-[#FEF3C7] border border-[#F59E0B] text-[#92400E] rounded-2xl px-4 py-3 mb-5 max-w-2xl">
           <ShieldAlert size={20} className="shrink-0 mt-0.5" />
           <div className="text-sm">
-            <div className="font-extrabold">WhatsApp belum terhubung</div>
-            Buka menu <b>WhatsApp</b> di sidebar dan pindai QR dengan HP Anda (WhatsApp → Perangkat Tertaut) agar pengiriman laporan berfungsi.
+            <div className="font-extrabold">WhatsApp Gateway belum siap</div>
+            Buka menu <b>WhatsApp</b> di sidebar, isi API Key wacloud.id lalu pilih device, agar pengiriman laporan berfungsi.
           </div>
         </div>
       )}
@@ -56,6 +58,21 @@ export default function SettingsReport() {
           <input data-testid="wa-enabled" type="checkbox" checked={form.whatsapp_enabled}
             onChange={(e) => setForm({ ...form, whatsapp_enabled: e.target.checked })} className="h-5 w-5" />
         </label>
+
+        <div className="rounded-xl border border-[#E4E4E7] p-3 space-y-3">
+          <div className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Isi Laporan yang Dikirim</div>
+          <label className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm font-bold"><TrendingUp size={16} className="text-[#10B981]" /> Laporan Penjualan harian</span>
+            <input data-testid="report-send-sales" type="checkbox" checked={form.send_sales}
+              onChange={(e) => setForm({ ...form, send_sales: e.target.checked })} className="h-5 w-5" />
+          </label>
+          <label className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm font-bold"><ShoppingCart size={16} className="text-[#E63946]" /> Laporan Belanja harian</span>
+            <input data-testid="report-send-purchases" type="checkbox" checked={form.send_purchases}
+              onChange={(e) => setForm({ ...form, send_purchases: e.target.checked })} className="h-5 w-5" />
+          </label>
+        </div>
+
         <div>
           <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Jam Kirim (WIB)</label>
           <input data-testid="wa-time" type="time" value={form.whatsapp_time}
@@ -67,11 +84,11 @@ export default function SettingsReport() {
           <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Nomor WhatsApp Tujuan</label>
           <textarea data-testid="wa-recipients" value={form.recipients}
             onChange={(e) => setForm({ ...form, recipients: e.target.value })} rows={3}
-            placeholder="+6281234567890&#10;+6285600000000" className="w-full rounded-xl border px-3 py-2 mt-1.5 font-num" />
-          <span className="text-[11px] text-[#a1a1aa]">Format internasional (+62...). Satu nomor per baris atau pisahkan dengan koma.</span>
+            placeholder="628123456789&#10;628560000000" className="w-full rounded-xl border px-3 py-2 mt-1.5 font-num" />
+          <span className="text-[11px] text-[#a1a1aa]">Format 62... Satu nomor per baris atau pisahkan dengan koma.</span>
         </div>
         <label className="flex items-center justify-between">
-          <span className="font-bold">Sertakan analisis AI dalam laporan</span>
+          <span className="font-bold">Sertakan analisis AI dalam laporan penjualan</span>
           <input data-testid="wa-include-ai" type="checkbox" checked={form.include_ai}
             onChange={(e) => setForm({ ...form, include_ai: e.target.checked })} className="h-5 w-5" />
         </label>

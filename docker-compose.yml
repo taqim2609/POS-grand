@@ -36,7 +36,9 @@ services:
       - PORT=3001
     volumes:
       - wa_auth:/app/whatsapp-service/.wwebjs_auth   # sesi WhatsApp tersimpan
-    profiles: ["whatsapp"]   # opsional & berat di Raspberry Pi. Aktifkan: docker compose --profile whatsapp up -d
+    # DINONAKTIFKAN: notifikasi WhatsApp kini via wacloud.id (HTTP API, tanpa Chromium).
+    # Layanan berat ini hanya nyala bila profil "legacy-wa" diaktifkan secara khusus.
+    profiles: ["legacy-wa"]
 
   frontend:
     build:
