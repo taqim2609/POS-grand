@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================
 # Cek & jalankan update HANYA bila ada versi baru di GitHub.
-# Dirancang untuk dijalankan otomatis oleh cron (lihat setup-autoupdate-pi.sh).
-# Aman: kalau tidak ada perubahan, tidak melakukan apa-apa.
+# Dijalankan otomatis oleh cron (lihat setup-autoupdate-pi.sh).
+# Argumen opsional: nomor WhatsApp tujuan notifikasi (mis. 62811687783).
+# Aman: kalau tidak ada perubahan, tidak melakukan apa-apa & tidak kirim WA.
 # ============================================================
 set -e
 cd "$(dirname "$0")"
 
+NOTIFY="${1:-}"
 TS() { date "+%Y-%m-%d %H:%M:%S"; }
 echo "[$(TS)] Cek update dimulai..."
 
@@ -37,5 +39,22 @@ $SUDO cp "$ENV_TMP" .env && rm -f "$ENV_TMP"
 echo "[$(TS)] Build & jalankan versi terbaru..."
 $DOCKER compose up -d --build
 $DOCKER image prune -f >/dev/null 2>&1 || true
-
 echo "[$(TS)] Update selesai ke $REMOTE."
+
+# --- Kirim notifikasi WhatsApp (hanya bila ada update & nomor diberikan) ---
+if [ -n "$NOTIFY" ]; then
+  SECRET="$(grep -E '^WEBHOOK_CRON_SECRET=' backend/.env.docker 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')"
+  if [ -n "$SECRET" ]; then
+    SHORT="$(git rev-parse --short HEAD)"
+    MSG="Grand Aceh Kuliner POS: server berhasil diperbarui ke versi terbaru pada $(TS) (commit $SHORT). Aplikasi kasir akan ikut ter-update otomatis."
+    echo "[$(TS)] Menunggu backend siap lalu kirim notifikasi WA ke $NOTIFY..."
+    sleep 20
+    curl -s -m 30 -X POST "http://localhost/api/cron/notify" \
+      -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" \
+      -d "{\"to\":\"$NOTIFY\",\"message\":\"$MSG\"}" >/dev/null \
+      && echo "[$(TS)] Notifikasi WA terkirim ke $NOTIFY." \
+      || echo "[$(TS)] Gagal kirim notifikasi WA (cek konfigurasi wacloud.id)."
+  else
+    echo "[$(TS)] WEBHOOK_CRON_SECRET tidak ada di backend/.env.docker — lewati notifikasi."
+  fi
+fi

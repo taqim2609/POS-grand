@@ -1656,6 +1656,22 @@ async def cron_daily_report(request: Request, background: BackgroundTasks):
     background.add_task(_run_daily_report_job)
     return {"ok": True}
 
+class CronNotifyIn(BaseModel):
+    to: str
+    message: str
+
+@api.post("/cron/notify")
+async def cron_notify(request: Request, body: CronNotifyIn):
+    import hmac as _hmac
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not (WEBHOOK_CRON_SECRET and _hmac.compare_digest(token, WEBHOOK_CRON_SECRET)):
+        raise HTTPException(401, "unauthorized")
+    if not body.to.strip():
+        raise HTTPException(400, "nomor tujuan kosong")
+    res = await _send_whatsapp([body.to.strip()], body.message)
+    return {"sent": res}
+
 # ---- WhatsApp Gateway (wacloud.id) config, devices & test ----
 class WAConfigIn(BaseModel):
     api_key: Optional[str] = None
