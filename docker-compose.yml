@@ -5,7 +5,8 @@
 services:
   mongo:
     # Windows / PC x86  -> mongo:7 (default).
-    # Raspberry Pi (64-bit OS) -> set MONGO_IMAGE=mongo:4.4 di .env
+    # Raspberry Pi 3/4 (ARMv8.0-A) -> set MONGO_IMAGE=mongo:4.4.18 di .env
+    #   (versi 4.4.19+ & 5.0+ butuh ARMv8.2-A -> crash "Illegal Instruction" di Pi 3/4)
     image: ${MONGO_IMAGE:-mongo:7}
     restart: unless-stopped
     volumes:

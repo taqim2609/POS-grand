@@ -20,7 +20,7 @@ POS Komputer (browser)   Android POS (APK)
 
 - **Windows:** pasang **Docker Desktop** (aktifkan WSL2). Rekomendasi utama, paling mudah.
 - **Raspberry Pi:** wajib **Raspberry Pi OS 64-bit**, pasang Docker + Docker Compose.
-  - ⚠️ **MongoDB:** versi 5+ TIDAK jalan di CPU Pi. Untuk Raspberry Pi set `MONGO_IMAGE=mongo:4.4` (lihat langkah 3).
+  - ⚠️ **MongoDB:** versi 4.4.19+ & 5+ TIDAK jalan di CPU Raspberry Pi 3/4 (butuh ARMv8.2-A). Set `MONGO_IMAGE=mongo:4.4.18` (lihat langkah 3).
   - ⚠️ **Raspberry Pi 3 (RAM 1GB) sangat terbatas.** Cukup untuk Mongo+backend+frontend outlet kecil,
     tapi fitur WhatsApp (Chromium) berat. **Sangat disarankan Raspberry Pi 4/5 (2GB+).**
 - Komputer butuh **internet HANYA saat build pertama** (mengunduh dependency). Setelah itu bisa offline.
@@ -41,7 +41,7 @@ Buka `backend/.env.docker`, lalu isi/ubah:
 
 **Khusus Raspberry Pi**, buat file `.env` di folder proyek:
 ```
-MONGO_IMAGE=mongo:4.4
+MONGO_IMAGE=mongo:4.4.18
 ```
 
 ## 4. Jalankan
