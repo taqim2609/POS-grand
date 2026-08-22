@@ -2,8 +2,8 @@ import { toast } from "sonner";
 import { getServerUrl } from "./api";
 
 // Kirim status OTA ke UI (komponen OtaIndicator mendengarkan event ini).
-function emitOta(show) {
-  try { window.dispatchEvent(new CustomEvent("gak-ota-status", { detail: { show } })); } catch (e) {}
+function emitOta(show, percent) {
+  try { window.dispatchEvent(new CustomEvent("gak-ota-status", { detail: { show, percent } })); } catch (e) {}
 }
 
 // Versi yang tertanam di bundle APK saat ini (dilayani lokal di ./ota/version.json).
@@ -51,8 +51,14 @@ export async function checkOtaUpdate() {
       return;
     }
     const full = url?.startsWith("http") ? url : `${base}${url || "/ota/bundle.zip"}`;
-    emitOta(true); // tampilkan indikator "Menghubungkan ke server..."
+    emitOta(true, 0); // tampilkan indikator + progres
+    let dlListener;
+    try {
+      dlListener = await CapacitorUpdater.addListener("download", (s) => emitOta(true, Math.round(s?.percent || 0)));
+    } catch (e) {}
     const bundle = await CapacitorUpdater.download({ url: full, version });
+    try { if (dlListener) dlListener.remove(); } catch (e) {}
+    emitOta(true, 100);
     localStorage.setItem("gak_ota_version", version);
     // Tandai agar setelah reload muncul toast "Tampilan diperbarui".
     try { localStorage.setItem("gak_ota_just_updated", version); } catch (e) {}
