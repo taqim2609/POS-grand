@@ -14,6 +14,22 @@ export default function Login() {
   const [showSrv, setShowSrv] = useState(false);
   const [srv, setSrv] = useState(getServerUrl());
   const [scanning, setScanning] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const testConn = async () => {
+    const base = (srv || getServerUrl()).replace(/\/+$/, "");
+    if (!base) { toast.error("Isi alamat server dulu"); return; }
+    setTesting(true);
+    const t = toast.loading(`Menghubungi ${base} ...`);
+    try {
+      const res = await fetch(`${base}/api/health`);
+      const txt = await res.text();
+      if (res.ok && txt.includes("gak-pos")) toast.success("Server terhubung! ✅ Silakan login.", { id: t, duration: 6000 });
+      else toast.error(`Server menjawab tapi tidak dikenal (HTTP ${res.status}). Cek alamat server.`, { id: t, duration: 8000 });
+    } catch (e) {
+      toast.error(`Gagal menghubungi server: ${e.message}. Cek IP & koneksi, pastikan diawali http://`, { id: t, duration: 9000 });
+    } finally { setTesting(false); }
+  };
 
   const saveSrv = () => {
     setServerUrl(srv);
@@ -53,7 +69,13 @@ export default function Login() {
       toast.success(`Selamat datang, ${u.name}`);
       nav(u.role === "admin" ? "/dashboard" : u.role === "input" ? "/products" : "/pos");
     } catch (err) {
-      toast.error(apiError(err.response?.data?.detail) || "Gagal masuk");
+      if (!err.response) {
+        toast.error(`Tidak bisa terhubung ke server (${getServerUrl() || "belum diatur"}). Cek alamat server, pastikan diawali http:// dan HP satu jaringan dengan server.`, { duration: 8000 });
+      } else if (err.response.status === 401) {
+        toast.error("Email atau password salah.");
+      } else {
+        toast.error(apiError(err.response?.data?.detail) || "Gagal masuk");
+      }
     } finally {
       setLoading(false);
     }
@@ -145,6 +167,12 @@ export default function Login() {
                 className="tap mt-2 w-full h-10 rounded-lg bg-[#0A0A0A] text-white font-bold text-sm"
               >
                 Simpan &amp; Hubungkan
+              </button>
+              <button
+                type="button" data-testid="server-test-btn" onClick={testConn} disabled={testing}
+                className="tap mt-2 w-full h-10 rounded-lg border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {testing ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Tes Koneksi
               </button>
             </div>
           )}
