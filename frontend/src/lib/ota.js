@@ -1,6 +1,11 @@
 import { toast } from "sonner";
 import { getServerUrl } from "./api";
 
+// Kirim status OTA ke UI (komponen OtaIndicator mendengarkan event ini).
+function emitOta(show) {
+  try { window.dispatchEvent(new CustomEvent("gak-ota-status", { detail: { show } })); } catch (e) {}
+}
+
 // OTA update via server Pi (LAN). Hanya berjalan di APK (native), diabaikan di web/PWA.
 // Cek /ota/version.json di server; jika versi beda, unduh bundle dari Pi & pasang live.
 export async function checkOtaUpdate() {
@@ -31,12 +36,14 @@ export async function checkOtaUpdate() {
     const current = localStorage.getItem("gak_ota_version") || "";
     if (version === current) return;
     const full = url?.startsWith("http") ? url : `${base}${url || "/ota/bundle.zip"}`;
+    emitOta(true); // tampilkan indikator "Menghubungkan ke server..."
     const bundle = await CapacitorUpdater.download({ url: full, version });
     localStorage.setItem("gak_ota_version", version);
     // Tandai agar setelah reload muncul toast "Tampilan diperbarui".
     try { localStorage.setItem("gak_ota_just_updated", version); } catch (e) {}
     await CapacitorUpdater.set(bundle); // beralih ke bundle baru & reload
   } catch {
+    emitOta(false); // sembunyikan indikator bila gagal/offline
     // gagal (server tak ada/offline) — biarkan pakai bundle sekarang
   }
 }

@@ -7,6 +7,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { OfflineProvider } from "@/context/OfflineContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Layout from "@/components/Layout";
+import OtaIndicator from "@/components/OtaIndicator";
 import Login from "@/pages/Login";
 import POS from "@/pages/POS";
 import Shift from "@/pages/Shift";
@@ -37,6 +38,7 @@ function App() {
       <AuthProvider>
         <OfflineProvider>
           <Toaster position="top-center" richColors />
+          <OtaIndicator />
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
