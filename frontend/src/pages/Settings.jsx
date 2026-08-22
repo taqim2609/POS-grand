@@ -7,13 +7,15 @@ import SettingsReport from "@/pages/SettingsReport";
 import SettingsInstaller from "@/pages/SettingsInstaller";
 import WhatsApp from "@/pages/WhatsApp";
 import DeviceSettings from "@/pages/DeviceSettings";
-import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer } from "lucide-react";
+import ReportChat from "@/pages/ReportChat";
+import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer, Bot } from "lucide-react";
 
 const TABS = [
   { key: "users", label: "Pengguna", icon: Users, comp: UsersPage },
   { key: "tables", label: "Meja", icon: Armchair, comp: Tables },
   { key: "device", label: "Perangkat", icon: Printer, comp: DeviceSettings },
   { key: "ai", label: "Pengaturan AI", icon: Sparkles, comp: SettingsAI },
+  { key: "aichat", label: "Tanya AI", icon: Bot, comp: ReportChat },
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle, comp: WhatsApp },
   { key: "report", label: "Laporan & WA", icon: MessageCircle, comp: SettingsReport },
   { key: "installer", label: "Installer", icon: Download, comp: SettingsInstaller },
