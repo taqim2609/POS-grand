@@ -5,9 +5,6 @@
   "android": {
     "allowMixedContent": true
   },
-  "server": {
-    "cleartext": true
-  },
   "plugins": {
     "CapacitorUpdater": {
       "autoUpdate": false,
