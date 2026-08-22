@@ -5,12 +5,16 @@ import SettingsAI from "@/pages/SettingsAI";
 import SettingsData from "@/pages/SettingsData";
 import SettingsReport from "@/pages/SettingsReport";
 import SettingsInstaller from "@/pages/SettingsInstaller";
-import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download } from "lucide-react";
+import WhatsApp from "@/pages/WhatsApp";
+import DeviceSettings from "@/pages/DeviceSettings";
+import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer } from "lucide-react";
 
 const TABS = [
   { key: "users", label: "Pengguna", icon: Users, comp: UsersPage },
   { key: "tables", label: "Meja", icon: Armchair, comp: Tables },
+  { key: "device", label: "Perangkat", icon: Printer, comp: DeviceSettings },
   { key: "ai", label: "Pengaturan AI", icon: Sparkles, comp: SettingsAI },
+  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle, comp: WhatsApp },
   { key: "report", label: "Laporan & WA", icon: MessageCircle, comp: SettingsReport },
   { key: "installer", label: "Installer", icon: Download, comp: SettingsInstaller },
   { key: "data", label: "Reset Data", icon: Trash2, comp: SettingsData },

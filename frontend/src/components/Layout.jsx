@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, Menu, X, Printer,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings, MessageCircle,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings,
 } from "lucide-react";
 
 function ChangePasswordDialog({ open, onClose }) {
@@ -56,8 +56,7 @@ const NAV = [
   { to: "/inventory", label: "Persediaan", icon: Boxes, roles: ["admin", "input"] },
   { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin", "input"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
-  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, roles: ["admin"] },
-  { to: "/device", label: "Perangkat", icon: Printer, roles: ["admin", "kasir", "input"] },
+  { to: "/device", label: "Perangkat", icon: Printer, roles: ["kasir", "input"] },
   { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
 ];
 
