@@ -73,8 +73,12 @@
   "browserslist": {
     "production": [
       ">0.2%",
+      "last 4 versions",
       "not dead",
-      "not op_mini all"
+      "not op_mini all",
+      "Android >= 5",
+      "Chrome >= 55",
+      "iOS >= 10"
     ],
     "development": [
       "last 1 chrome version",

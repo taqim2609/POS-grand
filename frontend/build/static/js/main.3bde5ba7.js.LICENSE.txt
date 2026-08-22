@@ -1,5 +1,7 @@
 /*! decimal.js-light v2.5.1 https://github.com/MikeMcl/decimal.js-light/LICENCE */
 
+/*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE */
+
 /**
  * @license React
  * react-dom-client.production.js
@@ -85,17 +87,6 @@
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
- */
-
-/**
- * react-router v7.15.1
- *
- * Copyright (c) Remix Software Inc.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE.md file in the root directory of this source tree.
- *
- * @license MIT
  */
 
 /** @license React v17.0.2
