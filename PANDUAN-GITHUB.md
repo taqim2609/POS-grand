@@ -136,8 +136,13 @@ saat build frontend).
 2. APK saat dibuka cek `grandpos.local/ota/version.json`; jika beda, unduh `bundle.zip` dari Pi & pasang live.
 3. Selesai — tampilan baru muncul, tanpa reinstall APK.
 
-### Build APK (sekali saja, di komputer)
-Prasyarat: Node.js 20, Java JDK 17, Android Studio (+Android SDK).
+### Build APK (sekali saja, di komputer — BUKAN di Pi)
+**Prasyarat (install di komputer Windows/Mac Anda):**
+- **Node.js 20/22/24** (LTS) — https://nodejs.org
+- **Java JDK 17** — biasanya sudah termasuk di Android Studio (Embedded JDK)
+- **Android Studio** + **Android SDK API 35** (Android 15). Pasang via *Tools → SDK Manager → SDK Platforms → centang Android 15 (API 35)*.
+
+**Langkah:**
 ```bash
 git clone https://github.com/taqim2609/POS-grand.git
 cd POS-grand/frontend
@@ -146,7 +151,27 @@ REACT_APP_BACKEND_URL="" yarn build
 npx cap sync android
 npx cap open android
 ```
-Di Android Studio: tunggu Gradle sync → Build → Build APK(s) → kirim `app-debug.apk` ke HP → Install (izinkan "sumber tidak dikenal").
+> `REACT_APP_BACKEND_URL=""` dikosongkan agar APK memakai alamat server yang
+> Anda isi sendiri saat pertama buka aplikasi. Di **CMD** pakai `set REACT_APP_BACKEND_URL=`
+> lalu `yarn build`. Di **PowerShell** pakai `$env:REACT_APP_BACKEND_URL=""; yarn build`.
+
+Di **Android Studio**:
+1. Tunggu **Gradle Sync** selesai (klik ikon gajah 🐘 bila perlu). Jika minta
+   download **SDK API 35**, klik *Install missing SDK* → Accept.
+2. Menu **Build → Build Bundle(s)/APK(s) → Build APK(s)**.
+3. Setelah "APK generated successfully", klik **locate**. File ada di:
+   `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
+4. Kirim `app-debug.apk` ke HP/tablet → Install (izinkan "sumber tidak dikenal").
+
+> Konfigurasi native sudah disiapkan di repo (minSdk 23, compileSdk 35, path aset
+> relatif untuk OTA). Jadi cukup ikuti langkah di atas.
+
+### Kalau muncul error saat build (sudah diperbaiki di repo, ini untuk referensi)
+- **`proguard-android.txt no longer supported`** → sudah diganti ke `-optimize` di repo.
+- **`minSdkVersion 22 cannot be smaller than 23`** → minSdk sudah 23 di repo.
+- **`compile against version 35 ... currently android-34`** → compileSdk sudah 35 di repo; pasang SDK API 35 (lihat prasyarat).
+- **`cordova.variables.gradle not found`** → jalankan `npx cap sync android` dulu.
+- Jika error cache: **Build → Clean Project** lalu **Rebuild Project**.
 
 > APK cukup dibuat 1x. Update tampilan berikutnya otomatis via OTA. Build APK lagi
 > hanya jika ada perubahan native (ganti ikon/plugin) — jarang.
