@@ -6,6 +6,15 @@ function emitOta(show) {
   try { window.dispatchEvent(new CustomEvent("gak-ota-status", { detail: { show } })); } catch (e) {}
 }
 
+// Versi yang tertanam di bundle APK saat ini (dilayani lokal di ./ota/version.json).
+async function localBundleVersion() {
+  try {
+    const r = await fetch("ota/version.json", { cache: "no-store" });
+    if (r.ok) { const j = await r.json(); return j.version || ""; }
+  } catch (e) {}
+  return "";
+}
+
 // OTA update via server Pi (LAN). Hanya berjalan di APK (native), diabaikan di web/PWA.
 // Cek /ota/version.json di server; jika versi beda, unduh bundle dari Pi & pasang live.
 export async function checkOtaUpdate() {
@@ -33,8 +42,14 @@ export async function checkOtaUpdate() {
     if (!res.ok) return;
     const { version, url } = await res.json();
     if (!version) return;
-    const current = localStorage.getItem("gak_ota_version") || "";
-    if (version === current) return;
+    let current = localStorage.getItem("gak_ota_version") || "";
+    if (!current) current = await localBundleVersion(); // seed dari versi bundle bawaan APK
+    // Hanya update bila server BENAR-BENAR lebih baru. Mencegah APK baru menarik
+    // bundle LAMA dari Pi (yang belum di-update) yang menyebabkan layar blank.
+    if (current && version <= current) {
+      if (!localStorage.getItem("gak_ota_version")) localStorage.setItem("gak_ota_version", current);
+      return;
+    }
     const full = url?.startsWith("http") ? url : `${base}${url || "/ota/bundle.zip"}`;
     emitOta(true); // tampilkan indikator "Menghubungkan ke server..."
     const bundle = await CapacitorUpdater.download({ url: full, version });
