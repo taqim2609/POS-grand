@@ -16,7 +16,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
-from datetime import datetime, timezone, date, timedelta
+from datetime import datetime, timezone, timedelta
 import logging, uuid, io, bcrypt, jwt, asyncio, re, zipfile
 from bson import json_util
 
