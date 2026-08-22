@@ -73,6 +73,8 @@ agenthub/agents/youtube/db
 *.pack
 *.deb
 *.dylib
+# OTA bundle WAJIB ikut ter-commit meski berekstensi .zip (dipakai APK untuk update)
+!frontend/build/ota/bundle.zip
 
 # Build caches
 .cache/
