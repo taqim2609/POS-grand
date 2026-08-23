@@ -1274,6 +1274,31 @@ async def put_ai_settings(body: AISettingsIn, admin: dict = Depends(require_admi
         await db.settings.update_one({"_id": "ai"}, {"$set": upd}, upsert=True)
     return {"ok": True}
 
+def _model_price_rank(mid):
+    m = (mid or "").lower()
+    cheap = any(k in m for k in ["flash", "mini", "nano", "lite", "micro", "haiku", "small", "8b", "free"])
+    return (0 if cheap else 1, m)
+
+@api.get("/settings/ai/models")
+async def ai_models(feature: str = "description", admin: dict = Depends(require_admin)):
+    import httpx
+    cfg = await _ai_cfg(feature)
+    if not (cfg["api_key"] and cfg["base_url"]):
+        raise HTTPException(400, "Isi & SIMPAN Base URL + API Key dulu, lalu muat model.")
+    base = cfg["base_url"].rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.get(f"{base}/models", headers={"Authorization": f"Bearer {cfg['api_key']}"})
+    except Exception as e:
+        raise HTTPException(400, f"Gagal menghubungi provider: {e}")
+    if r.status_code != 200:
+        raise HTTPException(400, f"Provider menolak permintaan (HTTP {r.status_code}).")
+    data = r.json()
+    items = data.get("data", data) if isinstance(data, dict) else data
+    ids = [m.get("id") for m in items if isinstance(m, dict) and m.get("id")]
+    ids = sorted(set(ids), key=_model_price_rank)
+    return {"models": ids}
+
 @api.get("/settings/ai/credit")
 async def ai_credit(feature: str = "description", admin: dict = Depends(require_admin)):
     """Best-effort remaining credit lookup via OpenAI-compatible billing endpoints."""

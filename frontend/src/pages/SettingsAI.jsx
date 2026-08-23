@@ -60,6 +60,8 @@ function FeatureCard({ featKey, data, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [credit, setCredit] = useState(null);
   const [checking, setChecking] = useState(false);
+  const [models, setModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const save = async () => {
     if (!form.base_url.trim()) return toast.error("Base URL wajib diisi");
@@ -83,6 +85,15 @@ function FeatureCard({ featKey, data, onSaved }) {
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setChecking(false); }
   };
 
+  const loadModels = async () => {
+    setLoadingModels(true);
+    try {
+      const { data: d } = await api.get("/settings/ai/models", { params: { feature: featKey } });
+      setModels(d.models || []);
+      toast.success(`${(d.models || []).length} model dimuat (termurah di atas)`);
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoadingModels(false); }
+  };
+
   return (
     <div className="bg-white rounded-2xl border p-6" data-testid={`ai-feature-${featKey}`}>
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
@@ -97,11 +108,19 @@ function FeatureCard({ featKey, data, onSaved }) {
         <Field label="Base URL" icon={Link2}>
           <input data-testid={`ai-base-url-${featKey}`} value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })}
             placeholder="https://api.contoh.com/v1" className="w-full h-11 rounded-xl border px-3 font-num" />
+          <button type="button" data-testid={`preset-google-${featKey}`}
+            onClick={() => setForm({ ...form, base_url: "https://generativelanguage.googleapis.com/v1beta/openai" })}
+            className="mt-1.5 text-[11px] font-bold text-[#E63946] hover:underline">
+            + Pakai endpoint Google Gemini
+          </button>
         </Field>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Model" icon={Cpu}>
             <input data-testid={`ai-model-${featKey}`} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}
-              placeholder={meta.modelPh} className="w-full h-11 rounded-xl border px-3 font-num" />
+              list={`models-${featKey}`} placeholder={meta.modelPh} className="w-full h-11 rounded-xl border px-3 font-num" />
+            <datalist id={`models-${featKey}`}>
+              {models.map((m) => <option key={m} value={m} />)}
+            </datalist>
           </Field>
           <Field label={data.api_key_set ? "API Key (isi untuk ganti)" : "API Key"} icon={KeyRound}>
             <input data-testid={`ai-api-key-${featKey}`} type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })}
@@ -133,6 +152,10 @@ function FeatureCard({ featKey, data, onSaved }) {
         <button data-testid={`credit-ai-${featKey}`} onClick={checkCredit} disabled={checking}
           className="tap h-12 px-4 rounded-xl bg-[#0A0A0A] hover:bg-[#27272A] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
           {checking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Cek Sisa Kredit
+        </button>
+        <button data-testid={`load-models-${featKey}`} onClick={loadModels} disabled={loadingModels}
+          className="tap h-12 px-4 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+          {loadingModels ? <Loader2 size={16} className="animate-spin" /> : <Cpu size={16} />} Muat Model
         </button>
       </div>
     </div>
