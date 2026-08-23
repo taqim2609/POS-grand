@@ -35,6 +35,12 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 
 
 ## Build 2 (2026-06)
+
+## Build 18 (2026-06) — Grafik Tren & Ekspor Laporan Periode di Tab Laporan
+- Tab Laporan: grafik **Tren Penjualan Harian** (LineChart recharts) muncul saat periode Mingguan/Bulanan, ambil data `/api/reports/range` (start/end periode) lalu isi kontinu per hari.
+- Tombol **Excel/PDF** untuk SELURUH laporan periode (KPI + rincian per kategori Makanan/Minuman/Retail + tabel vendor). Backend: `_period_report(start,end)` di-extract; endpoint `GET /api/reports/period/export/excel|pdf` (admin). Helper `_period_report_lines` untuk teks PDF.
+- Verified: curl export xlsx/pdf 200; screenshot (grafik tren bulanan + tombol Excel/PDF).
+
 - Pengaturan AI PER-FUNGSI (Deskripsi/Gambar/Analisis): Base URL/API Key/Model masing-masing; endpoint GET/PUT /api/settings/ai; cek sisa kredit GET /api/settings/ai/credit; image gen OpenAI-compatible hanya bila dikonfigurasi (else Gemini/Emergent).
 - Ambang stok menipis per-produk (ProductIn.min_stock, default 10); Dashboard low-stock pakai ambang per-produk.
 - Grafik tren penjualan mingguan/bulanan (Dashboard, /reports/range).

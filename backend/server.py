@@ -838,8 +838,7 @@ async def report_range(start: str, end: str, admin: dict = Depends(require_admin
         daily[day]["count"] += 1
     return {"daily": sorted(daily.values(), key=lambda x: x["date"])}
 
-@api.get("/reports/period")
-async def report_period(start: str, end: str, admin: dict = Depends(require_admin)):
+async def _period_report(start: str, end: str):
     s_utc, _ = wib_day_range(start)
     _, e_utc = wib_day_range(end)
     q = {"status": "paid", "created_at": {"$gte": s_utc, "$lt": e_utc}}
@@ -894,6 +893,69 @@ async def report_period(start: str, end: str, admin: dict = Depends(require_admi
             "total_discount": round(total_discount, 2), "total_cost": round(total_cost, 2),
             "gross_profit": round(total - total_cost, 2), "by_type": by_type, "by_payment": by_pm,
             "category_report": category_report, "top_products": top, "vendor": vendor}
+
+@api.get("/reports/period")
+async def report_period(start: str, end: str, admin: dict = Depends(require_admin)):
+    return await _period_report(start, end)
+
+def _period_report_lines(rep):
+    cr = rep["category_report"]
+    L = ["*Laporan Grand Aceh Kuliner*", f"Periode: {rep['start']} s/d {rep['end']}", "",
+         f"Total Penjualan: Rp{rep['total_sales']:,.0f}",
+         f"Jumlah Order: {rep['order_count']}",
+         f"Laba Kotor: Rp{rep['gross_profit']:,.0f}",
+         f"Total Diskon: Rp{rep['total_discount']:,.0f}", ""]
+    for key, label in [("makanan", "Makanan"), ("minuman", "Minuman"), ("retail", "Retail")]:
+        g = cr[key]
+        L.append(f"{label}: Rp{g['total']:,.0f}")
+        for c in g["categories"]:
+            L.append(f"  - {c['name']} (x{c['qty']}): Rp{c['total']:,.0f}")
+    v = rep.get("vendor", {})
+    L += ["", f"Bagi Hasil Vendor: Rp{v.get('total_vendor_share', 0):,.0f} (omzet Rp{v.get('total_gross', 0):,.0f})"]
+    for r in v.get("rows", []):
+        L.append(f"  - {r['vendor_name']}: Rp{r['vendor_share']:,.0f}")
+    return L
+
+@api.get("/reports/period/export/excel")
+async def export_period_excel(start: str, end: str, admin: dict = Depends(require_admin)):
+    import openpyxl
+    rep = await _period_report(start, end)
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Laporan"
+    ws.append(["Laporan Grand Aceh Kuliner"])
+    ws.append(["Periode", f"{start} s/d {end}"])
+    ws.append([])
+    ws.append(["Total Penjualan", rep["total_sales"]])
+    ws.append(["Jumlah Order", rep["order_count"]])
+    ws.append(["Laba Kotor", rep["gross_profit"]])
+    ws.append(["Total Diskon", rep["total_discount"]])
+    ws.append([])
+    for key, label in [("makanan", "Makanan"), ("minuman", "Minuman"), ("retail", "Retail")]:
+        g = rep["category_report"][key]
+        ws.append([label, "", g["total"]])
+        for c in g["categories"]:
+            ws.append(["  " + c["name"], c["qty"], c["total"]])
+        ws.append([])
+    v = rep.get("vendor", {})
+    ws.append(["Bagi Hasil Vendor"])
+    ws.append(["Vendor", "Qty", "Omzet", "Bagi Hasil Vendor", "Bagian Outlet"])
+    for r in v.get("rows", []):
+        ws.append([r["vendor_name"], r["qty"], r["gross"], r["vendor_share"], r["outlet_share"]])
+    ws.append(["TOTAL", "", v.get("total_gross", 0), v.get("total_vendor_share", 0), v.get("total_outlet_share", 0)])
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=laporan-{start}_{end}.xlsx"})
+
+@api.get("/reports/period/export/pdf")
+async def export_period_pdf(start: str, end: str, admin: dict = Depends(require_admin)):
+    from fpdf import FPDF
+    rep = await _period_report(start, end)
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", size=12)
+    for ln in _period_report_lines(rep):
+        txt = ln.replace("*", "").encode("latin-1", "replace").decode("latin-1")
+        pdf.multi_cell(pdf.epw, 7, txt or " ")
+    out = io.BytesIO(bytes(pdf.output()))
+    return StreamingResponse(out, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=laporan-{start}_{end}.pdf"})
 
 # ================================================================== INVENTORY (Retail)
 class PurchaseIn(BaseModel):

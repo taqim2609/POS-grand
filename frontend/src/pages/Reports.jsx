@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah, wibToday } from "@/lib/format";
 import { toast } from "sonner";
-import { FileSpreadsheet, Loader2, Utensils, Coffee, Store, Handshake, FileDown, FileText, Send } from "lucide-react";
+import { FileSpreadsheet, Loader2, Utensils, Coffee, Store, Handshake, FileDown, FileText, Send, TrendingUp } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 
@@ -19,6 +20,13 @@ function monthRange(ym) {
   const last = new Date(y, m, 0).getDate();
   return [`${ym}-01`, `${ym}-${String(last).padStart(2, "0")}`];
 }
+function enumerateDates(start, end) {
+  const out = [];
+  const d = new Date(start + "T00:00:00");
+  const e = new Date(end + "T00:00:00");
+  while (d <= e) { out.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
+  return out;
+}
 
 export default function Reports() {
   const [period, setPeriod] = useState("day");
@@ -26,6 +34,7 @@ export default function Reports() {
   const [weekDate, setWeekDate] = useState(wibToday());
   const [month, setMonth] = useState(wibToday().slice(0, 7));
   const [data, setData] = useState(null);
+  const [trend, setTrend] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -41,6 +50,13 @@ export default function Reports() {
       .then((r) => setData(r.data))
       .catch((e) => toast.error(apiError(e.response?.data?.detail)))
       .finally(() => setLoading(false));
+    api.get("/reports/range", { params: { start, end } })
+      .then((r) => {
+        const map = {};
+        (r.data.daily || []).forEach((x) => { map[x.date] = x; });
+        setTrend(enumerateDates(start, end).map((dt) => ({ date: dt, label: dt.slice(5), total: (map[dt] || {}).total || 0 })));
+      })
+      .catch(() => setTrend([]));
   }, [start, end]);
 
   const download = async (path, filename) => {
@@ -85,7 +101,13 @@ export default function Reports() {
         {period === "month" && (
           <div><label className="text-xs uppercase font-bold text-[#52525B]">Bulan</label><input data-testid="rep-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="block h-10 rounded-lg border px-3 font-num mt-1" /></div>
         )}
-        <div className="text-sm font-bold text-[#52525B] ml-auto" data-testid="rep-range-label">Periode: <span className="font-num text-[#0A0A0A]">{start === end ? start : `${start} s/d ${end}`}</span></div>
+        <div className="text-sm font-bold text-[#52525B] ml-auto flex items-center gap-3 flex-wrap" data-testid="rep-range-label">
+          <span>Periode: <span className="font-num text-[#0A0A0A]">{start === end ? start : `${start} s/d ${end}`}</span></span>
+          <div className="flex gap-2">
+            <button data-testid="period-excel-btn" onClick={() => download("/reports/period/export/excel", `laporan-${start}_${end}.xlsx`)} className="tap h-9 px-3 rounded-lg bg-white border font-bold text-xs flex items-center gap-1.5"><FileDown size={14} /> Excel</button>
+            <button data-testid="period-pdf-btn" onClick={() => download("/reports/period/export/pdf", `laporan-${start}_${end}.pdf`)} className="tap h-9 px-3 rounded-lg bg-white border font-bold text-xs flex items-center gap-1.5"><FileText size={14} /> PDF</button>
+          </div>
+        </div>
       </div>
 
       {loading || !data ? (
@@ -98,6 +120,21 @@ export default function Reports() {
             <Stat label="Laba Kotor" value={rupiah(data.gross_profit)} />
             <Stat label="Bagi Hasil Vendor" value={rupiah(data.vendor?.total_vendor_share || 0)} />
           </div>
+
+          {period !== "day" && (
+            <div className="bg-white rounded-2xl border p-5 mb-5" data-testid="report-trend-chart">
+              <h3 className="font-extrabold flex items-center gap-2 mb-4"><TrendingUp size={18} className="text-[#E63946]" /> Tren Penjualan Harian</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={trend} margin={{ left: 10, right: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F1F4" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={period === "week" ? 0 : "preserveStartEnd"} padding={{ right: 12 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={70} tickFormatter={(v) => "Rp" + (v >= 1000 ? (v / 1000) + "k" : v)} />
+                  <Tooltip formatter={(v) => rupiah(v)} labelFormatter={(l) => `Tanggal ${l}`} />
+                  <Line type="monotone" dataKey="total" stroke="#E63946" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} name="Penjualan" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           <div className="grid lg:grid-cols-3 gap-4 mb-5">
             {groups.map((g) => {
