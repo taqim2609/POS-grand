@@ -815,7 +815,8 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
     cash_moves = await db.cash_movements.find({"created_at": {"$gte": start, "$lt": end}}, {"_id": 0}).to_list(2000)
     cash_in = sum(m["amount"] for m in cash_moves if m["type"] == "in")
     cash_out = sum(m["amount"] for m in cash_moves if m["type"] == "out")
-    return {"date": d, "total_sales": round(total, 2), "order_count": len(orders),
+    vendor_summary = await _vendor_report(date_str=d)
+    return {"date": d, "vendor_summary": vendor_summary, "total_sales": round(total, 2), "order_count": len(orders),
             "total_discount": round(total_discount, 2), "by_type": by_type, "by_payment": by_pm,
             "fnb_total": round(fnb_total, 2), "retail_total": round(by_type["retail"]["total"], 2),
             "top_products": top, "low_stock": low_stock, "low_stock_threshold": LOW_STOCK_THRESHOLD,
@@ -836,6 +837,63 @@ async def report_range(start: str, end: str, admin: dict = Depends(require_admin
         daily[day]["total"] += o["total"]
         daily[day]["count"] += 1
     return {"daily": sorted(daily.values(), key=lambda x: x["date"])}
+
+@api.get("/reports/period")
+async def report_period(start: str, end: str, admin: dict = Depends(require_admin)):
+    s_utc, _ = wib_day_range(start)
+    _, e_utc = wib_day_range(end)
+    q = {"status": "paid", "created_at": {"$gte": s_utc, "$lt": e_utc}}
+    orders = await db.orders.find(q, {"_id": 0}).to_list(50000)
+    prods = await db.products.find({}, {"_id": 0, "id": 1, "category_id": 1, "type": 1}).to_list(5000)
+    prod_map = {p["id"]: p for p in prods}
+    cats_all = await db.categories.find({}, {"_id": 0}).to_list(1000)
+    cat_map = {c["id"]: c for c in cats_all}
+    by_type = {"dine_in": {"count": 0, "total": 0}, "take_away": {"count": 0, "total": 0}, "retail": {"count": 0, "total": 0}}
+    by_pm = {}
+    cat_sales = {}
+    group_totals = {"makanan": 0, "minuman": 0, "retail": 0}
+    product_sales = {}
+    total = 0; total_discount = 0; total_cost = 0
+    for o in orders:
+        bt = by_type[o["order_type"]]
+        bt["count"] += 1
+        bt["total"] += o["total"]
+        total += o["total"]
+        total_discount += o.get("discount", 0)
+        by_pm[o.get("payment_method_name", "?")] = by_pm.get(o.get("payment_method_name", "?"), 0) + o["total"]
+        for it in o["items"]:
+            line = it["price"] * it["qty"]
+            ps = product_sales.setdefault(it["name"], {"qty": 0, "total": 0, "cost": 0})
+            ps["qty"] += it["qty"]; ps["total"] += line; ps["cost"] += it.get("cost", 0) * it["qty"]
+            total_cost += it.get("cost", 0) * it["qty"]
+            pinfo = prod_map.get(it.get("product_id"), {})
+            itype = pinfo.get("type") or it.get("type") or "retail"
+            if itype in group_totals:
+                group_totals[itype] += line
+            cid = pinfo.get("category_id")
+            if cid:
+                cinfo = cat_map.get(cid, {})
+                cs = cat_sales.setdefault(cid, {"category_id": cid, "name": cinfo.get("name", "?"),
+                                                "type": cinfo.get("type", itype), "qty": 0, "total": 0})
+                cs["qty"] += it["qty"]; cs["total"] += line
+    by_cat = sorted(cat_sales.values(), key=lambda x: x["total"], reverse=True)
+    for c in by_cat:
+        c["total"] = round(c["total"], 2)
+    category_report = {
+        "makanan": {"total": round(group_totals["makanan"], 2), "categories": [c for c in by_cat if c["type"] == "makanan"]},
+        "minuman": {"total": round(group_totals["minuman"], 2), "categories": [c for c in by_cat if c["type"] == "minuman"]},
+        "retail": {"total": round(group_totals["retail"], 2), "categories": [c for c in by_cat if c["type"] == "retail"]},
+    }
+    top = []
+    for k, v in sorted(product_sales.items(), key=lambda x: x[1]["total"], reverse=True)[:10]:
+        profit = v["total"] - v["cost"]
+        margin = round(profit / v["total"] * 100, 1) if v["total"] else 0
+        top.append({"name": k, "qty": v["qty"], "total": round(v["total"], 2), "profit": round(profit, 2), "margin": margin})
+    vendor = await _vendor_report(start=start, end=end)
+    return {"start": start, "end": end, "total_sales": round(total, 2), "order_count": len(orders),
+            "total_discount": round(total_discount, 2), "total_cost": round(total_cost, 2),
+            "gross_profit": round(total - total_cost, 2), "by_type": by_type, "by_payment": by_pm,
+            "category_report": category_report, "top_products": top, "vendor": vendor}
 
 # ================================================================== INVENTORY (Retail)
 class PurchaseIn(BaseModel):

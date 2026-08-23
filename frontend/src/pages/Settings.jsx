@@ -6,9 +6,8 @@ import SettingsData from "@/pages/SettingsData";
 import SettingsReport from "@/pages/SettingsReport";
 import SettingsInstaller from "@/pages/SettingsInstaller";
 import WhatsAppReport from "@/pages/WhatsAppReport";
-import VendorReport from "@/pages/VendorReport";
 import DeviceSettings from "@/pages/DeviceSettings";
-import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer, Store } from "lucide-react";
+import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer } from "lucide-react";
 
 const TABS = [
   { key: "users", label: "Pengguna", icon: Users, comp: UsersPage },
@@ -16,7 +15,6 @@ const TABS = [
   { key: "device", label: "Perangkat", icon: Printer, comp: DeviceSettings },
   { key: "ai", label: "Pengaturan AI", icon: Sparkles, comp: SettingsAI },
   { key: "wa", label: "WhatsApp & Laporan", icon: MessageCircle, comp: WhatsAppReport },
-  { key: "vendor", label: "Bagi Hasil Vendor", icon: Store, comp: VendorReport },
   { key: "installer", label: "Installer", icon: Download, comp: SettingsInstaller },
   { key: "data", label: "Reset Data", icon: Trash2, comp: SettingsData },
 ];

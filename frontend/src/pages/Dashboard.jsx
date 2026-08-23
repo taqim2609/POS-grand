@@ -189,7 +189,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4 mb-4">
+      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
         <div className="rounded-2xl border-2 border-[#10B981] bg-[#ECFDF5] p-5" data-testid="stat-gross-profit">
           <Coins size={20} className="text-[#047857]" />
           <div className="text-xs font-bold uppercase tracking-wider mt-3 text-[#047857]">Laba Kotor</div>
@@ -207,6 +207,12 @@ export default function Dashboard() {
           <div className="text-xs font-bold uppercase tracking-wider mt-3 text-white/70">Kas Bersih Harian</div>
           <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.cash_net || 0)}</div>
           <div className="text-[11px] text-white/50 mt-1">Masuk {rupiah(data.cash_in || 0)} · Keluar {rupiah(data.cash_out || 0)}</div>
+        </div>
+        <div className="rounded-2xl border-2 border-[#0D9488] bg-[#F0FDFA] p-5" data-testid="stat-vendor-share">
+          <Store size={20} className="text-[#0F766E]" />
+          <div className="text-xs font-bold uppercase tracking-wider mt-3 text-[#0F766E]">Bagi Hasil Vendor</div>
+          <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.vendor_summary?.total_vendor_share || 0)}</div>
+          <div className="text-[11px] text-[#52525B] mt-1">Omzet vendor {rupiah(data.vendor_summary?.total_gross || 0)}</div>
         </div>
       </div>
 

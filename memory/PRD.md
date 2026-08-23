@@ -25,6 +25,14 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Frontend: Catalog tab "Vendor" (Vendors.jsx); Products.jsx form tampilkan dropdown Vendor + Bagi Hasil (%) saat type=vendor (sembunyikan HPP/stok); Settings tab "Bagi Hasil Vendor" (VendorReport.jsx) harian/rentang + Excel/PDF/Kirim WA.
 - Verified: curl (30% dari Rp20.000 = Rp6.000 vendor, Rp14.000 outlet; export xlsx/pdf 200) + screenshot UI. OTA bundle di-rebuild.
 
+## Build 17 (2026-06) — Tab Laporan (Harian/Mingguan/Bulanan) + Kartu Vendor di Dashboard
+- Menu nav baru "Laporan" (/laporan, admin, Reports.jsx): pilih periode Harian (tanggal), Mingguan (Sen–Min dari tanggal terpilih), Bulanan (input month). Menampilkan KPI (total, order, laba kotor, bagi hasil vendor) + rincian per kategori Makanan/Minuman/Retail + tabel Bagi Hasil Vendor (Excel/PDF/Kirim WA memakai rentang start/end).
+- Backend `GET /api/reports/period?start=&end=` (admin): agregasi by_type, by_payment, category_report (makanan/minuman/retail beserta kategori), top_products, dan `vendor` (via _vendor_report range).
+- `GET /api/reports/summary` kini menyertakan `vendor_summary` (bagi hasil hari itu) → Dashboard menampilkan kartu "Bagi Hasil Vendor" (teal) berisi total bagi hasil + omzet vendor hari ini.
+- Laporan vendor DIPINDAH dari tab Pengaturan ke tab Laporan; VendorReport.jsx dihapus (tab Settings "Bagi Hasil Vendor" dihapus).
+- Verified: curl (/reports/period & vendor_summary benar: 30% dari Rp20.000 = Rp6.000) + screenshot (Laporan harian/bulanan, kartu vendor Dashboard). OTA bundle di-rebuild (v20260823141638).
+
+
 
 ## Build 2 (2026-06)
 - Pengaturan AI PER-FUNGSI (Deskripsi/Gambar/Analisis): Base URL/API Key/Model masing-masing; endpoint GET/PUT /api/settings/ai; cek sisa kredit GET /api/settings/ai/credit; image gen OpenAI-compatible hanya bila dikonfigurasi (else Gemini/Emergent).
