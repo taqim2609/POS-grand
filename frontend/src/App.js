@@ -24,6 +24,8 @@ import SettingsData from "@/pages/SettingsData";
 import Settings from "@/pages/Settings";
 import WhatsApp from "@/pages/WhatsApp";
 import DeviceSettings from "@/pages/DeviceSettings";
+import Catalog from "@/pages/Catalog";
+import ReportChat from "@/pages/ReportChat";
 
 const wrap = (el, roles) => (
   <ProtectedRoute roles={roles}>
@@ -49,6 +51,8 @@ function App() {
               <Route path="/products" element={wrap(<Products />, ["admin", "input"])} />
               <Route path="/inventory" element={wrap(<Inventory />, ["admin", "input"])} />
               <Route path="/categories" element={wrap(<Categories />, ["admin", "input"])} />
+              <Route path="/catalog" element={wrap(<Catalog />, ["admin", "input"])} />
+              <Route path="/tanya-ai" element={wrap(<ReportChat />, ["admin"])} />
               <Route path="/tables" element={wrap(<Tables />, ["admin"])} />
               <Route path="/orders" element={wrap(<Orders />, ["admin"])} />
               <Route path="/users" element={wrap(<UsersPage />, ["admin"])} />

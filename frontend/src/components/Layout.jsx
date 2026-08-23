@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
   Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, Menu, X, Printer,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings,
+  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings, Bot,
 } from "lucide-react";
 
 function ChangePasswordDialog({ open, onClose }) {
@@ -52,9 +52,8 @@ const NAV = [
   { to: "/pos", label: "POS Kasir", icon: ShoppingCart, roles: ["admin", "kasir"] },
   { to: "/cash", label: "Kas", icon: Wallet, roles: ["admin", "kasir"] },
   { to: "/shift", label: "Shift", icon: Clock, roles: ["admin", "kasir"] },
-  { to: "/products", label: "Produk", icon: Package, roles: ["admin", "input"] },
-  { to: "/inventory", label: "Persediaan", icon: Boxes, roles: ["admin", "input"] },
-  { to: "/categories", label: "Kategori", icon: Tags, roles: ["admin", "input"] },
+  { to: "/catalog", label: "Produk & Stok", icon: Package, roles: ["admin", "input"] },
+  { to: "/tanya-ai", label: "Tanya AI", icon: Bot, roles: ["admin"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/device", label: "Perangkat", icon: Printer, roles: ["kasir", "input"] },
   { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
