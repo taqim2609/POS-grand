@@ -69,7 +69,7 @@ export default function Categories() {
             <Field label="Nama"><input data-testid="cat-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full h-11 rounded-xl border px-3" /></Field>
             <Field label="Tipe">
               <select data-testid="cat-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full h-11 rounded-xl border px-3 bg-white">
-                <option value="makanan">Makanan</option><option value="minuman">Minuman</option><option value="retail">Retail</option>
+                <option value="makanan">Makanan</option><option value="minuman">Minuman</option><option value="retail">Retail</option><option value="vendor">Vendor</option>
               </select>
             </Field>
             <Field label="Urutan Tampil"><input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>

@@ -8,12 +8,13 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const empty = { name: "", sku: "", category_id: "", type: "makanan", price: 0, cost: 0, description: "", image: "", active: true, sold_out: false, stock: 0, min_stock: 10 };
+const empty = { name: "", sku: "", category_id: "", type: "makanan", price: 0, cost: 0, vendor_id: "", vendor_share_percent: 0, description: "", image: "", active: true, sold_out: false, stock: 0, min_stock: 10 };
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 
 export default function Products() {
   const [items, setItems] = useState([]);
   const [cats, setCats] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
@@ -22,7 +23,7 @@ export default function Products() {
   const [aiImg, setAiImg] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
-  const load = () => Promise.all([api.get("/products"), api.get("/categories")]).then(([p, c]) => { setItems(p.data); setCats(c.data); });
+  const load = () => Promise.all([api.get("/products"), api.get("/categories"), api.get("/vendors")]).then(([p, c, v]) => { setItems(p.data); setCats(c.data); setVendors(v.data); });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
   useEffect(() => { load(); }, []);
 
@@ -33,6 +34,11 @@ export default function Products() {
     if (!form.category_id) return toast.error("Pilih kategori");
     try {
       const payload = { ...form, price: Number(form.price), cost: Number(form.cost), stock: Number(form.stock), min_stock: Number(form.min_stock) };
+      if (form.type === "vendor") {
+        if (!form.vendor_id) return toast.error("Pilih vendor");
+        payload.vendor_share_percent = Number(form.vendor_share_percent);
+        payload.cost = 0;
+      }
       if (editId) await api.put(`/products/${editId}`, payload);
       else await api.post("/products", payload);
       toast.success("Produk tersimpan"); setOpen(false); load();
@@ -87,7 +93,7 @@ export default function Products() {
         </div>
       </div>
       <div className="flex gap-2 mb-4">
-        {["all", "makanan", "minuman", "retail"].map((t) => (
+        {["all", "makanan", "minuman", "retail", "vendor"].map((t) => (
           <button key={t} onClick={() => setFilter(t)} className={`tap h-9 px-4 rounded-lg text-sm font-bold ${filter === t ? "bg-[#0A0A0A] text-white" : "bg-white border"}`}>
             {t === "all" ? "Semua" : TYPE_LABEL[t]}
           </button>
@@ -111,7 +117,7 @@ export default function Products() {
                 <td className="p-3 font-num text-[#52525B]">{p.sku}</td>
                 <td className="p-3">{TYPE_LABEL[p.type]}</td>
                 <td className="p-3 text-right font-num font-bold">{rupiah(p.price)}</td>
-                <td className="p-3 text-right font-num text-[#52525B]">{rupiah(p.cost || 0)}</td>
+                <td className="p-3 text-right font-num text-[#52525B]">{p.type === "vendor" ? `${p.vendor_share_percent || 0}%` : rupiah(p.cost || 0)}</td>
                 <td className="p-3 text-right font-num">{p.track_stock ? p.stock : "-"}</td>
                 <td className="p-3 text-center">
                   <button data-testid={`soldout-toggle-${p.id}`} onClick={() => toggleSold(p)} className={`text-xs font-bold px-2 py-1 rounded ${p.sold_out ? "bg-[#FEE2E2] text-[#EF4444]" : "bg-[#D1FAE5] text-[#047857]"}`}>
@@ -142,7 +148,7 @@ export default function Products() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Tipe">
                 <select data-testid="prod-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, category_id: "" })} className="w-full h-11 rounded-xl border px-3 bg-white">
-                  <option value="makanan">Makanan</option><option value="minuman">Minuman</option><option value="retail">Retail</option>
+                  <option value="makanan">Makanan</option><option value="minuman">Minuman</option><option value="retail">Retail</option><option value="vendor">Vendor (Bagi Hasil)</option>
                 </select>
               </Field>
               <Field label="Kategori">
@@ -154,8 +160,21 @@ export default function Products() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Harga Jual"><input data-testid="prod-price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
-              <Field label={form.type === "retail" ? "Harga Beli" : "HPP (Modal)"}><input data-testid="prod-cost" type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+              {form.type === "vendor" ? (
+                <Field label="Bagi Hasil Vendor (%)"><input data-testid="prod-vendor-share" type="number" min="0" max="100" value={form.vendor_share_percent} onChange={(e) => setForm({ ...form, vendor_share_percent: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+              ) : (
+                <Field label={form.type === "retail" ? "Harga Beli" : "HPP (Modal)"}><input data-testid="prod-cost" type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>
+              )}
             </div>
+            {form.type === "vendor" && (
+              <Field label="Vendor (Pemilik Produk)">
+                <select data-testid="prod-vendor" value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} className="w-full h-11 rounded-xl border px-3 bg-white">
+                  <option value="">Pilih vendor...</option>
+                  {vendors.filter((v) => v.active).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+                <span className="text-[11px] text-[#a1a1aa]">Bagi hasil dihitung {form.vendor_share_percent || 0}% dari harga jual (omzet).</span>
+              </Field>
+            )}
             {form.type === "retail" && (
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Stok Awal"><input data-testid="prod-stock" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full h-11 rounded-xl border px-3 font-num" /></Field>

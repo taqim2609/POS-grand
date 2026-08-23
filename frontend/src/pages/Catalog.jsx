@@ -2,12 +2,14 @@ import { useState } from "react";
 import Products from "@/pages/Products";
 import Inventory from "@/pages/Inventory";
 import Categories from "@/pages/Categories";
-import { Package, Boxes, Tags } from "lucide-react";
+import Vendors from "@/pages/Vendors";
+import { Package, Boxes, Tags, Store } from "lucide-react";
 
 const TABS = [
   { k: "produk", l: "Produk", i: Package, C: Products },
   { k: "stok", l: "Persediaan", i: Boxes, C: Inventory },
   { k: "kategori", l: "Kategori", i: Tags, C: Categories },
+  { k: "vendor", l: "Vendor", i: Store, C: Vendors },
 ];
 
 export default function Catalog() {

@@ -136,7 +136,7 @@ class ResetDataIn(BaseModel):
 
 class CategoryIn(BaseModel):
     name: str
-    type: Literal["makanan", "minuman", "retail"]
+    type: Literal["makanan", "minuman", "retail", "vendor"]
     sort_order: int = 0
     active: bool = True
 
@@ -155,6 +155,12 @@ class ProductIn(BaseModel):
     sold_out: bool = False
     stock: Optional[int] = 0
     min_stock: Optional[int] = 10
+
+class VendorIn(BaseModel):
+    name: str
+    contact: Optional[str] = ""
+    note: Optional[str] = ""
+    active: bool = True
 
 class TableIn(BaseModel):
     name: str
@@ -412,6 +418,40 @@ async def delete_product(pid: str, admin: dict = Depends(admin_or_input)):
     await db.products.delete_one({"id": pid})
     return {"deleted": True}
 
+# ================================================================== VENDORS
+@api.get("/vendors")
+async def list_vendors(active_only: bool = False, user: dict = Depends(get_current_user)):
+    q = {"active": True} if active_only else {}
+    return await db.vendors.find(q, {"_id": 0}).sort("name", 1).to_list(500)
+
+@api.post("/vendors")
+async def create_vendor(body: VendorIn, admin: dict = Depends(admin_or_input)):
+    if await db.vendors.find_one({"name": {"$regex": f"^{re.escape(body.name.strip())}$", "$options": "i"}}):
+        raise HTTPException(400, f"Vendor '{body.name}' sudah ada")
+    doc = body.model_dump()
+    doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
+    await db.vendors.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/vendors/{vid}")
+async def update_vendor(vid: str, body: VendorIn, admin: dict = Depends(admin_or_input)):
+    if not await db.vendors.find_one({"id": vid}):
+        raise HTTPException(404, "Vendor tidak ditemukan")
+    if await db.vendors.find_one({"name": {"$regex": f"^{re.escape(body.name.strip())}$", "$options": "i"}, "id": {"$ne": vid}}):
+        raise HTTPException(400, f"Vendor '{body.name}' sudah ada")
+    await db.vendors.update_one({"id": vid}, {"$set": body.model_dump()})
+    return await db.vendors.find_one({"id": vid}, {"_id": 0})
+
+@api.delete("/vendors/{vid}")
+async def delete_vendor(vid: str, admin: dict = Depends(admin_or_input)):
+    used = await db.products.count_documents({"vendor_id": vid})
+    if used:
+        await db.vendors.update_one({"id": vid}, {"$set": {"active": False}})
+        return {"soft_deleted": True, "reason": f"Vendor dipakai {used} produk, dinonaktifkan (tidak dihapus)."}
+    await db.vendors.delete_one({"id": vid})
+    return {"deleted": True}
+
 # ================================================================== TABLES
 @api.get("/tables")
 async def list_tables(user: dict = Depends(get_current_user)):
@@ -496,9 +536,15 @@ async def _resolve_items(raw_items):
             raise HTTPException(400, f"Produk nonaktif tidak bisa dijual: {p['name']}")
         if p.get("sold_out"):
             raise HTTPException(400, f"Produk sold out: {p['name']}")
-        resolved.append({"product_id": p["id"], "name": p["name"], "price": p["price"],
-                         "cost": p.get("cost", 0),
-                         "qty": it.qty, "type": p["type"], "track_stock": p.get("track_stock", False)})
+        line = {"product_id": p["id"], "name": p["name"], "price": p["price"],
+                "cost": p.get("cost", 0),
+                "qty": it.qty, "type": p["type"], "track_stock": p.get("track_stock", False)}
+        if p["type"] == "vendor" and p.get("vendor_id"):
+            share = float(p.get("vendor_share_percent") or 0)
+            line["vendor_id"] = p["vendor_id"]
+            line["vendor_share_percent"] = share
+            line["vendor_total"] = round(p["price"] * it.qty * share / 100, 2)
+        resolved.append(line)
     return resolved
 
 async def _validate_order_rules(order_type, table_id, items):
@@ -1555,6 +1601,110 @@ async def export_report_pdf(date_str: Optional[str] = Query(None, alias="date"),
     s = await report_summary(date_str=d, admin=user)
     return StreamingResponse(_report_pdf(d, s), media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename=laporan-{d}.pdf"})
+
+# -------------------------------------------------------- VENDOR SETTLEMENT
+async def _vendor_report(date_str=None, start=None, end=None):
+    if start and end:
+        s_utc, _ = wib_day_range(start)
+        _, e_utc = wib_day_range(end)
+        label = f"{start} s/d {end}"
+    else:
+        d = date_str or wib_today()
+        s_utc, e_utc = wib_day_range(d)
+        label = d
+    q = {"status": "paid", "created_at": {"$gte": s_utc, "$lt": e_utc}}
+    orders = await db.orders.find(q, {"_id": 0}).to_list(20000)
+    vendors = await db.vendors.find({}, {"_id": 0}).to_list(500)
+    vmap = {v["id"]: v for v in vendors}
+    agg = {}
+    for o in orders:
+        for it in o.get("items", []):
+            if it.get("type") == "vendor" and it.get("vendor_id"):
+                vid = it["vendor_id"]
+                a = agg.setdefault(vid, {"vendor_id": vid,
+                                         "vendor_name": vmap.get(vid, {}).get("name", "(vendor dihapus)"),
+                                         "qty": 0, "gross": 0, "vendor_share": 0})
+                line = it["price"] * it["qty"]
+                a["qty"] += it["qty"]
+                a["gross"] += line
+                a["vendor_share"] += it.get("vendor_total", round(line * float(it.get("vendor_share_percent") or 0) / 100, 2))
+    rows = sorted(agg.values(), key=lambda x: x["gross"], reverse=True)
+    for r in rows:
+        r["gross"] = round(r["gross"], 2)
+        r["vendor_share"] = round(r["vendor_share"], 2)
+        r["outlet_share"] = round(r["gross"] - r["vendor_share"], 2)
+    total_gross = round(sum(r["gross"] for r in rows), 2)
+    total_vendor = round(sum(r["vendor_share"] for r in rows), 2)
+    return {"label": label, "rows": rows, "total_gross": total_gross,
+            "total_vendor_share": total_vendor, "total_outlet_share": round(total_gross - total_vendor, 2)}
+
+def _vendor_report_lines(rep):
+    L = ["*Laporan Bagi Hasil Vendor - Grand Aceh Kuliner*", f"Periode: {rep['label']}", "",
+         f"Total Omzet Vendor: Rp{rep['total_gross']:,.0f}",
+         f"Total Bagi Hasil Vendor: Rp{rep['total_vendor_share']:,.0f}",
+         f"Bagian Outlet: Rp{rep['total_outlet_share']:,.0f}", ""]
+    if rep["rows"]:
+        L.append("Rincian per Vendor:")
+        for r in rep["rows"]:
+            L.append(f"- {r['vendor_name']} (x{r['qty']}): Omzet Rp{r['gross']:,.0f} -> Vendor Rp{r['vendor_share']:,.0f}")
+    else:
+        L.append("Belum ada penjualan produk vendor pada periode ini.")
+    return L
+
+@api.get("/reports/vendors")
+async def report_vendors(date_str: Optional[str] = Query(None, alias="date"),
+                         start: Optional[str] = None, end: Optional[str] = None,
+                         admin: dict = Depends(require_admin)):
+    return await _vendor_report(date_str, start, end)
+
+@api.get("/reports/vendors/export/excel")
+async def export_vendor_excel(date_str: Optional[str] = Query(None, alias="date"),
+                              start: Optional[str] = None, end: Optional[str] = None,
+                              admin: dict = Depends(require_admin)):
+    import openpyxl
+    rep = await _vendor_report(date_str, start, end)
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Bagi Hasil Vendor"
+    ws.append(["Vendor", "Qty", "Omzet", "Bagi Hasil Vendor", "Bagian Outlet"])
+    for r in rep["rows"]:
+        ws.append([r["vendor_name"], r["qty"], r["gross"], r["vendor_share"], r["outlet_share"]])
+    ws.append([])
+    ws.append(["TOTAL", "", rep["total_gross"], rep["total_vendor_share"], rep["total_outlet_share"]])
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename=bagi-hasil-vendor-{rep['label']}.xlsx"})
+
+@api.get("/reports/vendors/export/pdf")
+async def export_vendor_pdf(date_str: Optional[str] = Query(None, alias="date"),
+                            start: Optional[str] = None, end: Optional[str] = None,
+                            admin: dict = Depends(require_admin)):
+    from fpdf import FPDF
+    rep = await _vendor_report(date_str, start, end)
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", size=12)
+    for ln in _vendor_report_lines(rep):
+        txt = ln.replace("*", "").encode("latin-1", "replace").decode("latin-1")
+        pdf.multi_cell(pdf.epw, 7, txt or " ")
+    out = io.BytesIO(bytes(pdf.output()))
+    return StreamingResponse(out, media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=bagi-hasil-vendor-{rep['label']}.pdf"})
+
+class VendorWASendIn(BaseModel):
+    date: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    recipients: Optional[List[str]] = None
+
+@api.post("/reports/vendors/send-whatsapp")
+async def send_vendor_whatsapp(body: VendorWASendIn, admin: dict = Depends(require_admin)):
+    rep = await _vendor_report(body.date, body.start, body.end)
+    doc = await db.settings.find_one({"_id": "report"}) or {}
+    recips = body.recipients or doc.get("recipients", [])
+    if not recips:
+        raise HTTPException(400, "Belum ada nomor WhatsApp tujuan. Atur di 'WhatsApp & Laporan'.")
+    text = "\n".join(_vendor_report_lines(rep))
+    result = await _send_whatsapp(recips, text)
+    if not any(r.get("ok") for r in result):
+        raise HTTPException(400, f"Gagal kirim WhatsApp: {result[0].get('error') if result else 'tidak diketahui'}")
+    return {"sent": result}
 
 class ReportSettingsIn(BaseModel):
     whatsapp_enabled: bool = False

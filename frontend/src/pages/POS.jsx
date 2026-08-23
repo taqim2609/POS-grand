@@ -84,7 +84,7 @@ export default function POS() {
     api.get("/shifts/current").then((r) => setShift(r.data || null)).catch(() => setShift({ offline: true }));
   }, []);
 
-  const relevantTypes = orderType === "retail" ? ["retail"] : ["makanan", "minuman"];
+  const relevantTypes = orderType === "retail" ? ["retail"] : ["makanan", "minuman", "vendor"];
   const cats = categories.filter((c) => relevantTypes.includes(c.type));
 
   const visibleProducts = useMemo(() => {

@@ -16,6 +16,16 @@ POS hybrid F&B + retail untuk Grand Aceh Kuliner. POS komputer (web) + POS Andro
 - Struk 80mm Sunmi (JS bridge + fallback print via Blob URL, XSS-escaped).
 - Import/Export produk Excel.
 
+## Build 16 (2026-06) — Produk Tipe Vendor (Bagi Hasil / Konsinyasi)
+- Tipe produk baru "vendor": tanpa HPP, pakai bagi hasil = `vendor_share_percent`% dari OMZET (harga jual). Dijual di alur F&B (dine-in/take-away). `track_stock=False`.
+- Vendor CRUD: `/api/vendors` (GET/POST/PUT/DELETE, admin/input). Koleksi `vendors` {id,name,contact,note,active}. Hapus vendor terpakai → soft-deactivate.
+- CategoryIn.type kini termasuk "vendor" → buat kategori bertipe vendor untuk produk vendor.
+- `_resolve_items`: line item vendor simpan `vendor_id`, `vendor_share_percent`, `vendor_total` (=price*qty*share/100).
+- Laporan bagi hasil: `GET /api/reports/vendors?date=` atau `?start=&end=` (admin) → rows per vendor {qty, gross, vendor_share, outlet_share} + total. Export `/api/reports/vendors/export/excel|pdf`. WA `POST /api/reports/vendors/send-whatsapp`.
+- Frontend: Catalog tab "Vendor" (Vendors.jsx); Products.jsx form tampilkan dropdown Vendor + Bagi Hasil (%) saat type=vendor (sembunyikan HPP/stok); Settings tab "Bagi Hasil Vendor" (VendorReport.jsx) harian/rentang + Excel/PDF/Kirim WA.
+- Verified: curl (30% dari Rp20.000 = Rp6.000 vendor, Rp14.000 outlet; export xlsx/pdf 200) + screenshot UI. OTA bundle di-rebuild.
+
+
 ## Build 2 (2026-06)
 - Pengaturan AI PER-FUNGSI (Deskripsi/Gambar/Analisis): Base URL/API Key/Model masing-masing; endpoint GET/PUT /api/settings/ai; cek sisa kredit GET /api/settings/ai/credit; image gen OpenAI-compatible hanya bila dikonfigurasi (else Gemini/Emergent).
 - Ambang stok menipis per-produk (ProductIn.min_stock, default 10); Dashboard low-stock pakai ambang per-produk.
