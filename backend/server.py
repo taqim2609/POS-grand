@@ -144,9 +144,11 @@ class ProductIn(BaseModel):
     name: str
     sku: str
     category_id: str
-    type: Literal["makanan", "minuman", "retail"]
+    type: Literal["makanan", "minuman", "retail", "vendor"]
     price: float
     cost: float = 0
+    vendor_id: Optional[str] = None
+    vendor_share_percent: Optional[float] = None
     description: Optional[str] = ""
     image: Optional[str] = ""
     active: bool = True
