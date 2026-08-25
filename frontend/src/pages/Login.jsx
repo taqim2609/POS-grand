@@ -58,7 +58,7 @@ export default function Login() {
   };
 
   useEffect(() => {
-    if (user) nav("/pos");
+    if (user) nav(user.role === "admin" ? "/dashboard" : user.role === "input" ? "/products" : "/pos");
   }, [user, nav]);
 
   const submit = async (e) => {
