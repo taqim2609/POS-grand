@@ -174,59 +174,21 @@ export default function Login() {
             {loading && <Loader2 size={18} className="animate-spin" />} Masuk
           </button>
 
-          <button
-            type="button" data-testid="server-scan-btn" onClick={scan} disabled={scanning}
-            className="tap mt-4 w-full h-11 rounded-xl border-2 border-[#E63946] text-[#E63946] font-bold flex items-center justify-center gap-2 disabled:opacity-60"
-          >
-            {scanning ? <Loader2 size={16} className="animate-spin" /> : <Radar size={16} />} Cari Server Otomatis
-          </button>
-
-          <a
-            href="https://drive.google.com/drive/folders/1VC1AHHBcq2RhVV42GARB63O-Y_hrx6-I?usp=sharing"
-            target="_blank" rel="noopener noreferrer" data-testid="download-app-btn"
-            className="tap mt-3 w-full h-11 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold flex items-center justify-center gap-2 hover:bg-[#0A0A0A] hover:text-white transition-colors"
-          >
-            <Download size={16} /> Unduh Aplikasi
-          </a>
-
-          <button
-            type="button" data-testid="tailscale-toggle" onClick={() => setShowTs((v) => !v)}
-            className="tap mt-3 w-full h-11 rounded-xl border-2 border-[#2563EB] text-[#2563EB] font-bold flex items-center justify-center gap-2 hover:bg-[#2563EB] hover:text-white transition-colors"
-          >
-            <Globe size={16} /> Koneksi via Tailscale
-          </button>
-          {showTs && (
-            <div className="mt-3 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] p-3" data-testid="tailscale-panel">
-              <label className="text-xs uppercase tracking-wider font-bold text-[#1D4ED8]">Alamat Server Tailscale (Funnel)</label>
-              <input
-                data-testid="tailscale-url-input" value={tsUrl} onChange={(e) => setTsUrl(e.target.value)}
-                placeholder="https://grandpos.tailf3a839.ts.net"
-                className="w-full h-11 px-3 mt-1.5 rounded-lg border border-[#BFDBFE] bg-white text-sm font-mono outline-none focus:border-[#2563EB]"
-              />
-              <p className="text-[11px] text-[#3B82F6] mt-1.5 leading-snug">
-                Akses server toko dari luar jaringan lewat internet, tanpa memasang aplikasi Tailscale di HP. Jalankan dulu <span className="font-mono">setup-funnel-pi.sh</span> di Raspberry Pi untuk mengaktifkan Funnel.
-              </p>
-              <button
-                type="button" data-testid="tailscale-save" onClick={saveTs}
-                className="tap mt-2 w-full h-10 rounded-lg bg-[#2563EB] text-white font-bold text-sm"
-              >
-                Simpan &amp; Hubungkan
-              </button>
-              <button
-                type="button" data-testid="tailscale-test" onClick={testTs} disabled={testing}
-                className="tap mt-2 w-full h-10 rounded-lg border-2 border-[#2563EB] text-[#2563EB] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {testing ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Tes Koneksi
-              </button>
-            </div>
-          )}
-
-          <button
-            type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
-            className="mt-3 mx-auto flex items-center gap-1.5 text-xs font-bold text-[#a1a1aa] hover:text-[#52525B]"
-          >
-            <Server size={13} /> Atur Server Manual (LAN)
-          </button>
+          {/* Baris 1: Cari Server Otomatis | Atur Server Manual */}
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <button
+              type="button" data-testid="server-scan-btn" onClick={scan} disabled={scanning}
+              className="tap h-11 rounded-xl border-2 border-[#E63946] text-[#E63946] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight disabled:opacity-60"
+            >
+              {scanning ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Cari Server Otomatis
+            </button>
+            <button
+              type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
+              className="tap h-11 rounded-xl border-2 border-[#71717A] text-[#52525B] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight hover:bg-[#52525B] hover:text-white transition-colors"
+            >
+              <Server size={15} /> Atur Server Manual
+            </button>
+          </div>
           {showSrv && (
             <div className="mt-3 rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] p-3" data-testid="server-config-panel">
               <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Alamat Server</label>
@@ -247,6 +209,48 @@ export default function Login() {
               <button
                 type="button" data-testid="server-test-btn" onClick={testConn} disabled={testing}
                 className="tap mt-2 w-full h-10 rounded-lg border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {testing ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Tes Koneksi
+              </button>
+            </div>
+          )}
+
+          {/* Baris 2: Unduh Aplikasi | Koneksi via Tailscale */}
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <a
+              href="https://drive.google.com/drive/folders/1VC1AHHBcq2RhVV42GARB63O-Y_hrx6-I?usp=sharing"
+              target="_blank" rel="noopener noreferrer" data-testid="download-app-btn"
+              className="tap h-11 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight hover:bg-[#0A0A0A] hover:text-white transition-colors"
+            >
+              <Download size={15} /> Unduh Aplikasi
+            </a>
+            <button
+              type="button" data-testid="tailscale-toggle" onClick={() => setShowTs((v) => !v)}
+              className="tap h-11 rounded-xl border-2 border-[#2563EB] text-[#2563EB] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight hover:bg-[#2563EB] hover:text-white transition-colors"
+            >
+              <Globe size={15} /> Koneksi via Tailscale
+            </button>
+          </div>
+          {showTs && (
+            <div className="mt-3 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] p-3" data-testid="tailscale-panel">
+              <label className="text-xs uppercase tracking-wider font-bold text-[#1D4ED8]">Alamat Server Tailscale (Funnel)</label>
+              <input
+                data-testid="tailscale-url-input" value={tsUrl} onChange={(e) => setTsUrl(e.target.value)}
+                placeholder="https://grandpos.tailf3a839.ts.net"
+                className="w-full h-11 px-3 mt-1.5 rounded-lg border border-[#BFDBFE] bg-white text-sm font-mono outline-none focus:border-[#2563EB]"
+              />
+              <p className="text-[11px] text-[#3B82F6] mt-1.5 leading-snug">
+                Akses server toko dari luar jaringan lewat internet, tanpa memasang aplikasi Tailscale di HP. Jalankan dulu <span className="font-mono">setup-funnel-pi.sh</span> di Raspberry Pi untuk mengaktifkan Funnel.
+              </p>
+              <button
+                type="button" data-testid="tailscale-save" onClick={saveTs}
+                className="tap mt-2 w-full h-10 rounded-lg bg-[#2563EB] text-white font-bold text-sm"
+              >
+                Simpan &amp; Hubungkan
+              </button>
+              <button
+                type="button" data-testid="tailscale-test" onClick={testTs} disabled={testing}
+                className="tap mt-2 w-full h-10 rounded-lg border-2 border-[#2563EB] text-[#2563EB] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {testing ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Tes Koneksi
               </button>
