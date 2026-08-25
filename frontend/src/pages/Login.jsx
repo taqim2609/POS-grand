@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError, getServerUrl, setServerUrl, discoverServer } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail, Server, Radar } from "lucide-react";
+import { Loader2, Lock, Mail, Server, Radar, Download } from "lucide-react";
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -144,6 +144,14 @@ export default function Login() {
           >
             {scanning ? <Loader2 size={16} className="animate-spin" /> : <Radar size={16} />} Cari Server Otomatis
           </button>
+
+          <a
+            href="https://drive.google.com/drive/folders/1VC1AHHBcq2RhVV42GARB63O-Y_hrx6-I?usp=sharing"
+            target="_blank" rel="noopener noreferrer" data-testid="download-app-btn"
+            className="tap mt-3 w-full h-11 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold flex items-center justify-center gap-2 hover:bg-[#0A0A0A] hover:text-white transition-colors"
+          >
+            <Download size={16} /> Unduh Aplikasi
+          </a>
 
           <button
             type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
