@@ -175,3 +175,28 @@ Di **Android Studio**:
 
 > APK cukup dibuat 1x. Update tampilan berikutnya otomatis via OTA. Build APK lagi
 > hanya jika ada perubahan native (ganti ikon/plugin) — jarang.
+
+---
+
+## 🤖 Build Frontend Otomatis (GitHub Actions) — TIDAK PERLU `yarn build` MANUAL LAGI
+
+Sekarang repo punya robot otomatis: `.github/workflows/build-frontend.yml`.
+
+**Cara kerja:** setiap kali Anda push perubahan kode frontend (mis. lewat tombol
+"Save to Github"), GitHub akan **otomatis menjalankan `yarn build` di cloud** lalu
+**commit ulang folder `frontend/build/`** ke repo. Jadi:
+
+- ✅ Anda cukup: **edit kode → Save to Github**. Selesai.
+- ✅ Tidak perlu lagi menjalankan `yarn build` manual sebelum push.
+- ✅ Raspberry Pi tetap ringan (ambil `frontend/build/` yang sudah jadi via `./update-pi.sh`).
+- ✅ Tanpa setup apa pun — pakai token bawaan GitHub (gratis untuk repo Anda).
+
+**Alur update di Pi setelah push:**
+1. Edit kode → **Save to Github**.
+2. Tunggu ± 1–2 menit sampai tab **Actions** di GitHub selesai (centang hijau) —
+   inilah yang meng-commit `frontend/build/` terbaru.
+3. Di Pi jalankan: `cd ~/grand-aceh-pos && ./update-pi.sh`.
+
+> Catatan: jika di Pi Anda menjalankan `./update-pi.sh` TEPAT setelah push tetapi
+> SEBELUM Actions selesai, `git pull` belum berisi build terbaru. Tunggu centang
+> hijau di tab **Actions** dulu, baru jalankan `./update-pi.sh`.

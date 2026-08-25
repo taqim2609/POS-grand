@@ -1,0 +1,71 @@
+name: Build Frontend untuk Raspberry Pi
+
+# Robot ini otomatis menjalankan "yarn build" di cloud GitHub setiap kali
+# kode frontend berubah, lalu commit hasil folder frontend/build kembali ke
+# repo. Dengan begitu Anda TIDAK perlu lagi menjalankan "yarn build" manual
+# sebelum push — cukup edit kode lalu "Save to Github".
+#
+# Raspberry Pi tetap memakai frontend/build yang sudah jadi (tanpa build berat).
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      # Hanya jalan bila SUMBER frontend berubah (BUKAN saat folder build
+      # diperbarui) supaya tidak terjadi loop tak berujung.
+      - 'frontend/src/**'
+      - 'frontend/public/**'
+      - 'frontend/scripts/**'
+      - 'frontend/package.json'
+      - 'frontend/yarn.lock'
+      - 'frontend/craco.config.js'
+      - 'frontend/tailwind.config.js'
+      - 'frontend/postcss.config.js'
+      - 'frontend/jsconfig.json'
+      - 'frontend/components.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+
+      - name: Siapkan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Aktifkan corepack (yarn sesuai packageManager)
+        run: corepack enable
+
+      - name: Install dependency
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --network-timeout 600000
+
+      - name: Build produksi (prebuilt untuk Pi + bundle OTA)
+        working-directory: frontend
+        env:
+          REACT_APP_BACKEND_URL: ""
+          GENERATE_SOURCEMAP: "false"
+        run: yarn build
+
+      - name: Commit folder build bila berubah
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f frontend/build
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan pada frontend/build — lewati commit."
+          else
+            git commit -m "chore(ci): rebuild frontend/build otomatis [skip ci]"
+            git push
+          fi
