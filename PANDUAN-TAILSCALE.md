@@ -81,3 +81,40 @@ Aplikasi akan memuat ulang dan terhubung ke server toko dari mana saja. ✅
 - **Cek status koneksi** di Pi: `tailscale status`
 - Jika IP `100.x` tidak bisa diakses: pastikan Tailscale di KEDUA sisi aktif
   dan login akun yang sama; coba `ping 100.x.x.x` dari perangkat luar.
+
+---
+
+## 🌐 OPSI TANPA PASANG APLIKASI TAILSCALE DI HP — Tailscale Funnel
+
+Jika Anda ingin tablet/HP terhubung dari luar jaringan **tanpa memasang
+aplikasi Tailscale** (cukup buka lewat browser / APK POS), gunakan
+**Tailscale Funnel**. Funnel memberi server POS Anda **URL publik HTTPS**,
+mis. `https://grandpos.tailf3a839.ts.net`.
+
+> ⚠️ Konsekuensi keamanan: halaman login POS jadi bisa diakses siapa pun yang
+> tahu URL tersebut (data tetap aman karena tetap butuh login email+password).
+> Jika ingin akses terbatas ke perangkat pribadi saja, tetap pakai cara
+> Tailscale biasa di atas (HP wajib pasang Tailscale).
+
+### Langkah A — Aktifkan Funnel di Raspberry Pi (sekali saja)
+SSH ke Pi, lalu:
+```bash
+cd ~/grand-aceh-pos
+bash setup-funnel-pi.sh
+```
+Skrip akan memandu prasyarat di admin Tailscale (Enable MagicDNS + HTTPS
+Certificates, dan izin `funnel` di ACL), lalu menampilkan **URL publik** Anda.
+
+Mematikan Funnel: `sudo tailscale funnel reset`.
+
+### Langkah B — Pakai di aplikasi POS / browser
+- **Lewat browser mana pun (tanpa Tailscale):** buka langsung URL publiknya,
+  mis. `https://grandpos.tailf3a839.ts.net`.
+- **Lewat APK POS:** di halaman **Login**, ketuk tombol **"Koneksi via
+  Tailscale"** → alamat sudah terisi otomatis (`https://grandpos.tailf3a839.ts.net`)
+  → ketuk **Simpan & Hubungkan**. (Tersedia juga tombol **Tes Koneksi** untuk
+  memastikan server terjangkau sebelum login.)
+
+> Di dalam toko (LAN sama) tetap disarankan pakai alamat lokal
+> (`http://192.168.x.x` / `grandpos.local`) agar lebih cepat. URL Funnel dipakai
+> saat di luar jaringan toko.

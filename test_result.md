@@ -158,7 +158,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Role-based login redirect (admin → /dashboard, kasir → /pos, input → /products)"
+    - "Login page: tombol 'Koneksi via Tailscale' (Funnel) + panel isian URL"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -175,3 +175,24 @@ agent_communication:
 
     - agent: "testing"
       message: "All role-based logins verified working: admin->/dashboard, kasir->/pos, input->/products. No console errors. Backend APIs 200, 13 products seeded. Frontend build serves correctly. App ready."
+
+  - task: "Login page: tombol 'Koneksi via Tailscale' (Funnel) + panel isian URL"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Login.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added separate blue 'Koneksi via Tailscale' button (data-testid=tailscale-toggle) that opens a panel (tailscale-panel) with URL input (tailscale-url-input) prefilled to https://grandpos.tailf3a839.ts.net, plus 'Simpan & Hubungkan' (tailscale-save) and 'Tes Koneksi' (tailscale-test). Also added Google Drive 'Unduh Aplikasi' anchor (download-app-btn). Verify panel opens + prefill + buttons render. Do NOT click Save (it reloads to a non-reachable ts.net server and would persist a bad URL). Clicking 'Tes Koneksi' should show an error toast (funnel not active in preview) — that is acceptable/expected."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL CHECKS PASSED. (1) 'Unduh Aplikasi' button: Confirmed as <a> tag with href='https://drive.google.com/drive/folders/1VC1AHHBcq2RhVV42GARB63O-Y_hrx6-I?usp=sharing' pointing to Google Drive folder. (2) 'Koneksi via Tailscale' button: Present with blue border (border-2 border-[#2563EB]), toggles panel correctly. (3) Tailscale panel (data-testid=tailscale-panel): Opens/closes on toggle, contains all required elements. (4) URL input (data-testid=tailscale-url-input): PREFILLED with EXACT value 'https://grandpos.tailf3a839.ts.net'. (5) 'Simpan & Hubungkan' button (data-testid=tailscale-save): Present, NOT clicked as instructed. (6) 'Tes Koneksi' button (data-testid=tailscale-test): Present and functional, clicked to test wiring - error toast appeared as EXPECTED ('Gagal menghubungi https://grandpos.tailf3a839.ts.net: Failed to fetch. Pastikan Funnel aktif di Pi & URL benar.') because Tailscale Funnel is not active in preview environment. localStorage cleanup completed. No unexpected console errors. Implementation is correct and complete."
+
+agent_communication:
+    - agent: "main"
+      message: "New frontend additions on Login page. Please verify: (1) blue button 'Koneksi via Tailscale' exists and, when clicked, reveals a panel with a URL input PREFILLED to 'https://grandpos.tailf3a839.ts.net' and two buttons ('Simpan & Hubungkan', 'Tes Koneksi'). (2) The 'Unduh Aplikasi' button is an anchor pointing to the Google Drive folder URL. IMPORTANT: do NOT click 'Simpan & Hubungkan' (it persists a dead server URL to localStorage and reloads). If you must test wiring, click 'Tes Koneksi' (an error toast is expected since Funnel isn't active in preview), and afterwards clear localStorage key 'gak_server_url' so login still works. Do not fix anything—just report."
+    - agent: "testing"
+      message: "✅ VERIFICATION COMPLETE: Both new login page additions working perfectly. (1) 'Koneksi via Tailscale' blue button toggles panel correctly, URL input prefilled with exact value 'https://grandpos.tailf3a839.ts.net', both 'Simpan & Hubungkan' and 'Tes Koneksi' buttons present and functional. 'Tes Koneksi' shows expected error toast (Funnel not active). (2) 'Unduh Aplikasi' is anchor tag with correct Google Drive href. All data-testids present. No fixes needed - implementation is correct and complete."

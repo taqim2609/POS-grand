@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError, getServerUrl, setServerUrl, discoverServer } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail, Server, Radar, Download } from "lucide-react";
+import { Loader2, Lock, Mail, Server, Radar, Download, Globe } from "lucide-react";
+
+const TAILSCALE_FUNNEL_URL = "https://grandpos.tailf3a839.ts.net";
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -13,6 +15,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showSrv, setShowSrv] = useState(false);
   const [srv, setSrv] = useState(getServerUrl());
+  const [showTs, setShowTs] = useState(false);
+  const [tsUrl, setTsUrl] = useState(() => {
+    const cur = getServerUrl();
+    return cur && cur.includes(".ts.net") ? cur : TAILSCALE_FUNNEL_URL;
+  });
   const [scanning, setScanning] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -35,6 +42,35 @@ export default function Login() {
     setServerUrl(srv);
     toast.success("Alamat server disimpan. Memuat ulang...");
     setTimeout(() => window.location.reload(), 700);
+  };
+
+  const saveTs = () => {
+    const url = (tsUrl || "").trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/.+/.test(url)) {
+      toast.error("Alamat Tailscale harus diawali https:// (mis. https://grandpos.tailf3a839.ts.net)");
+      return;
+    }
+    setServerUrl(url);
+    setSrv(url);
+    toast.success("Terhubung via Tailscale. Memuat ulang...");
+    setTimeout(() => window.location.reload(), 700);
+  };
+
+  const testTs = async () => {
+    const base = (tsUrl || "").trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/.+/.test(base)) { toast.error("Isi alamat Tailscale yang benar dulu (https://...)"); return; }
+    setTesting(true);
+    const t = toast.loading(`Menghubungi ${base} ...`);
+    try {
+      const res = await fetch(`${base}/api/health`);
+      const txt = await res.text();
+      if (res.ok && txt.includes("gak-pos")) toast.success("Server Tailscale terhubung! ✅ Silakan login.", { id: t, duration: 6000 });
+      else toast.error(`Server menjawab tapi tidak dikenal (HTTP ${res.status}).`, { id: t, duration: 8000 });
+    } catch (e) {
+      toast.error(`Gagal menghubungi ${base}: ${e.message}. Pastikan Funnel aktif di Pi & URL benar.`, { id: t, duration: 9000 });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const scan = async () => {
@@ -152,6 +188,38 @@ export default function Login() {
           >
             <Download size={16} /> Unduh Aplikasi
           </a>
+
+          <button
+            type="button" data-testid="tailscale-toggle" onClick={() => setShowTs((v) => !v)}
+            className="tap mt-3 w-full h-11 rounded-xl border-2 border-[#2563EB] text-[#2563EB] font-bold flex items-center justify-center gap-2 hover:bg-[#2563EB] hover:text-white transition-colors"
+          >
+            <Globe size={16} /> Koneksi via Tailscale
+          </button>
+          {showTs && (
+            <div className="mt-3 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] p-3" data-testid="tailscale-panel">
+              <label className="text-xs uppercase tracking-wider font-bold text-[#1D4ED8]">Alamat Server Tailscale (Funnel)</label>
+              <input
+                data-testid="tailscale-url-input" value={tsUrl} onChange={(e) => setTsUrl(e.target.value)}
+                placeholder="https://grandpos.tailf3a839.ts.net"
+                className="w-full h-11 px-3 mt-1.5 rounded-lg border border-[#BFDBFE] bg-white text-sm font-mono outline-none focus:border-[#2563EB]"
+              />
+              <p className="text-[11px] text-[#3B82F6] mt-1.5 leading-snug">
+                Akses server toko dari luar jaringan lewat internet, tanpa memasang aplikasi Tailscale di HP. Jalankan dulu <span className="font-mono">setup-funnel-pi.sh</span> di Raspberry Pi untuk mengaktifkan Funnel.
+              </p>
+              <button
+                type="button" data-testid="tailscale-save" onClick={saveTs}
+                className="tap mt-2 w-full h-10 rounded-lg bg-[#2563EB] text-white font-bold text-sm"
+              >
+                Simpan &amp; Hubungkan
+              </button>
+              <button
+                type="button" data-testid="tailscale-test" onClick={testTs} disabled={testing}
+                className="tap mt-2 w-full h-10 rounded-lg border-2 border-[#2563EB] text-[#2563EB] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {testing ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Tes Koneksi
+              </button>
+            </div>
+          )}
 
           <button
             type="button" data-testid="server-config-toggle" onClick={() => setShowSrv((v) => !v)}
