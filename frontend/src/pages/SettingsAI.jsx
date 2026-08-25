@@ -39,7 +39,7 @@ export default function SettingsAI() {
         <div className="text-sm">
           <div className="font-extrabold">Peringatan Keamanan &amp; Biaya</div>
           API Key disimpan di server aplikasi ini dan dipakai untuk memanggil penyedia AI Anda. Jangan bagikan key ke pihak lain.
-          Setiap permintaan AI dapat mengurangi saldo/kredit di akun penyedia Anda — pantau lewat tombol "Cek Sisa Kredit".
+          Setiap permintaan AI dapat mengurangi saldo/kredit di akun penyedia Anda — pantau lewat tombol Cek Sisa Kredit.
           Kosongkan kolom API Key jika tidak ingin mengubah key yang sudah tersimpan.
         </div>
       </div>
@@ -56,6 +56,7 @@ export default function SettingsAI() {
 function FeatureCard({ featKey, data, onSaved }) {
   const meta = FEATURE_META[featKey];
   const Icon = meta.icon;
+  const [provider, setProvider] = useState(data.provider || "gemini");
   const [form, setForm] = useState({ base_url: data.base_url || "", model: data.model || "", api_key: "" });
   const [saving, setSaving] = useState(false);
   const [credit, setCredit] = useState(null);
@@ -63,11 +64,18 @@ function FeatureCard({ featKey, data, onSaved }) {
   const [models, setModels] = useState([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
+  const isGemini = provider === "gemini";
+  const pickProvider = (p) => {
+    setProvider(p);
+    if (p === "chenzk" && !form.base_url.trim()) setForm((f) => ({ ...f, base_url: "https://chenzk.top/v1" }));
+  };
+
   const save = async () => {
-    if (!form.base_url.trim()) return toast.error("Base URL wajib diisi");
+    if (!isGemini && !form.base_url.trim()) return toast.error("Base URL wajib diisi untuk chenzk");
     setSaving(true);
     try {
-      const payload = { feature: featKey, base_url: form.base_url.trim(), model: form.model.trim() };
+      const payload = { feature: featKey, provider, model: form.model.trim() };
+      if (!isGemini) payload.base_url = form.base_url.trim();
       if (form.api_key.trim()) payload.api_key = form.api_key.trim();
       await api.put("/settings/ai", payload);
       toast.success(`Pengaturan "${meta.label}" tersimpan`);
@@ -102,22 +110,40 @@ function FeatureCard({ featKey, data, onSaved }) {
           {data.api_key_set ? `Key aktif ${data.api_key_last4}` : "Belum ada key"}
         </span>
       </div>
-      <p className="text-xs text-[#52525B] mb-4">{meta.hint}</p>
+      <p className="text-xs text-[#52525B] mb-3">{meta.hint}</p>
+
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <button type="button" data-testid={`provider-gemini-${featKey}`} onClick={() => pickProvider("gemini")}
+          className={`tap h-11 rounded-xl border-2 font-bold flex items-center justify-center gap-2 transition-colors ${isGemini ? "bg-[#2563EB] border-[#2563EB] text-white" : "border-[#BFDBFE] text-[#2563EB] hover:bg-[#EFF6FF]"}`}>
+          <Sparkles size={16} /> Gemini AI
+        </button>
+        <button type="button" data-testid={`provider-chenzk-${featKey}`} onClick={() => pickProvider("chenzk")}
+          className={`tap h-11 rounded-xl border-2 font-bold flex items-center justify-center gap-2 transition-colors ${!isGemini ? "bg-[#0A0A0A] border-[#0A0A0A] text-white" : "border-[#D4D4D8] text-[#0A0A0A] hover:bg-[#FAFAFA]"}`}>
+          <Cpu size={16} /> chenzk
+        </button>
+      </div>
 
       <div className="space-y-3">
-        <Field label="Base URL" icon={Link2}>
-          <input data-testid={`ai-base-url-${featKey}`} value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })}
-            placeholder="https://api.contoh.com/v1" className="w-full h-11 rounded-xl border px-3 font-num" />
-          <button type="button" data-testid={`preset-google-${featKey}`}
-            onClick={() => setForm({ ...form, base_url: "https://generativelanguage.googleapis.com/v1beta/openai" })}
-            className="mt-1.5 text-[11px] font-bold text-[#E63946] hover:underline">
-            + Pakai endpoint Google Gemini
-          </button>
-        </Field>
+        {!isGemini && (
+          <Field label="Base URL" icon={Link2}>
+            <input data-testid={`ai-base-url-${featKey}`} value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+              placeholder="https://chenzk.top/v1" className="w-full h-11 rounded-xl border px-3 font-num" />
+            <button type="button" data-testid={`preset-chenzk-${featKey}`}
+              onClick={() => setForm({ ...form, base_url: "https://chenzk.top/v1" })}
+              className="mt-1.5 text-[11px] font-bold text-[#E63946] hover:underline">
+              + Pakai endpoint chenzk (ezkielyna.store)
+            </button>
+          </Field>
+        )}
+        {isGemini && (
+          <p className="text-[11px] text-[#2563EB] bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg px-3 py-2">
+            Mode Gemini memakai kunci Gemini bawaan server (endpoint resmi Google). Kosongkan API Key untuk memakai kunci default, atau isi untuk memakai kunci Gemini Anda sendiri.
+          </p>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Model" icon={Cpu}>
             <input data-testid={`ai-model-${featKey}`} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}
-              list={`models-${featKey}`} placeholder={meta.modelPh} className="w-full h-11 rounded-xl border px-3 font-num" />
+              list={`models-${featKey}`} placeholder={isGemini ? "gemini-flash-latest" : meta.modelPh} className="w-full h-11 rounded-xl border px-3 font-num" />
             <datalist id={`models-${featKey}`}>
               {models.map((m) => <option key={m} value={m} />)}
             </datalist>
@@ -149,14 +175,18 @@ function FeatureCard({ featKey, data, onSaved }) {
           className="tap flex-1 min-w-[140px] h-12 rounded-xl bg-[#E63946] hover:bg-[#BE123C] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
           {saving ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />} Simpan
         </button>
-        <button data-testid={`credit-ai-${featKey}`} onClick={checkCredit} disabled={checking}
-          className="tap h-12 px-4 rounded-xl bg-[#0A0A0A] hover:bg-[#27272A] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-          {checking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Cek Sisa Kredit
-        </button>
-        <button data-testid={`load-models-${featKey}`} onClick={loadModels} disabled={loadingModels}
-          className="tap h-12 px-4 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-          {loadingModels ? <Loader2 size={16} className="animate-spin" /> : <Cpu size={16} />} Muat Model
-        </button>
+        {!isGemini && (
+          <>
+            <button data-testid={`credit-ai-${featKey}`} onClick={checkCredit} disabled={checking}
+              className="tap h-12 px-4 rounded-xl bg-[#0A0A0A] hover:bg-[#27272A] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+              {checking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Cek Sisa Kredit
+            </button>
+            <button data-testid={`load-models-${featKey}`} onClick={loadModels} disabled={loadingModels}
+              className="tap h-12 px-4 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+              {loadingModels ? <Loader2 size={16} className="animate-spin" /> : <Cpu size={16} />} Muat Model
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

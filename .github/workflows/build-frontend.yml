@@ -54,6 +54,7 @@ jobs:
       - name: Build produksi (prebuilt untuk Pi + bundle OTA)
         working-directory: frontend
         env:
+          CI: "false"
           REACT_APP_BACKEND_URL: ""
           GENERATE_SOURCEMAP: "false"
         run: yarn build

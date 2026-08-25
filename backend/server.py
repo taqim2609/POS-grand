@@ -34,6 +34,8 @@ GEMINI_IMAGE_MODEL = os.environ.get('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-imag
 OPENAI_COMPAT_BASE_URL = os.environ.get('OPENAI_COMPAT_BASE_URL')
 OPENAI_COMPAT_API_KEY = os.environ.get('OPENAI_COMPAT_API_KEY')
 OPENAI_COMPAT_MODEL = os.environ.get('OPENAI_COMPAT_MODEL') or 'gpt-4o-mini'
+CHENZK_BASE_URL = "https://chenzk.top/v1"  # default base url provider "chenzk" (ezkielyna.store)
+GEMINI_REST_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 app = FastAPI(title="Grand Aceh Kuliner POS")
 api = APIRouter(prefix="/api")
@@ -1137,7 +1139,7 @@ def _get_chat(session, system, model):
     from emergentintegrations.llm.chat import LlmChat
     return LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session, system_message=system).with_model("gemini", model)
 
-AI_FEATURES = {"description": "Deskripsi Produk", "image": "Gambar Produk", "summary": "Analisis Laporan", "vision": "Baca Faktur (Vision)"}
+AI_FEATURES = {"description": "Deskripsi Produk", "image": "Gambar Produk", "summary": "Analisis Laporan", "vision": "Baca Faktur (Vision)", "assistant": "Asisten Admin"}
 
 async def _ai_cfg(feature="description"):
     """Per-feature AI provider config: DB settings (editable in UI) override .env.
@@ -1150,42 +1152,82 @@ async def _ai_cfg(feature="description"):
         "model": feat.get("model") or doc.get("openai_model") or OPENAI_COMPAT_MODEL,
     }
 
-async def _gemini_text(system, prompt, feature="description"):
-    """Text via OpenAI-compatible provider if configured, else user's Gemini key, else Emergent."""
-    cfg = await _ai_cfg(feature)
-    if cfg["api_key"] and cfg["base_url"]:
+async def _ai_provider_cfg(feature="description"):
+    """Resolve which provider ('gemini' | 'chenzk') to use for a feature and its creds."""
+    doc = await db.settings.find_one({"_id": "ai"}) or {}
+    feat = (doc.get("features", {}) or {}).get(feature, {}) or {}
+    provider = feat.get("provider")
+    if not provider:
+        # Infer for backward-compat: OpenAI-compatible creds present -> chenzk, else gemini.
+        if feat.get("api_key") and (feat.get("base_url") or OPENAI_COMPAT_BASE_URL):
+            provider = "chenzk"
+        else:
+            provider = "gemini"
+    if provider == "gemini":
+        return {"provider": "gemini",
+                "api_key": feat.get("api_key") or GEMINI_API_KEY,
+                "model": feat.get("model") or GEMINI_TEXT_MODEL}
+    return {"provider": "chenzk",
+            "base_url": (feat.get("base_url") or doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL or CHENZK_BASE_URL),
+            "api_key": feat.get("api_key") or doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY,
+            "model": feat.get("model") or doc.get("openai_model") or OPENAI_COMPAT_MODEL}
+
+async def _ai_chat(messages, system="", feature="description", temperature=0.5, max_tokens=4000):
+    """Unified text chat across providers. `messages`=[{role:'user'|'assistant',content:str}].
+    Routes to Gemini REST (X-goog-api-key) or chenzk (OpenAI-compatible), else Emergent fallback."""
+    cfg = await _ai_provider_cfg(feature)
+    if cfg["provider"] == "gemini" and cfg.get("api_key"):
+        import httpx
+        model = cfg["model"] or GEMINI_TEXT_MODEL
+        contents = []
+        for m in messages:
+            role = "model" if m.get("role") == "assistant" else "user"
+            contents.append({"role": role, "parts": [{"text": str(m.get("content", ""))}]})
+        payload = {"contents": contents,
+                   "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}}
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+        url = f"{GEMINI_REST_URL}/{model}:generateContent"
+        try:
+            async with httpx.AsyncClient(timeout=60) as c:
+                r = await c.post(url, headers={"Content-Type": "application/json", "X-goog-api-key": cfg["api_key"]}, json=payload)
+        except Exception as e:
+            raise HTTPException(400, f"Gagal menghubungi Gemini: {e}")
+        if r.status_code != 200:
+            raise HTTPException(400, f"Gemini menolak permintaan (HTTP {r.status_code}): {r.text[:200]}")
+        data = r.json()
+        try:
+            parts = data["candidates"][0]["content"]["parts"]
+            return "".join(p.get("text", "") for p in parts).strip()
+        except Exception:
+            raise HTTPException(400, "Gemini tidak mengembalikan teks. Coba lagi atau ganti model.")
+    if cfg["provider"] == "chenzk" and cfg.get("api_key") and cfg.get("base_url"):
         from openai import OpenAI
+        msgs = ([{"role": "system", "content": system}] if system else []) + \
+               [{"role": ("assistant" if m.get("role") == "assistant" else "user"), "content": str(m.get("content", ""))} for m in messages]
 
         def run():
             client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
-            r = client.chat.completions.create(
-                model=cfg["model"],
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-                temperature=0.5, max_tokens=4000,
-            )
+            r = client.chat.completions.create(model=cfg["model"], messages=msgs,
+                                               temperature=temperature, max_tokens=max_tokens)
             msg = r.choices[0].message
             content = (msg.content or "").strip()
-            if not content:  # some reasoning models return text in reasoning_content
+            if not content:
                 content = (getattr(msg, "reasoning_content", "") or "").strip()
             return content
         return await asyncio.to_thread(run)
-    if GEMINI_API_KEY:
-        from google import genai
-        from google.genai import types
-
-        def run():
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            r = client.models.generate_content(
-                model=GEMINI_TEXT_MODEL, contents=f"{system}\n\n{prompt}",
-                config=types.GenerateContentConfig(temperature=0.5, max_output_tokens=800),
-            )
-            return (r.text or "").strip()
-        return await asyncio.to_thread(run)
+    # Fallback: Emergent universal key (single-turn only)
     if not EMERGENT_LLM_KEY:
-        raise HTTPException(400, "AI belum dikonfigurasi. Isi API key & endpoint provider Anda di Pengaturan AI.")
+        raise HTTPException(400, "AI belum dikonfigurasi. Pilih provider (Gemini/chenzk) dan isi API key di Pengaturan AI.")
     from emergentintegrations.llm.chat import UserMessage
     chat = _get_chat(new_id(), system, "gemini-2.5-flash")
-    return (await chat.send_message(UserMessage(text=prompt))).strip()
+    last = messages[-1]["content"] if messages else ""
+    return (await chat.send_message(UserMessage(text=last))).strip()
+
+async def _gemini_text(system, prompt, feature="description"):
+    """Text generation for description/summary — routes via unified provider chat."""
+    return await _ai_chat([{"role": "user", "content": prompt}], system=system, feature=feature,
+                          temperature=0.5, max_tokens=800 if feature == "description" else 4000)
 
 async def _gemini_image(prompt):
     """Image via OpenAI-compatible image endpoint (only when explicitly configured for 'image'),
@@ -1398,7 +1440,8 @@ async def admin_update(admin: dict = Depends(require_admin)):
 
 
 class AISettingsIn(BaseModel):
-    feature: Literal["description", "image", "summary"]
+    feature: Literal["description", "image", "summary", "vision", "assistant"]
+    provider: Optional[Literal["gemini", "chenzk"]] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
@@ -1415,23 +1458,31 @@ async def get_ai_settings(admin: dict = Depends(require_admin)):
     out = {}
     for key, label in AI_FEATURES.items():
         f = feats.get(key, {}) or {}
-        if key == "image":
-            # Image generation only activates with explicit per-feature config;
-            # never fall back to the legacy/env text model (not a valid image model).
-            akey = f.get("api_key")
-            base = f.get("base_url") or ""
-            model = f.get("model") or ""
-        else:
-            akey = f.get("api_key") or doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY
-            base = f.get("base_url") or doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL or ""
-            model = f.get("model") or doc.get("openai_model") or (OPENAI_COMPAT_MODEL if akey else "") or ""
-        out[key] = {"label": label, "base_url": base, "model": model,
+        provider = f.get("provider")
+        if not provider:
+            provider = "chenzk" if (f.get("api_key") and (f.get("base_url") or OPENAI_COMPAT_BASE_URL)) else "gemini"
+        if provider == "gemini":
+            akey = f.get("api_key") or GEMINI_API_KEY
+            base = ""
+            model = f.get("model") or (GEMINI_IMAGE_MODEL if key == "image" else GEMINI_TEXT_MODEL)
+        else:  # chenzk / OpenAI-compatible
+            if key == "image":
+                akey = f.get("api_key")
+                base = f.get("base_url") or CHENZK_BASE_URL
+                model = f.get("model") or ""
+            else:
+                akey = f.get("api_key") or doc.get("openai_api_key") or OPENAI_COMPAT_API_KEY
+                base = f.get("base_url") or doc.get("openai_base_url") or OPENAI_COMPAT_BASE_URL or CHENZK_BASE_URL
+                model = f.get("model") or doc.get("openai_model") or (OPENAI_COMPAT_MODEL if akey else "") or ""
+        out[key] = {"label": label, "provider": provider, "base_url": base, "model": model,
                     "api_key_set": bool(akey), "api_key_last4": _mask_key(akey)}
     return {"features": out}
 
 @api.put("/settings/ai")
 async def put_ai_settings(body: AISettingsIn, admin: dict = Depends(require_admin)):
     upd = {}
+    if body.provider is not None:
+        upd[f"features.{body.feature}.provider"] = body.provider
     if body.base_url is not None:
         upd[f"features.{body.feature}.base_url"] = body.base_url.strip()
     if body.model is not None:
@@ -1497,6 +1548,199 @@ async def ai_credit(feature: str = "description", admin: dict = Depends(require_
                     "remaining": round(float(total) - used, 2), "currency": "USD"}
     except Exception as e:
         return {"available": False, "message": f"Gagal cek kredit: {e}"}
+
+# ---------------------------------------------------------------- AI ADMIN ASSISTANT
+class AIAssistantChatIn(BaseModel):
+    session_id: Optional[str] = None
+    message: str
+
+class AIAssistantApplyIn(BaseModel):
+    action: dict
+
+ASSISTANT_SYSTEM = (
+    "Anda adalah 'Asisten Admin' untuk aplikasi kasir/POS 'Grand Aceh Kuliner'. "
+    "Bahasa jawaban: Indonesia, ringkas, ramah, dan praktis. "
+    "Anda membantu admin mengelola: produk, kategori, vendor, harga, diskon, dan metode pembayaran. "
+    "Jika admin hanya bertanya/minta saran, jawab biasa TANPA blok aksi. "
+    "Jika admin meminta PERUBAHAN DATA, jelaskan singkat lalu sertakan TEPAT SATU blok aksi berformat: "
+    "<ACTION>{\"type\":\"...\", ...}</ACTION> berisi JSON valid (tanpa komentar). "
+    "Jenis aksi yang didukung beserta field-nya:\n"
+    "1) create_category: {\"type\":\"create_category\",\"name\":str,\"kind\":\"makanan|minuman|retail|vendor\"}\n"
+    "2) create_vendor: {\"type\":\"create_vendor\",\"name\":str,\"contact\":str?,\"note\":str?}\n"
+    "3) create_payment_method: {\"type\":\"create_payment_method\",\"name\":str,\"pm_type\":\"cash|qris|card\"}\n"
+    "4) create_product: {\"type\":\"create_product\",\"name\":str,\"price\":number,\"kind\":\"makanan|minuman|retail|vendor\",\"category_name\":str,\"cost\":number?,\"stock\":number?,\"sku\":str?,\"description\":str?,\"vendor_name\":str?}\n"
+    "5) update_product: {\"type\":\"update_product\",\"name\":str,\"price\":number?,\"cost\":number?,\"stock\":number?,\"sold_out\":bool?,\"active\":bool?,\"description\":str?}\n"
+    "Catatan: DISKON di sistem ini bersifat per-transaksi (diterapkan kasir saat bayar), bukan data master; "
+    "untuk diskon berikan SARAN saja, jangan membuat blok aksi. "
+    "Gunakan KONTEKS DATA untuk mencocokkan nama kategori/vendor yang sudah ada dan hindari duplikat. "
+    "Jangan mengarang id. Selalu konfirmasi bahwa admin akan menekan tombol 'Terapkan' untuk mengeksekusi."
+)
+
+async def _assistant_context():
+    cats = await db.categories.find({}, {"_id": 0, "name": 1, "type": 1, "active": 1}).to_list(500)
+    vendors = await db.vendors.find({}, {"_id": 0, "name": 1}).sort("name", 1).to_list(500)
+    pms = await db.payment_methods.find({}, {"_id": 0, "name": 1, "type": 1}).to_list(100)
+    pcount = await db.products.count_documents({})
+    return {
+        "kategori": [{"nama": c.get("name"), "tipe": c.get("type")} for c in cats],
+        "vendor": [v.get("name") for v in vendors],
+        "metode_pembayaran": [{"nama": p.get("name"), "tipe": p.get("type")} for p in pms],
+        "jumlah_produk": pcount,
+    }
+
+def _parse_action(text):
+    import json, re
+    m = re.search(r"<ACTION>\s*(\{.*?\})\s*</ACTION>", text or "", re.S)
+    if not m:
+        return None, (text or "").strip()
+    try:
+        action = json.loads(m.group(1))
+    except Exception:
+        return None, (text or "").strip()
+    clean = ((text[:m.start()] + text[m.end():]) or "").strip()
+    return action, clean
+
+def _to_num(v, default=0.0):
+    if isinstance(v, (int, float)):
+        return float(v)
+    import re as _r
+    s = _r.sub(r"[^0-9.\-]", "", str(v or ""))
+    try:
+        return float(s) if s not in ("", "-", ".") else float(default)
+    except Exception:
+        return float(default)
+
+def _slug_sku(name):
+    import re as _r
+    base = _r.sub(r"[^A-Za-z0-9]+", "-", (name or "").upper()).strip("-")[:12] or "SKU"
+    return f"{base}-{new_id()[:4].upper()}"
+
+@api.post("/ai/assistant/chat")
+async def assistant_chat(body: AIAssistantChatIn, admin: dict = Depends(require_admin)):
+    import json
+    if not (body.message or "").strip():
+        raise HTTPException(400, "Pesan kosong")
+    sid = body.session_id or new_id()
+    sess = await db.ai_assistant_sessions.find_one({"id": sid}) or {"id": sid, "messages": []}
+    history = sess.get("messages", [])
+    ctx = await _assistant_context()
+    system = ASSISTANT_SYSTEM + "\n\nKONTEKS DATA SAAT INI:\n" + json.dumps(ctx, ensure_ascii=False)
+    msgs = history + [{"role": "user", "content": body.message}]
+    reply = await _ai_chat(msgs, system=system, feature="assistant", temperature=0.3, max_tokens=1500)
+    action, clean = _parse_action(reply)
+    history = (history + [{"role": "user", "content": body.message},
+                          {"role": "assistant", "content": reply}])[-20:]
+    await db.ai_assistant_sessions.update_one({"id": sid},
+        {"$set": {"id": sid, "messages": history, "updated_at": now_utc().isoformat()}}, upsert=True)
+    return {"session_id": sid, "reply": clean or "(tidak ada balasan)", "action": action}
+
+async def _resolve_or_create_category(name, kind):
+    kind = kind if kind in ("makanan", "minuman", "retail", "vendor") else "retail"
+    name = (name or "").strip() or "Umum"
+    cat = await db.categories.find_one({"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "type": kind})
+    if cat:
+        return cat["id"], False
+    doc = {"id": new_id(), "name": name, "type": kind, "sort_order": 0, "active": True,
+           "created_at": now_utc().isoformat()}
+    await db.categories.insert_one(doc)
+    return doc["id"], True
+
+@api.post("/ai/assistant/apply")
+async def assistant_apply(body: AIAssistantApplyIn, admin: dict = Depends(require_admin)):
+    a = body.action or {}
+    t = a.get("type")
+    if t == "create_category":
+        name = (a.get("name") or "").strip()
+        kind = a.get("kind") if a.get("kind") in ("makanan", "minuman", "retail", "vendor") else "retail"
+        if not name:
+            raise HTTPException(400, "Nama kategori wajib diisi")
+        if await db.categories.find_one({"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "type": kind}):
+            raise HTTPException(400, f"Kategori '{name}' ({kind}) sudah ada")
+        doc = {"id": new_id(), "name": name, "type": kind, "sort_order": 0, "active": True,
+               "created_at": now_utc().isoformat()}
+        await db.categories.insert_one(doc)
+        return {"ok": True, "message": f"Kategori '{name}' ({kind}) dibuat.", "entity": "category"}
+
+    if t == "create_vendor":
+        name = (a.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, "Nama vendor wajib diisi")
+        if await db.vendors.find_one({"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}):
+            raise HTTPException(400, f"Vendor '{name}' sudah ada")
+        doc = {"id": new_id(), "name": name, "contact": str(a.get("contact") or ""),
+               "note": str(a.get("note") or ""), "active": True, "created_at": now_utc().isoformat()}
+        await db.vendors.insert_one(doc)
+        return {"ok": True, "message": f"Vendor '{name}' dibuat.", "entity": "vendor"}
+
+    if t == "create_payment_method":
+        name = (a.get("name") or "").strip()
+        pm_type = a.get("pm_type") if a.get("pm_type") in ("cash", "qris", "card") else "cash"
+        if not name:
+            raise HTTPException(400, "Nama metode pembayaran wajib diisi")
+        if await db.payment_methods.find_one({"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}):
+            raise HTTPException(400, f"Metode pembayaran '{name}' sudah ada")
+        doc = {"id": new_id(), "name": name, "type": pm_type, "active": True}
+        await db.payment_methods.insert_one(doc)
+        return {"ok": True, "message": f"Metode pembayaran '{name}' ({pm_type}) dibuat.", "entity": "payment_method"}
+
+    if t == "create_product":
+        name = (a.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, "Nama produk wajib diisi")
+        price = _to_num(a.get("price"), 0)
+        cost = _to_num(a.get("cost"), 0)
+        if price < 0 or cost < 0:
+            raise HTTPException(400, "Harga/HPP tidak boleh negatif")
+        kind = a.get("kind") if a.get("kind") in ("makanan", "minuman", "retail", "vendor") else "retail"
+        cat_id, cat_created = await _resolve_or_create_category(a.get("category_name") or "Umum", kind)
+        sku = (a.get("sku") or "").strip() or _slug_sku(name)
+        if await db.products.find_one({"sku": sku}):
+            sku = _slug_sku(name)
+        vendor_id = None
+        if a.get("vendor_name"):
+            v = await db.vendors.find_one({"name": {"$regex": f"^{re.escape(str(a.get('vendor_name')).strip())}$", "$options": "i"}})
+            vendor_id = v["id"] if v else None
+        doc = {"id": new_id(), "name": name, "sku": sku, "category_id": cat_id, "type": kind,
+               "price": price, "cost": cost, "vendor_id": vendor_id, "vendor_share_percent": None,
+               "description": str(a.get("description") or ""), "image": "", "active": True,
+               "sold_out": False, "stock": int(_to_num(a.get("stock"), 0)), "min_stock": 10,
+               "track_stock": kind == "retail", "created_at": now_utc().isoformat()}
+        await db.products.insert_one(doc)
+        extra = " (kategori baru dibuat)" if cat_created else ""
+        return {"ok": True, "message": f"Produk '{name}' (SKU {sku}, Rp {int(price):,}) dibuat{extra}.".replace(",", "."),
+                "entity": "product"}
+
+    if t == "update_product":
+        name = (a.get("name") or a.get("sku") or "").strip()
+        if not name:
+            raise HTTPException(400, "Sebutkan nama/SKU produk yang akan diubah")
+        p = await db.products.find_one({"$or": [
+            {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+            {"sku": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}]})
+        if not p:
+            raise HTTPException(404, f"Produk '{name}' tidak ditemukan")
+        upd = {}
+        if a.get("price") is not None:
+            upd["price"] = _to_num(a.get("price"))
+        if a.get("cost") is not None:
+            upd["cost"] = _to_num(a.get("cost"))
+        if a.get("stock") is not None:
+            upd["stock"] = int(_to_num(a.get("stock")))
+        if a.get("sold_out") is not None:
+            upd["sold_out"] = bool(a.get("sold_out"))
+        if a.get("active") is not None:
+            upd["active"] = bool(a.get("active"))
+        if a.get("description") is not None:
+            upd["description"] = str(a.get("description"))
+        if upd.get("price", 0) < 0 or upd.get("cost", 0) < 0:
+            raise HTTPException(400, "Harga/HPP tidak boleh negatif")
+        if not upd:
+            raise HTTPException(400, "Tidak ada perubahan untuk diterapkan")
+        await db.products.update_one({"id": p["id"]}, {"$set": upd})
+        changed = ", ".join(f"{k}={v}" for k, v in upd.items())
+        return {"ok": True, "message": f"Produk '{p['name']}' diperbarui ({changed}).", "entity": "product"}
+
+    raise HTTPException(400, f"Jenis aksi tidak didukung: {t}")
 
 import json as _json, re as _re
 

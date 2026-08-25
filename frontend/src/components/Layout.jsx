@@ -55,6 +55,7 @@ const NAV = [
   { to: "/catalog", label: "Produk & Stok", icon: Package, roles: ["admin", "input"] },
   { to: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin"] },
   { to: "/tanya-ai", label: "Tanya AI", icon: Bot, roles: ["admin"] },
+  { to: "/asisten-ai", label: "Asisten AI", icon: Sparkles, roles: ["admin"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/device", label: "Perangkat", icon: Printer, roles: ["kasir", "input"] },
   { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
