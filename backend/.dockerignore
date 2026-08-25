@@ -1,7 +1,0 @@
-.env
-.env.*
-!.env.docker
-__pycache__/
-*.pyc
-uploads/
-.pytest_cache/

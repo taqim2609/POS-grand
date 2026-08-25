@@ -1,8 +1,0 @@
-crons:
-  - name: daily-report-wa
-    description: "Kirim laporan penjualan harian ke WhatsApp pada jam yang diatur admin di Pengaturan"
-    cron: "0 * * * *"
-    endpoint: "{{BASE_URL}}/api/cron/daily-report"
-    method: POST
-    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
-    enabled: true
