@@ -1,0 +1,64 @@
+========================================================
+  GRAND ACEH KULINER POS — MULAI DI SINI (3 LANGKAH)
+========================================================
+
+Aplikasi ini berjalan di 1 komputer "server" (Desktop Windows ATAU Raspberry Pi).
+Perangkat lain (kasir & Android) cukup membuka alamatnya lewat WiFi toko.
+
+--------------------------------------------------------
+LANGKAH 1 — PASANG DOCKER (sekali saja, di komputer server)
+--------------------------------------------------------
+  * Windows : pasang "Docker Desktop" -> https://www.docker.com/products/docker-desktop
+              (aktifkan WSL2, lalu restart komputer)
+  * Raspberry Pi / Linux (lewat SSH) :
+        curl -fsSL https://get.docker.com | sh
+        sudo usermod -aG docker $USER
+        sudo systemctl enable docker
+    (Raspberry Pi wajib OS 64-bit. Setelah ini, keluar & masuk SSH lagi.)
+
+--------------------------------------------------------
+LANGKAH 2 — JALANKAN INSTALLER (dari dalam folder ini)
+--------------------------------------------------------
+  * Windows : DOBEL-KLIK file  ->  install-windows.bat
+  * Raspberry Pi / Linux (SSH) :
+        chmod +x install-pi.sh
+        ./install-pi.sh
+
+  Saat diminta, isi file backend/.env.docker:
+    - JWT_SECRET  : ganti dengan teks acak panjang
+    - ADMIN_EMAIL / ADMIN_PASSWORD : akun pemilik pertama
+    - (opsional) kunci AI Anda. EMERGENT_LLM_KEY biarkan KOSONG.
+  Simpan, lalu jalankan installer sekali lagi.
+  (Di Raspberry Pi, editor teks terbuka OTOMATIS.)
+
+--------------------------------------------------------
+LANGKAH 3 — BUKA APLIKASI
+--------------------------------------------------------
+  Cari IP komputer server:
+    * Windows : ketik  ipconfig   (lihat IPv4 Address)
+    * Pi/Linux: ketik  hostname -I
+  Lalu di komputer kasir buka browser:   http://IP-SERVER
+    contoh:   http://192.168.1.100
+  Android (APK): buka aplikasi -> Login -> "Pengaturan Server (LAN)"
+                 -> isi http://IP-SERVER -> Simpan.
+
+========================================================
+PERAWATAN
+========================================================
+  * UPDATE versi baru : jalankan  update-windows.bat  /  ./update-pi.sh
+  * BACKUP data       : jalankan  backup-windows.bat  /  ./backup-pi.sh
+                        (hasil ada di folder backups/, salin ke flashdisk)
+  * RESTORE data      : restore-windows.bat <file.gz>  /  ./restore-pi.sh <file.gz>
+
+========================================================
+PINTASAN CEPAT (untuk komputer KLIEN)
+========================================================
+  Dobel-klik salah satu (buka aplikasi di browser tanpa mengetik alamat):
+    * Windows : Buka-POS-Windows.url
+    * Linux   : Buka-POS-Linux.desktop
+  Keduanya mengarah ke  http://pos.local  (nama server Raspberry Pi/hostname "pos").
+  Jika server memakai IP tetap, EDIT file pintasan itu, ganti "pos.local"
+  dengan IP server, mis:  http://192.168.1.100
+
+Butuh bantuan? Baca README-DEPLOY.md di folder ini.
+========================================================

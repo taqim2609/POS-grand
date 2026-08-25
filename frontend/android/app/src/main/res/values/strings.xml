@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Grand Aceh Kuliner POS</string>
+    <string name="title_activity_main">Grand Aceh Kuliner POS</string>
+    <string name="package_name">host.emergent.hybridposaceh</string>
+    <string name="custom_url_scheme">host.emergent.hybridposaceh</string>
+</resources>

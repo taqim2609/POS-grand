@@ -1,0 +1,78 @@
+{
+  "summary": "Full e2e test of Grand Aceh Kuliner POS V1 (backend + frontend). Backend: 67/67 pytest cases pass (auth/RBAC, categories, products, tables+open-bill protections, order rules F&B vs retail, pay/discount, void/refund+audit+stock restore, shifts, reports, Excel template/export/import preview+commit+logs, and all 3 Gemini AI endpoints incl. Nano Banana image). Frontend: all POS flows verified live (take-away pay w/ 10% discount + receipt, dine-in open bill save->reload->append->pay, retail pay + stock decrement in UI), admin CRUD (Products w/ AI description + AI image, Categories, Tables incl. duplicate-name toast, Users, Orders void/refund, Dashboard report cards + AI summary, Shift open/sale/close report), Excel template/export downloads, import preview with per-row errors + commit. Kasir role gating verified (nav restricted, direct /products URL redirected to /pos). NO blocking defects. However, adversarial API probing exposed 5 real server-side validation gaps (price tampering, order-type spoofing, oversell, underpayment, negative discount) that the UI hides but any client can exploit.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/orders", "issue": "Item price/name/type are trusted from the client and never re-validated against the products collection. Sending {product_id: <real retail product>, price: 1} creates a paid order of Rp1 for a Rp5.000 item (verified). Prices must be looked up server-side from db.products.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/orders (_validate_order_rules)", "issue": "The F&B-vs-retail separation rule only inspects the client-supplied item.type. A retail product sent with type='makanan' was accepted into a dine_in order (verified 200), fully bypassing the core business rule. Resolve type from DB per product_id.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/orders/{id}/pay", "issue": "No stock validation: selling qty greater than stock succeeded and drove retail stock to -500 (verified). Reject or clamp when qty > stock for track_stock products.", "priority": "HIGH"},
+      {"endpoint": "POST /api/orders/{id}/pay", "issue": "Underpayment accepted: amount_paid=1 on a Rp5.000 total returned status 'paid' with change=-4999 (verified). Backend must reject amount_paid < total for cash.", "priority": "HIGH"},
+      {"endpoint": "POST /api/orders, POST /api/orders/{id}/pay", "issue": "discount_value is unbounded: discount_type='percent' with value -100 produced discount=-45000 and total=90000 (2x subtotal, verified). Also percent>100 is unchecked. Validate discount_value >= 0 (and <= 100 for percent) in Pydantic.", "priority": "HIGH"},
+      {"endpoint": "POST /api/orders", "issue": "OrderItem.qty accepts negative values (qty=-5 accepted, verified) which yields negative subtotals and would inflate stock on void. Use Field(gt=0) for qty and ge=0 for price.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/shifts/close", "issue": "_shift_report derives expected_cash from by_payment['Cash'] i.e. the payment-method NAME string. Renaming the Cash method (admin can create methods freely) silently breaks expected_cash. Key off payment method type=='cash' instead."},
+      {"endpoint": "GET /api/orders?date=, GET /api/reports/summary?date=", "issue": "Date filtering uses lexicographic string comparison on created_at ISO strings and only covers the UTC day. WIB (UTC+7) sales after 17:00 local fall into the next report day - shift/daily reports will be off for a real Aceh store. Store a real datetime or add a timezone offset."},
+      {"endpoint": "POST /api/orders (take_away/retail)", "issue": "Take-away/retail orders that are created but not paid stay status='open' forever with no UI to resume or cancel them (only admin void). Consider not persisting until payment, or add a cancel path."},
+      {"endpoint": "POST /api/auth/login", "issue": "No rate limiting / lockout: 8 consecutive wrong passwords all returned 401 and the 9th correct login succeeded (verified). Add lockout or throttling."},
+      {"endpoint": "app startup", "issue": "Uses deprecated @app.on_event('startup'/'shutdown'); migrate to the lifespan context manager."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Login.jsx", "issue": "React console error on every load: \"Cannot update a component (BrowserRouter) while rendering a different component (Login)\" - a navigate()/setState call happens during render. Use <Navigate to=... /> or useEffect.", "selector": "[data-testid=\"login-form\"]", "priority": "MEDIUM"},
+      {"component": "Products.jsx product form", "issue": "The floating 'AI' badge button sits on top of the Deskripsi textarea and covers the generated text's last line (see screenshot 30_product_ai). Move it above the textarea or add bottom padding.", "selector": "[data-testid=\"ai-desc-btn\"]", "priority": "LOW"},
+      {"component": "All Dialogs (Radix)", "issue": "Console warning 'Missing Description or aria-describedby for DialogContent' on every dialog (Pay, Table picker, Import, forms) - a11y gap.", "selector": "[role=\"dialog\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Excel import commit", "issue": "No visible success toast/summary was rendered after a successful commit (created/updated counts come back from the API but the toast list was empty when checked ~4s later). Confirm the success toast fires and consider showing created/updated counts inline.", "affected_selectors": ["[data-testid=\"commit-import-btn\"]", "[data-sonner-toast]"]}
+    ],
+    "design_issues": [
+      {"screen": "POS at tablet portrait 768x1024", "issues": ["Fixed widths (sidebar 240 + category rail 200 + cart 340 = 780px) exceed the 768px viewport, so the product grid collapses to zero width and the cart is clipped off-screen - POS is unusable in portrait. App is landscape-first per spec, but add a min-width guard/collapsible rail or an 'rotate device' notice."]},
+      {"screen": "Dashboard & Transaksi date filter", "issues": ["Uses the native browser <input type=\"date\"> picker (renders as 08/19/2026 with the OS icon) instead of the shadcn Calendar/Popover used elsewhere - inconsistent with the design system."]},
+      {"screen": "POS product grid", "issues": ["All seeded products have no image, so every card shows the same grey placeholder icon; the grid reads as empty at a glance. Seed a few images (the AI image generator works and persists correctly)."]},
+      {"screen": "Login", "issues": ["Large empty area under the form on 1920x1080; the right panel content is vertically un-centred relative to the hero panel."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/cleanup_test_data.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/pytest_ai.xml"
+  ],
+  "action_items": [
+    "CRITICAL: recompute order item price/name/type server-side from db.products in POST /api/orders and PATCH /api/orders/{id}/items - client-supplied price and type are currently trusted (price tampering + F&B/retail rule bypass both reproduced).",
+    "Add stock validation for track_stock products before finalizing payment (stock went to -500).",
+    "Reject amount_paid < total for cash payments (order was marked paid with change=-4999).",
+    "Constrain discount_value (>=0, and <=100 for percent) and qty (>0) / price (>=0) in Pydantic models.",
+    "Key shift expected_cash off payment_method type=='cash' rather than the literal name 'Cash'.",
+    "Handle timezone: reports/shifts bucket by UTC day, which splits an Aceh (UTC+7) business day.",
+    "Fix the Login.jsx setState-during-render React error.",
+    "Add login rate limiting/lockout.",
+    "POS layout breaks at 768px portrait - add a min-width guard or collapsible rails.",
+    "Replace native date inputs on Dashboard/Transaksi with the shadcn Calendar component.",
+    "Optional: split server.py (840 lines) into routers (auth, catalog, orders, reports, excel, ai)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:_validate_order_rules trusts item.type from the request body; the entire hybrid F&B/retail separation guarantee is client-side only. Load each product by product_id and use its stored type + price.",
+    "server.py:_finalize_payment decrements stock without any availability check and computes change without verifying amount_paid >= total.",
+    "server.py:compute_totals has no guard on discount_value sign/upper bound, so a negative percent discount increases the total above subtotal.",
+    "server.py:_shift_report hardcodes by_pm.get('Cash') for expected_cash - fragile because payment method names are user-editable.",
+    "server.py is 840 lines (>700 guideline); AI, Excel and order domains should move into separate routers.",
+    "Auth stores the JWT in localStorage with no httpOnly cookie and no login throttling; CORS_ORIGINS defaults to '*' (acceptable only because allow_credentials=False). Consider explicit origins.",
+    "Deprecated @app.on_event startup/shutdown hooks should move to FastAPI lifespan."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)",
+    "/app/backend/tests/conftest.py (new)",
+    "/app/backend/tests/cleanup_test_data.py (new)",
+    "/app/backend/tests/make_ui_import_xlsx.py (new, UI import fixture generator)"
+  ],
+  "success_rate": {"backend": "100% (67/67 pytest cases; separate adversarial probing found 6 validation gaps not covered by happy-path tests)", "frontend": "100% of tested flows passed (POS x3 order types, open bill, discount, receipt, admin CRUD x5 pages, AI x3, Excel import/export, shift, role gating)"},
+  "seed_data_creation": "All QA artifacts were purged afterwards via /app/backend/tests/cleanup_test_data.py: TEST_* products/categories/tables, test users, and ALL orders/shifts/audit_logs/import_logs generated during testing (34+13+6 orders). Seeded retail stock restored to RT-001=50, RT-002=30, RT-003=100. App is back to a clean demo state: 13 seeded products, 8 tables, 3 payment methods, 0 orders.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Admin taqim2609@gmail.com / GrandAceh#2026 (role admin), Kasir kasir@grandaceh.com / kasir123 (role kasir). Both verified working; admin password_hash confirmed bcrypt $2b$ format. Auth is Bearer JWT in localStorage (gak_token), NOT httpOnly cookies - intentional per spec, so the cookie/CORS-credentials items of the generic auth playbook do not apply.",
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -q` (67 cases, ~45s incl. AI) then ALWAYS run `python /app/backend/tests/cleanup_test_data.py` afterwards - it purges TEST_* entities plus all orders/shifts/logs and restores seeded stock. Do NOT make the cleanup a session-scoped autouse fixture: pytest.ini forces xdist -n 2, so a per-worker session teardown deletes TEST_* data while the other worker is still using it (this caused 2 false failures on the first run). Excel-import rows must use a category whose type matches tipe_produk (e.g. retail rows -> 'Snack Retail'/'Minuman Kemasan'); 'Cemilan' is makanan. UI: switching order-type tabs with a non-empty cart triggers window.confirm, so register page.on('dialog', accept). All 3 Gemini AI endpoints were working (text ~5s, image ~20s). Verify the 6 backend validation gaps listed in backend_issues.critical after the main agent fixes them - reproduce with direct API calls, not the UI (the UI already blocks them).",
+  "rca_of_the_issue": "Root cause of all 6 critical/high backend findings is the same: the order pipeline treats the request body as the source of truth. OrderItem carries name/price/type from the client and the server persists them verbatim; _validate_order_rules inspects those client fields, and compute_totals/_finalize_payment apply no domain constraints (no stock check, no amount_paid >= total check, no discount/qty bounds). Reproduction: POST /api/orders {order_type:'dine_in', table_id:<empty table>, items:[{product_id:<retail product id>, price:1, qty:1, type:'makanan'}]} -> 200 with total Rp1; POST /api/orders {..., discount_type:'percent', discount_value:-100} -> total = 2x subtotal; pay with amount_paid=1 -> status 'paid', change -4999; qty > stock -> stock -500. Mitigation: in create_order/update_order_items, fetch each product by product_id (404/400 if missing or inactive/sold_out), rebuild each item from the DB document (name, price, type, track_stock), validate stock for track_stock items, and add Pydantic Field constraints for qty (>0), price (>=0) and discount_value (>=0, <=100 when percent); in _finalize_payment reject amount_paid < total for cash methods."
+}

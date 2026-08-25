@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only retest of redesigned per-feature Pengaturan AI page (/settings-ai) at 1920x900. All 5 requested scenarios PASS: (1) 3 feature cards + warning box render for admin via sidebar nav; (2) status badges show 'Key aktif ••••c123', inputs present with password-type API key, save PUT /api/settings/ai {feature,base_url,model} -> 200 + success toast, api_key field cleared, values persist after reload and api_key_set stays true (blank key does not wipe key); (3) per-feature independence verified with distinct models (TEST-desc-model / TEST-img-model / TEST-sum-model) -> each slot persisted independently, then restored to claude-sonnet-5 and base_url https://www.chenzk.top/v1; (4) 'Cek Sisa Kredit' -> GET /api/settings/ai/credit?feature=description returned 200 and rendered warning box 'Provider tidak menyediakan info kredit (HTTP 401).' with no crash/unhandled error; (5) admin gate: kasir sees 0 'Pengaturan AI' nav items, /settings-ai redirects to /pos, GET /api/settings/ai = 403 for kasir and 401 anonymous. No console errors observed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Pengaturan AI", "issues": ["'Gambar Produk' card defaults its Model to the shared legacy text model (claude-sonnet-5) via _ai_cfg fallback, which is not a valid image-generation model — could mislead the owner into saving a text model for image gen. Consider not falling back to legacy model for the image feature (leave blank so Gemini default is used)."]}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_6.json"],
+  "action_items": ["Optional: avoid legacy text-model fallback for the 'image' feature model field in GET /api/settings/ai", "Cleanup leftover test seed data from earlier iterations: category 'TEST_KAT2_99a21f' still visible in POS category list"],
+  "critical_code_review_comments": [
+    "SettingsAI FeatureCard form state is initialized from props only; after onSaved() re-fetch the inputs are not resynced (harmless today since values match what was just saved, but a server-side normalization would not be reflected until reload).",
+    "get_ai_settings computes unused variable legacy_key (line 925) — dead code."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request); AI settings endpoints exercised via UI all returned 200/401/403 as expected", "frontend": "100% (5/5 scenarios)"},
+  "seed_data_creation": "No new data. Temporarily changed per-feature model values then restored to claude-sonnet-5 with base_url https://www.chenzk.top/v1; API key never overwritten (left blank).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin taqim2609@gmail.com / GrandAceh#2026 ; Kasir kasir@grandaceh.com / kasir123 (both work)",
+  "context_for_next_testing_agent": "Per-feature AI settings UI is fully working. Do NOT enter an API key when testing save (blank preserves owner's live key ••••c123). Provider key is known-invalid, so credit check and AI generation endpoints return 401 from provider — expected, user action item, not a bug.",
+  "rca_of_the_issue": "N/A - no defects reproduced."
+}
