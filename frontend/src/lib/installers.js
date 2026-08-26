@@ -1,5 +1,5 @@
 // Embedded 1-click installer scripts (source of truth for in-app download).
-// Kept identical to /install-windows.bat and /install-pi.sh at repo root.
+// Sumber update kini vibecoder.co.id (bukan GitHub) — lihat update-vibecoder-pi.sh.
 
 export const INSTALL_WINDOWS_BAT = `@echo off
 setlocal enabledelayedexpansion
@@ -116,10 +116,16 @@ echo "==========================================="
 export const UPDATE_WINDOWS_BAT = `@echo off
 cd /d "%~dp0"
 echo === Update Grand Aceh Kuliner POS (Windows) ===
-if exist ".git" (
-  echo Menarik pembaruan terbaru dari Git...
-  git pull --ff-only
+set BASE_URL=https://taqim258.vibecoder.co.id/pos-grand-update
+echo Mengunduh versi terbaru dari vibecoder.co.id...
+curl -fsSL -o "%TEMP%\\gak-pos-update.tar.gz" "%BASE_URL%/pos-grand.tar.gz"
+if errorlevel 1 (
+  echo [ERROR] Gagal mengunduh dari vibecoder.co.id. Cek internet lalu ulangi.
+  pause
+  exit /b 1
 )
+tar xzf "%TEMP%\\gak-pos-update.tar.gz" -C .
+del "%TEMP%\\gak-pos-update.tar.gz"
 echo Membangun ulang dan menjalankan versi terbaru...
 docker compose up -d --build
 docker image prune -f >nul 2>nul
@@ -132,6 +138,16 @@ export const UPDATE_PI_SH = `#!/usr/bin/env bash
 set -e
 cd "$(dirname "$0")"
 echo "=== Update Grand Aceh Kuliner POS (Pi/Linux) ==="
+# Mode vibecoder: update dari vibecoder.co.id (tanpa git pull).
+if [ -f .vibecoder-version ]; then
+  if [ ! -f update-vibecoder-pi.sh ]; then
+    echo "Mengunduh update-vibecoder-pi.sh dari vibecoder.co.id..."
+    curl -fsSL https://taqim258.vibecoder.co.id/pos-grand-update/update-vibecoder-pi.sh -o update-vibecoder-pi.sh
+    chmod +x update-vibecoder-pi.sh
+  fi
+  exec bash update-vibecoder-pi.sh "$@"
+fi
+# Fallback: mode GitHub lama (bila folder belum dialihkan ke vibecoder)
 if [ -d .git ]; then
   echo "Menarik pembaruan terbaru dari Git..."
   git pull --ff-only || echo "(git pull dilewati)"
@@ -233,23 +249,16 @@ echo "Batalkan     : crontab -e  (hapus baris backup-pi.sh)"
 
 export const BOOTSTRAP_PI_SH = `#!/usr/bin/env bash
 set -e
-# Install & update Grand Aceh POS LANGSUNG dari GitHub.
-# Repo default bisa ditimpa:  REPO_URL=... APP_DIR=... ./bootstrap-pi.sh
-REPO="\${REPO_URL:-https://github.com/taqim2609/POS-grand.git}"
+# Install Grand Aceh POS LANGSUNG dari vibecoder.co.id (pengganti git clone).
+BASE_URL="https://taqim258.vibecoder.co.id/pos-grand-update"
 APP_DIR="\${APP_DIR:-$HOME/grand-aceh-pos}"
 
-echo "=== Bootstrap Grand Aceh POS (Raspberry Pi / GitHub) ==="
-echo "Repo   : $REPO"
+echo "=== Bootstrap Grand Aceh POS (Raspberry Pi / vibecoder.co.id) ==="
+echo "Sumber : $BASE_URL"
 echo "Folder : $APP_DIR"
 echo
 
-# 1. git
-if ! command -v git >/dev/null 2>&1; then
-  echo "Memasang git..."
-  sudo apt-get update && sudo apt-get install -y git
-fi
-
-# 2. Docker
+# 1. Docker
 if ! command -v docker >/dev/null 2>&1; then
   echo "Memasang Docker (butuh internet)..."
   curl -fsSL https://get.docker.com | sh
@@ -258,35 +267,32 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "[OK] Docker terpasang."
 fi
 
-# 3. Ambil / perbarui kode dari GitHub
-if [ -d "$APP_DIR/.git" ]; then
-  echo "Proyek sudah ada -> menarik pembaruan (git pull)..."
-  git -C "$APP_DIR" pull --ff-only || true
-else
-  echo "Mengunduh proyek dari GitHub..."
-  git clone "$REPO" "$APP_DIR"
-fi
+# 2. Unduh kode terbaru dari vibecoder.co.id
+mkdir -p "$APP_DIR"
+echo "Mengunduh kode dari vibecoder.co.id..."
+curl -fsSL -o /tmp/pos-grand.tar.gz "$BASE_URL/pos-grand.tar.gz"
+tar xzf /tmp/pos-grand.tar.gz -C "$APP_DIR"
+rm -f /tmp/pos-grand.tar.gz
 
-# 4. Jalankan installer
+# 3. Jalankan installer
 cd "$APP_DIR"
-chmod +x install-pi.sh update-pi.sh restart-pi.sh backup-pi.sh restore-pi.sh setup-autobackup-pi.sh 2>/dev/null || true
+chmod +x install-pi.sh update-pi.sh update-vibecoder-pi.sh restart-pi.sh backup-pi.sh restore-pi.sh setup-autobackup-pi.sh 2>/dev/null || true
 echo "Menjalankan installer..."
 sudo ./install-pi.sh
 `;
 
 export const BOOTSTRAP_WINDOWS_BAT = `@echo off
 setlocal
-set REPO=https://github.com/taqim2609/POS-grand.git
+set BASE_URL=https://taqim258.vibecoder.co.id/pos-grand-update
 set APP_DIR=grand-aceh-pos
 echo ============================================
 echo   Grand Aceh Kuliner POS - Bootstrap Windows
 echo ============================================
 echo.
 
-where git >nul 2>nul
+where curl >nul 2>nul
 if errorlevel 1 (
-  echo [ERROR] Git belum terpasang. Pasang Git for Windows dulu:
-  echo   https://git-scm.com/download/win
+  echo [ERROR] curl tidak tersedia. Gunakan Windows 10/11 (sudah ada bawaan).
   pause
   exit /b 1
 )
@@ -299,18 +305,20 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if exist "%APP_DIR%\\.git" (
-  echo Proyek sudah ada -^> menarik pembaruan...
-  cd /d "%APP_DIR%"
-  git pull --ff-only
-) else (
-  echo Mengunduh proyek dari GitHub...
-  git clone %REPO% "%APP_DIR%"
-  cd /d "%APP_DIR%"
+if not exist "%APP_DIR%" mkdir "%APP_DIR%"
+echo Mengunduh kode dari vibecoder.co.id...
+curl -fsSL -o "%APP_DIR%\\pos-grand.tar.gz" "%BASE_URL%/pos-grand.tar.gz"
+if errorlevel 1 (
+  echo [ERROR] Gagal mengunduh dari vibecoder.co.id. Cek internet lalu ulangi.
+  pause
+  exit /b 1
 )
+tar xzf "%APP_DIR%\\pos-grand.tar.gz" -C "%APP_DIR%"
+del "%APP_DIR%\\pos-grand.tar.gz"
 
 echo.
 echo Menjalankan installer...
+cd /d "%APP_DIR%"
 call install-windows.bat
 `;
 

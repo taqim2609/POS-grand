@@ -19,6 +19,7 @@ export default function Products() {
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [catFilter, setCatFilter] = useState("all");
   const [aiDesc, setAiDesc] = useState(false);
   const [aiImg, setAiImg] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -79,7 +80,8 @@ export default function Products() {
     const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
   };
 
-  const shown = items.filter((p) => filter === "all" || p.type === filter);
+  const shown = items.filter((p) => (filter === "all" || p.type === filter) && (catFilter === "all" || p.category_id === catFilter));
+  const filterCats = cats.filter((c) => c.active && (filter === "all" || c.type === filter));
 
   return (
     <div className="h-full overflow-y-auto p-8">
@@ -92,12 +94,21 @@ export default function Products() {
           <button data-testid="add-product-btn" onClick={() => { setForm(empty); setEditId(null); setOpen(true); }} className="tap h-11 px-5 rounded-xl bg-[#E63946] hover:bg-[#BE123C] text-white font-bold flex items-center gap-2"><Plus size={18} /> Tambah</button>
         </div>
       </div>
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
         {["all", "makanan", "minuman", "retail", "vendor"].map((t) => (
-          <button key={t} onClick={() => setFilter(t)} className={`tap h-9 px-4 rounded-lg text-sm font-bold ${filter === t ? "bg-[#0A0A0A] text-white" : "bg-white border"}`}>
+          <button key={t} onClick={() => { setFilter(t); setCatFilter("all"); }} className={`tap h-9 px-4 rounded-lg text-sm font-bold ${filter === t ? "bg-[#0A0A0A] text-white" : "bg-white border"}`}>
             {t === "all" ? "Semua" : TYPE_LABEL[t]}
           </button>
         ))}
+        <select data-testid="prod-cat-filter" value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="h-9 px-3 rounded-lg bg-white border text-sm font-bold text-[#0A0A0A]">
+          <option value="all">Semua Kategori</option>
+          {filterCats.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {catFilter !== "all" && (
+          <button onClick={() => setCatFilter("all")} className="tap h-9 px-3 rounded-lg bg-[#FEE2E2] text-[#EF4444] text-sm font-bold inline-flex items-center gap-1"><X size={14} /> Reset</button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border overflow-hidden">
