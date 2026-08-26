@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import {
   Bot, Send, Loader2, Sparkles, User, Cpu, CheckCircle2, X, Wand2, Settings as SettingsIcon,
   History, Plus, Trash2, MessageSquare,
@@ -36,7 +37,7 @@ const FIELD_LABEL = {
   category_name: "Kategori", vendor_name: "Vendor", sold_out: "Habis", active: "Aktif",
 };
 
-function ActionCard({ action, state, result, onApply }) {
+function ActionCard({ action, state, result, onApply, canApply }) {
   const danger = DESTRUCTIVE.has(action.type);
   const isBulk = action.type === "create_products_bulk";
   const items = isBulk ? (Array.isArray(action.items) ? action.items : []) : [];
@@ -90,14 +91,20 @@ function ActionCard({ action, state, result, onApply }) {
         <div className="mt-2.5 flex items-center gap-1.5 text-[#71717A] font-bold text-sm"><X size={16} /> Dibatalkan</div>
       ) : (
         <div className="mt-2.5 flex gap-2">
-          <button data-testid="assistant-apply-btn" onClick={() => onApply("apply")} disabled={state === "applying"}
-            className={`tap flex-1 h-10 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 ${danger ? "bg-[#DC2626]" : "bg-[#2563EB]"}`}>
-            {state === "applying" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Terapkan
-          </button>
-          <button data-testid="assistant-cancel-btn" onClick={() => onApply("cancel")} disabled={state === "applying"}
-            className="tap h-10 px-4 rounded-lg border-2 border-[#71717A] text-[#52525B] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
-            <X size={15} /> Batal
-          </button>
+          {canApply ? (
+            <>
+              <button data-testid="assistant-apply-btn" onClick={() => onApply("apply")} disabled={state === "applying"}
+                className={`tap flex-1 h-10 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 ${danger ? "bg-[#DC2626]" : "bg-[#2563EB]"}`}>
+                {state === "applying" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Terapkan
+              </button>
+              <button data-testid="assistant-cancel-btn" onClick={() => onApply("cancel")} disabled={state === "applying"}
+                className="tap h-10 px-4 rounded-lg border-2 border-[#71717A] text-[#52525B] font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+                <X size={15} /> Batal
+              </button>
+            </>
+          ) : (
+            <div className="text-xs font-bold text-[#71717A] flex items-center gap-1.5"><X size={14} /> Penerapan aksi hanya untuk admin</div>
+          )}
         </div>
       )}
     </div>
@@ -105,6 +112,7 @@ function ActionCard({ action, state, result, onApply }) {
 }
 
 export default function AssistantAI() {
+  const { user } = useAuth();
   const [sid, setSid] = useState(null);
   const [messages, setMessages] = useState([]); // {role, text, error?, action?, actionState?}
   const [input, setInput] = useState("");
@@ -211,17 +219,19 @@ export default function AssistantAI() {
             <History size={15} /> Riwayat
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-[#71717A] hidden sm:block">Provider:</span>
-          <button data-testid="assistant-provider-gemini" onClick={() => pickProvider("gemini")} disabled={savingProvider}
-            className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 ${provider === "gemini" ? "bg-[#2563EB] border-[#2563EB] text-white" : "border-[#BFDBFE] text-[#2563EB]"}`}>
-            <Sparkles size={14} /> Gemini AI
-          </button>
-          <button data-testid="assistant-provider-chenzk" onClick={() => pickProvider("chenzk")} disabled={savingProvider}
-            className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 ${provider === "chenzk" ? "bg-[#0A0A0A] border-[#0A0A0A] text-white" : "border-[#D4D4D8] text-[#0A0A0A]"}`}>
-            <Cpu size={14} /> chenzk
-          </button>
-        </div>
+        {user.role === "admin" && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[#71717A] hidden sm:block">Provider:</span>
+            <button data-testid="assistant-provider-gemini" onClick={() => pickProvider("gemini")} disabled={savingProvider}
+              className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 ${provider === "gemini" ? "bg-[#2563EB] border-[#2563EB] text-white" : "border-[#BFDBFE] text-[#2563EB]"}`}>
+              <Sparkles size={14} /> Gemini AI
+            </button>
+            <button data-testid="assistant-provider-chenzk" onClick={() => pickProvider("chenzk")} disabled={savingProvider}
+              className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 ${provider === "chenzk" ? "bg-[#0A0A0A] border-[#0A0A0A] text-white" : "border-[#D4D4D8] text-[#0A0A0A]"}`}>
+              <Cpu size={14} /> chenzk
+            </button>
+          </div>
+        )}
       </div>
 
       {provider === "chenzk" && !keySet && (
@@ -282,7 +292,7 @@ export default function AssistantAI() {
                 {m.text}
               </div>
               {m.action && (
-                <ActionCard action={m.action} state={m.actionState} result={m.actionResult} onApply={(mode) => handleAction(i, mode)} />
+                <ActionCard action={m.action} state={m.actionState} result={m.actionResult} canApply={user.role === "admin"} onApply={(mode) => handleAction(i, mode)} />
               )}
             </div>
           </div>

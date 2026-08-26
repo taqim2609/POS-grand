@@ -55,9 +55,9 @@ function App() {
               <Route path="/inventory" element={wrap(<Inventory />, ["admin", "input"])} />
               <Route path="/categories" element={wrap(<Categories />, ["admin", "input"])} />
               <Route path="/catalog" element={wrap(<Catalog />, ["admin", "input"])} />
-              <Route path="/laporan" element={wrap(<Reports />, ["admin"])} />
-              <Route path="/tanya-ai" element={wrap(<ReportChat />, ["admin"])} />
-              <Route path="/asisten-ai" element={wrap(<AssistantAI />, ["admin"])} />
+              <Route path="/laporan" element={wrap(<Reports />, ["admin", "kasir"])} />
+              <Route path="/tanya-ai" element={wrap(<ReportChat />, ["admin", "kasir"])} />
+              <Route path="/asisten-ai" element={wrap(<AssistantAI />, ["admin", "kasir"])} />
               <Route path="/tables" element={wrap(<Tables />, ["admin"])} />
               <Route path="/orders" element={wrap(<Orders />, ["admin"])} />
               <Route path="/users" element={wrap(<UsersPage />, ["admin"])} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah, wibToday } from "@/lib/format";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import { FileSpreadsheet, Loader2, Utensils, Coffee, Store, Handshake, FileDown, FileText, Send, TrendingUp } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -29,6 +30,7 @@ function enumerateDates(start, end) {
 }
 
 export default function Reports() {
+  const { user } = useAuth();
   const [period, setPeriod] = useState("day");
   const [day, setDay] = useState(wibToday());
   const [weekDate, setWeekDate] = useState(wibToday());
@@ -166,7 +168,9 @@ export default function Reports() {
               <div className="flex gap-2">
                 <button data-testid="vendor-excel-btn" onClick={() => download("/reports/vendors/export/excel", "bagi-hasil-vendor.xlsx")} className="tap h-9 px-3 rounded-lg bg-white border font-bold text-xs flex items-center gap-1.5"><FileDown size={14} /> Excel</button>
                 <button data-testid="vendor-pdf-btn" onClick={() => download("/reports/vendors/export/pdf", "bagi-hasil-vendor.pdf")} className="tap h-9 px-3 rounded-lg bg-white border font-bold text-xs flex items-center gap-1.5"><FileText size={14} /> PDF</button>
-                <button data-testid="vendor-wa-btn" onClick={sendVendorWA} disabled={sending} className="tap h-9 px-3 rounded-lg bg-[#25D366] text-white font-bold text-xs flex items-center gap-1.5 disabled:opacity-50">{sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Kirim WA</button>
+                {user.role === "admin" && (
+                  <button data-testid="vendor-wa-btn" onClick={sendVendorWA} disabled={sending} className="tap h-9 px-3 rounded-lg bg-[#25D366] text-white font-bold text-xs flex items-center gap-1.5 disabled:opacity-50">{sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Kirim WA</button>
+                )}
               </div>
             </div>
             <table className="w-full text-sm">

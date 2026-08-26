@@ -113,6 +113,7 @@ def require_roles(*roles):
     return _dep
 
 admin_or_input = require_roles("admin", "input")
+admin_or_kasir = require_roles("admin", "kasir")
 
 # ------------------------------------------------------------------ Models
 class LoginIn(BaseModel):
@@ -747,7 +748,7 @@ async def list_shifts(admin: dict = Depends(require_admin)):
 # ================================================================== REPORTS
 @api.get("/reports/summary")
 async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
-                         admin: dict = Depends(require_admin)):
+                         admin: dict = Depends(admin_or_kasir)):
     d = date_str or wib_today()
     start, end = wib_day_range(d)
     q = {"status": "paid", "created_at": {"$gte": start, "$lt": end}}
@@ -827,7 +828,7 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
             "category_report": category_report}
 
 @api.get("/reports/range")
-async def report_range(start: str, end: str, admin: dict = Depends(require_admin)):
+async def report_range(start: str, end: str, admin: dict = Depends(admin_or_kasir)):
     s_utc, _ = wib_day_range(start)
     _, e_utc = wib_day_range(end)
     q = {"status": "paid", "created_at": {"$gte": s_utc, "$lt": e_utc}}
@@ -897,7 +898,7 @@ async def _period_report(start: str, end: str):
             "category_report": category_report, "top_products": top, "vendor": vendor}
 
 @api.get("/reports/period")
-async def report_period(start: str, end: str, admin: dict = Depends(require_admin)):
+async def report_period(start: str, end: str, admin: dict = Depends(admin_or_kasir)):
     return await _period_report(start, end)
 
 def _period_report_lines(rep):
@@ -919,7 +920,7 @@ def _period_report_lines(rep):
     return L
 
 @api.get("/reports/period/export/excel")
-async def export_period_excel(start: str, end: str, admin: dict = Depends(require_admin)):
+async def export_period_excel(start: str, end: str, admin: dict = Depends(admin_or_kasir)):
     import openpyxl
     rep = await _period_report(start, end)
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Laporan"
@@ -948,7 +949,7 @@ async def export_period_excel(start: str, end: str, admin: dict = Depends(requir
                              headers={"Content-Disposition": f"attachment; filename=laporan-{start}_{end}.xlsx"})
 
 @api.get("/reports/period/export/pdf")
-async def export_period_pdf(start: str, end: str, admin: dict = Depends(require_admin)):
+async def export_period_pdf(start: str, end: str, admin: dict = Depends(admin_or_kasir)):
     from fpdf import FPDF
     rep = await _period_report(start, end)
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", size=12)
@@ -1566,7 +1567,7 @@ def _mask_key(k):
     return "••••" + k[-4:] if len(k) >= 4 else "••••"
 
 @api.get("/settings/ai")
-async def get_ai_settings(admin: dict = Depends(require_admin)):
+async def get_ai_settings(admin: dict = Depends(admin_or_kasir)):
     doc = await db.settings.find_one({"_id": "ai"}) or {}
     feats = doc.get("features", {}) or {}
     out = {}
@@ -1738,7 +1739,7 @@ def _slug_sku(name):
     return f"{base}-{new_id()[:4].upper()}"
 
 @api.post("/ai/assistant/chat")
-async def assistant_chat(body: AIAssistantChatIn, admin: dict = Depends(require_admin)):
+async def assistant_chat(body: AIAssistantChatIn, admin: dict = Depends(admin_or_kasir)):
     import json
     if not (body.message or "").strip():
         raise HTTPException(400, "Pesan kosong")
@@ -1759,7 +1760,7 @@ async def assistant_chat(body: AIAssistantChatIn, admin: dict = Depends(require_
     return {"session_id": sid, "reply": clean or "(tidak ada balasan)", "action": action}
 
 @api.get("/ai/assistant/sessions")
-async def assistant_sessions(admin: dict = Depends(require_admin)):
+async def assistant_sessions(admin: dict = Depends(admin_or_kasir)):
     docs = await db.ai_assistant_sessions.find({}, {"_id": 0}).sort("updated_at", -1).to_list(50)
     out = []
     for d in docs:
@@ -1770,7 +1771,7 @@ async def assistant_sessions(admin: dict = Depends(require_admin)):
     return {"sessions": out}
 
 @api.get("/ai/assistant/sessions/{sid}")
-async def assistant_session_detail(sid: str, admin: dict = Depends(require_admin)):
+async def assistant_session_detail(sid: str, admin: dict = Depends(admin_or_kasir)):
     d = await db.ai_assistant_sessions.find_one({"id": sid}, {"_id": 0})
     if not d:
         raise HTTPException(404, "Sesi tidak ditemukan")
@@ -1784,7 +1785,7 @@ async def assistant_session_detail(sid: str, admin: dict = Depends(require_admin
     return {"id": sid, "messages": msgs}
 
 @api.delete("/ai/assistant/sessions/{sid}")
-async def assistant_session_delete(sid: str, admin: dict = Depends(require_admin)):
+async def assistant_session_delete(sid: str, admin: dict = Depends(admin_or_kasir)):
     await db.ai_assistant_sessions.delete_one({"id": sid})
     return {"deleted": True}
 
@@ -2059,7 +2060,7 @@ async def ai_image(body: AIImageIn, admin: dict = Depends(admin_or_input)):
         raise HTTPException(500, f"AI gambar gagal: {e}")
 
 @api.post("/reports/ai-summary")
-async def ai_summary(body: AISummaryIn, admin: dict = Depends(require_admin)):
+async def ai_summary(body: AISummaryIn, admin: dict = Depends(admin_or_kasir)):
     d = body.date or now_utc().strftime("%Y-%m-%d")
     summary = await report_summary(date_str=d, admin=admin)
     try:
@@ -2243,13 +2244,13 @@ def _vendor_report_lines(rep):
 @api.get("/reports/vendors")
 async def report_vendors(date_str: Optional[str] = Query(None, alias="date"),
                          start: Optional[str] = None, end: Optional[str] = None,
-                         admin: dict = Depends(require_admin)):
+                         admin: dict = Depends(admin_or_kasir)):
     return await _vendor_report(date_str, start, end)
 
 @api.get("/reports/vendors/export/excel")
 async def export_vendor_excel(date_str: Optional[str] = Query(None, alias="date"),
                               start: Optional[str] = None, end: Optional[str] = None,
-                              admin: dict = Depends(require_admin)):
+                              admin: dict = Depends(admin_or_kasir)):
     import openpyxl
     rep = await _vendor_report(date_str, start, end)
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Bagi Hasil Vendor"
@@ -2265,7 +2266,7 @@ async def export_vendor_excel(date_str: Optional[str] = Query(None, alias="date"
 @api.get("/reports/vendors/export/pdf")
 async def export_vendor_pdf(date_str: Optional[str] = Query(None, alias="date"),
                             start: Optional[str] = None, end: Optional[str] = None,
-                            admin: dict = Depends(require_admin)):
+                            admin: dict = Depends(admin_or_kasir)):
     from fpdf import FPDF
     rep = await _vendor_report(date_str, start, end)
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", size=12)
@@ -2534,7 +2535,7 @@ async def _report_context(date_str):
     }
 
 @api.post("/ai/report-chat")
-async def ai_report_chat(body: ReportChatIn, admin: dict = Depends(require_admin)):
+async def ai_report_chat(body: ReportChatIn, admin: dict = Depends(admin_or_kasir)):
     import json
     if not body.message.strip():
         raise HTTPException(400, "Pertanyaan kosong")
@@ -2571,7 +2572,7 @@ async def ai_report_chat(body: ReportChatIn, admin: dict = Depends(require_admin
     return {"reply": reply}
 
 @api.get("/ai/report-chat/{session_id}")
-async def ai_report_chat_history(session_id: str, admin: dict = Depends(require_admin)):
+async def ai_report_chat_history(session_id: str, admin: dict = Depends(admin_or_kasir)):
     doc = await db.ai_report_chats.find_one({"_id": session_id}) or {}
     return {"messages": doc.get("messages", [])}
 

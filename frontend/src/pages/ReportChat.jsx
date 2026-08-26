@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import { Bot, Send, Loader2, MessageCircle, Sparkles, User } from "lucide-react";
 
 const SUGGESTIONS = [
@@ -11,6 +12,7 @@ const SUGGESTIONS = [
 ];
 
 export default function ReportChat() {
+  const { user } = useAuth();
   const [sid] = useState(() => `rc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -70,7 +72,7 @@ export default function ReportChat() {
             </div>
             <div className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-[#0A0A0A] text-white" : m.error ? "bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]" : "bg-white border"}`}>
               {m.text}
-              {m.role === "assistant" && !m.error && (
+              {m.role === "assistant" && !m.error && user.role === "admin" && (
                 <button data-testid={`send-wa-${i}`} onClick={() => sendToWa(m.text, i)} disabled={sendingWa === i}
                   className="tap mt-2 flex items-center gap-1.5 text-xs font-bold text-[#25D366] hover:underline disabled:opacity-50">
                   {sendingWa === i ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />} Kirim ke WhatsApp
