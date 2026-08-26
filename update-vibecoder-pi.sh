@@ -6,6 +6,7 @@
 # Pakai:
 #   bash update-vibecoder-pi.sh                 # update manual
 #   bash update-vibecoder-pi.sh 62811687783     # + notifikasi WA ke nomor
+#   bash update-vibecoder-pi.sh --test          # diagnosa koneksi ke vibecoder.co.id
 #
 # Aman: bila versi remote sama dengan versi terpasang, TIDAK melakukan apa-apa
 # (tidak unduh, tidak rebuild). Dijalankan juga oleh cron auto-update
@@ -19,17 +20,45 @@ cd "$(dirname "$0")"
 
 BASE_URL="https://taqim258.vibecoder.co.id/pos-grand-update"
 VER_FILE=".vibecoder-version"
-NOTIFY="${1:-}"
+CURL_ERR="/tmp/gak-curl-err.txt"
 
 TS() { date "+%Y-%m-%d %H:%M:%S"; }
-echo "[$(TS)] Cek update dari vibecoder.co.id ..."
 
-# --- versi remote vs versi lokal ---
-REMOTE_VER="$(curl -fsSL -m 30 "$BASE_URL/version.json" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
-if [ -z "$REMOTE_VER" ]; then
-  echo "[$(TS)] Tidak bisa menghubungi $BASE_URL (internet mati / alamat tidak terjangkau)."
+# ---------- mode diagnosa ----------
+if [ "${1:-}" = "--test" ]; then
+  echo "=== Diagnosa koneksi ke vibecoder.co.id ==="
+  echo "Jam Pi          : $(date '+%Y-%m-%d %H:%M:%S %Z')"
+  echo "curl            : $(command -v curl >/dev/null 2>&1 && curl --version | head -1 || echo TIDAK ADA)"
+  echo "DNS vibecoder   : $(getent hosts taqim258.vibecoder.co.id | head -1 || echo 'TIDAK RESOLVE')"
+  echo "--- coba HTTPS (lihat baris terakhir) ---"
+  curl -v --connect-timeout 15 -m 30 "$BASE_URL/version.json" -o /dev/null 2>&1 | tail -6 || true
+  echo "--- penjelasan cepat ---"
+  echo "1) Kalau ada 'Could not resolve host'       -> DNS/ISP memblokir domain. Cek: getent hosts vibecoder.co.id"
+  echo "2) Kalau ada 'unable to get local issuer'   -> CA lama. Jalankan: sudo apt update && sudo apt install -y ca-certificates && sudo update-ca-certificates"
+  echo "3) Kalau ada 'certificate is not yet/expired' -> jam Pi salah. Jalankan: sudo date -s '$(date +%F\ %T)' atau pasang NTP"
+  echo "4) Kalau ada 'Connection timed out'         -> jaringan/firewall memblokir port 443 ke vibecoder.co.id"
   exit 0
 fi
+
+NOTIFY="${1:-}"
+echo "[$(TS)] Cek update dari vibecoder.co.id ..."
+
+# --- versi remote vs versi lokal (dengan pesan error asli bila gagal) ---
+REMOTE_VER="$(curl -fsSL --connect-timeout 15 -m 30 "$BASE_URL/version.json" 2>"$CURL_ERR" \
+  | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+if [ -z "$REMOTE_VER" ]; then
+  echo "[$(TS)] GAGAL menghubungi $BASE_URL"
+  echo "[$(TS)] Penyebab dari curl:"
+  sed 's/^/[curl] /' "$CURL_ERR" 2>/dev/null | tail -5 || true
+  echo "[$(TS)] Solusi cepat:"
+  echo "   - DNS:   getent hosts vibecoder.co.id  (harus ada alamat IP)"
+  echo "   - CA:    sudo apt update && sudo apt install -y ca-certificates && sudo update-ca-certificates"
+  echo "   - Jam:   cek 'date' — kalau salah: sudo date -s '$(date +%F\ %T)'"
+  echo "   - Jaringan memblokir 443 ke vibecoder.co.id (VPN/proxy/firewall?)"
+  echo "   - Diagnosa lengkap: bash update-vibecoder-pi.sh --test"
+  exit 0
+fi
+
 LOCAL_VER="$(cat "$VER_FILE" 2>/dev/null || echo "")"
 if [ -n "$LOCAL_VER" ] && [ "$LOCAL_VER" = "$REMOTE_VER" ]; then
   echo "[$(TS)] Sudah versi terbaru ($REMOTE_VER). Tidak ada update."
@@ -37,7 +66,11 @@ if [ -n "$LOCAL_VER" ] && [ "$LOCAL_VER" = "$REMOTE_VER" ]; then
 fi
 
 echo "[$(TS)] Versi baru ditemukan: ${LOCAL_VER:-(belum ada)} -> $REMOTE_VER. Mengunduh ..."
-curl -fsSL -m 300 -o /tmp/gak-pos-update.tar.gz "$BASE_URL/pos-grand.tar.gz"
+if ! curl -fsSL --connect-timeout 15 -m 300 -o /tmp/gak-pos-update.tar.gz "$BASE_URL/pos-grand.tar.gz" 2>"$CURL_ERR"; then
+  echo "[$(TS)] GAGAL mengunduh arsip. Penyebab dari curl:"
+  sed 's/^/[curl] /' "$CURL_ERR" 2>/dev/null | tail -5 || true
+  exit 0
+fi
 test -s /tmp/gak-pos-update.tar.gz
 
 # Ekstrak DI TEMPAT. .env / backend/.env.docker / backups/ tidak ada di arsip -> aman.
