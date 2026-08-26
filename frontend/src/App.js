@@ -26,7 +26,6 @@ import Settings from "@/pages/Settings";
 import WhatsApp from "@/pages/WhatsApp";
 import DeviceSettings from "@/pages/DeviceSettings";
 import Catalog from "@/pages/Catalog";
-import ReportChat from "@/pages/ReportChat";
 import AssistantAI from "@/pages/AssistantAI";
 import Reports from "@/pages/Reports";
 
@@ -56,7 +55,7 @@ function App() {
               <Route path="/categories" element={wrap(<Categories />, ["admin", "input"])} />
               <Route path="/catalog" element={wrap(<Catalog />, ["admin", "input"])} />
               <Route path="/laporan" element={wrap(<Reports />, ["admin", "kasir"])} />
-              <Route path="/tanya-ai" element={wrap(<ReportChat />, ["admin", "kasir"])} />
+              <Route path="/tanya-ai" element={<Navigate to="/asisten-ai" replace />} />
               <Route path="/asisten-ai" element={wrap(<AssistantAI />, ["admin", "kasir"])} />
               <Route path="/tables" element={wrap(<Tables />, ["admin"])} />
               <Route path="/orders" element={wrap(<Orders />, ["admin"])} />

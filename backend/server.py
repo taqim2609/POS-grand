@@ -1701,9 +1701,14 @@ class AIAssistantApplyIn(BaseModel):
     action: dict
 
 ASSISTANT_SYSTEM = (
-    "Anda adalah 'Asisten Admin' untuk aplikasi kasir/POS 'Grand Aceh Kuliner'. "
+    "Anda adalah 'Asisten AI' untuk aplikasi kasir/POS 'Grand Aceh Kuliner'. "
     "Bahasa jawaban: Indonesia, ringkas, ramah, dan praktis. "
+    "Anda bisa menjawab SEMUA pertanyaan: (a) laporan penjualan/belanja (gunakan data laporan_penjualan, "
+    "tampilkan Rupiah, jujur bila data tidak tersedia), (b) cara pakai fitur aplikasi (gunakan panduan_aplikasi), "
+    "(c) pengetahuan umum usaha. "
     "Anda membantu admin mengelola: produk, kategori, vendor, harga, diskon, dan metode pembayaran. "
+    "PENTING: yang dapat MENERAPKAN perubahan data hanyalah admin; jika pengguna berperan kasir, "
+    "tetap jawab dengan baik tapi JANGAN sertakan blok aksi — cukup jelaskan bahwa perubahan data perlu admin. "
     "Jika admin hanya bertanya/minta saran, jawab biasa TANPA blok aksi. "
     "Jika admin meminta PERUBAHAN DATA, jelaskan singkat lalu sertakan TEPAT SATU blok aksi berformat: "
     "<ACTION>{\"type\":\"...\", ...}</ACTION> berisi JSON valid (tanpa komentar). "
@@ -1732,11 +1737,18 @@ async def _assistant_context():
     vendors = await db.vendors.find({}, {"_id": 0, "name": 1}).sort("name", 1).to_list(500)
     pms = await db.payment_methods.find({}, {"_id": 0, "name": 1, "type": 1}).to_list(100)
     pcount = await db.products.count_documents({})
+    # Data laporan (hari ini & kemarin) agar AI bisa menjawab pertanyaan penjualan juga.
+    try:
+        rep = await _report_context(None)
+    except Exception:
+        rep = {}
     return {
         "kategori": [{"nama": c.get("name"), "tipe": c.get("type")} for c in cats],
         "vendor": [v.get("name") for v in vendors],
         "metode_pembayaran": [{"nama": p.get("name"), "tipe": p.get("type")} for p in pms],
         "jumlah_produk": pcount,
+        "laporan_penjualan": rep,
+        "panduan_aplikasi": APP_GUIDE,
     }
 
 def _parse_action(text):
@@ -1775,7 +1787,8 @@ async def assistant_chat(body: AIAssistantChatIn, admin: dict = Depends(admin_or
     sess = await db.ai_assistant_sessions.find_one({"id": sid}) or {"id": sid, "messages": []}
     history = sess.get("messages", [])
     ctx = await _assistant_context()
-    system = ASSISTANT_SYSTEM + "\n\nKONTEKS DATA SAAT INI:\n" + json.dumps(ctx, ensure_ascii=False)
+    role_line = "Pengguna berperan: admin (boleh menerapkan aksi)." if admin.get("role") == "admin" else "Pengguna berperan: kasir (HANYA bertanya — jangan sertakan blok aksi, perubahan data hanya admin)."
+    system = role_line + "\n" + ASSISTANT_SYSTEM + "\n\nKONTEKS DATA SAAT INI:\n" + json.dumps(ctx, ensure_ascii=False)
     msgs = history + [{"role": "user", "content": body.message}]
     reply = await _ai_chat(msgs, system=system, feature="assistant", temperature=0.3, max_tokens=1500)
     action, clean = _parse_action(reply)

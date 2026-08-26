@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 
 const SUGGESTIONS = [
+  "Berapa total penjualan hari ini?",
+  "Apa produk terlaris hari ini?",
+  "Bandingkan penjualan hari ini dengan kemarin",
+  "Berapa total belanja hari ini?",
   "Buat kategori baru 'Kopi' untuk minuman",
   "Tambah banyak produk: Kopi Susu 18000, Teh Tarik 15000, Roti Bakar 12000",
   "Nonaktifkan produk Es Teh Manis",
@@ -235,7 +239,7 @@ export default function AssistantAI() {
       {/* header + provider selector */}
       <div className="border-b bg-white px-4 lg:px-6 py-3 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-extrabold flex items-center gap-2"><Sparkles className="text-[#E63946]" size={20} /> Asisten Admin AI</h1>
+          <h1 className="text-lg font-extrabold flex items-center gap-2"><Sparkles className="text-[#E63946]" size={20} /> AI</h1>
           <button data-testid="assistant-new-chat" onClick={newChat}
             className="tap h-9 px-3 rounded-lg border-2 border-[#E63946] text-[#E63946] font-bold text-sm flex items-center gap-1.5 hover:bg-[#E63946] hover:text-white transition-colors">
             <Plus size={15} /> Baru
