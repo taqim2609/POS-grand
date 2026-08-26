@@ -79,9 +79,41 @@ else
   fi
   test -s /tmp/gak-pos-update.tar.gz
 
-  # Ekstrak DI TEMPAT. .env / backend/.env.docker / backups/ tidak ada di arsip -> aman.
-  tar xzf /tmp/gak-pos-update.tar.gz -C .
+  # ===== Ekstraksi yang TAHAN IZIN & TAHAN JENIS tar =====
+  # Kasus di Pi: folder sebagian milik root (update via sudo/container) dan
+  # sebagian tar (busybox) MENOLAK menimpa file yang sudah ada ("File exists").
+  # Solusi: perbaiki kepemilikan dulu (pola update-pi.sh), ekstrak ke folder
+  # kosong di /tmp, lalu SALIN-TIMPA dengan cp (cp selalu menimpa).
+  ME_UID="$(id -u 2>/dev/null || echo 1000)"
+  GRP_GID="$(id -g 2>/dev/null || echo 1000)"
+  if [ -n "$(find . ! -uid "$ME_UID" -print -quit 2>/dev/null)" ]; then
+    echo "[$(TS)] Ada file milik user lain (biasanya root). Memperbaiki kepemilikan (perlu sudo SEKALI) ..."
+    sudo chown -R "$ME_UID:$GRP_GID" . 2>/dev/null || echo "[$(TS)] (chown gagal — akan coba sudo saat menyalin)"
+  fi
+
+  XDIR="$(mktemp -d /tmp/gak-extract.XXXXXX)"
+  if ! tar xzf /tmp/gak-pos-update.tar.gz -C "$XDIR" 2>/dev/null; then
+    echo "[$(TS)] GAGAL mengekstrak arsip di /tmp (arsip rusak?)."
+    rm -rf "$XDIR"
+    exit 0
+  fi
+
+  if ! cp -a "$XDIR"/. . 2>/dev/null; then
+    echo "[$(TS)] Menyalin ke folder gagal tanpa sudo — mencoba dengan sudo ..."
+    if ! sudo cp -a "$XDIR"/. . 2>/dev/null; then
+      echo "[$(TS)] GAGAL menyalin bahkan dengan sudo. Periksa izin folder secara manual."
+      rm -rf "$XDIR"
+      exit 0
+    fi
+    sudo chown -R "$ME_UID:$GRP_GID" . 2>/dev/null || true
+  fi
+  rm -rf "$XDIR"
   rm -f /tmp/gak-pos-update.tar.gz
+
+  # Sanity check: file kunci harus ada setelah ekstraksi
+  if [ ! -f docker-compose.yml ] || [ ! -f frontend/build/polyfills.js ]; then
+    echo "[$(TS)] PERINGATAN: file kunci tidak ditemukan setelah ekstraksi — cek arsip."
+  fi
 
   # Re-exec memakai file skrip versi BARU (arsip membawa skrip ini juga) —
   # supaya sisa langkah tidak dijalankan oleh file yang sedang ditimpa.
