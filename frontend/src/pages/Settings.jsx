@@ -7,7 +7,8 @@ import SettingsReport from "@/pages/SettingsReport";
 import SettingsInstaller from "@/pages/SettingsInstaller";
 import WhatsAppReport from "@/pages/WhatsAppReport";
 import DeviceSettings from "@/pages/DeviceSettings";
-import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer } from "lucide-react";
+import Diagnostik from "@/pages/Diagnostik";
+import { Users, Armchair, Sparkles, Trash2, MessageCircle, Download, Printer, Bug } from "lucide-react";
 
 const TABS = [
   { key: "users", label: "Pengguna", icon: Users, comp: UsersPage },
@@ -16,6 +17,7 @@ const TABS = [
   { key: "ai", label: "Pengaturan AI", icon: Sparkles, comp: SettingsAI },
   { key: "wa", label: "WhatsApp & Laporan", icon: MessageCircle, comp: WhatsAppReport },
   { key: "installer", label: "Installer", icon: Download, comp: SettingsInstaller },
+  { key: "diagnostik", label: "Diagnostik", icon: Bug, comp: Diagnostik },
   { key: "data", label: "Reset Data", icon: Trash2, comp: SettingsData },
 ];
 

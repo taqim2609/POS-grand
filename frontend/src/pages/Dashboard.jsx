@@ -5,7 +5,7 @@ import { copyText } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   LayoutDashboard, TrendingUp, Utensils, ShoppingBag, Store,
-  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX, Coins, Wallet, MessageCircle,
+  Sparkles, Loader2, Receipt, Percent, AlertTriangle, PackageX, Coins, Wallet, MessageCircle, RefreshCw,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, LineChart, Line, CartesianGrid } from "recharts";
 
@@ -110,12 +110,47 @@ export default function Dashboard() {
   const [ai, setAi] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [waLoading, setWaLoading] = useState(false);
+  const [upd, setUpd] = useState(null);
+  const [updState, setUpdState] = useState("idle"); // idle | starting | building | done
 
   const load = useCallback(
     () => api.get("/reports/summary", { params: { date } }).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e.response?.data?.detail))),
     [date]
   );
   useEffect(() => { load(); setAi(""); }, [load]);
+
+  // Banner "Versi baru tersedia" — cek ke backend (yang memeriksa vibecoder.co.id).
+  useEffect(() => {
+    let stop = false;
+    api.get("/update/check", { timeout: 12000 })
+      .then((r) => { if (!stop) setUpd(r.data); })
+      .catch(() => { /* bukan admin / offline — abaikan */ });
+    return () => { stop = true; };
+  }, []);
+
+  const startUpdate = async () => {
+    if (!window.confirm("Unduh versi terbaru dari vibecoder.co.id & bangun ulang sekarang? Aplikasi akan restart beberapa menit.")) return;
+    setUpdState("starting");
+    const t = toast.loading("Memulai update...");
+    try {
+      await api.post("/admin/update");
+      toast.success("Update dimulai — memuat ulang otomatis saat selesai.", { id: t, duration: 8000 });
+      setUpdState("building");
+      const started = Date.now();
+      let sawRunning = false;
+      const iv = setInterval(async () => {
+        if (Date.now() - started > 12 * 60 * 1000) { clearInterval(iv); window.location.reload(); return; }
+        try {
+          const r = await api.get("/admin/update/status");
+          if (r.data?.running) { sawRunning = true; setUpdState("building"); }
+          else if (sawRunning) { clearInterval(iv); setUpdState("done"); setTimeout(() => window.location.reload(), 1500); }
+        } catch (_) { /* server restart — tunggu */ }
+      }, 5000);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Gagal memulai update", { id: t, duration: 10000 });
+      setUpdState("idle");
+    }
+  };
 
   const genAi = async () => {
     setAiLoading(true);
@@ -152,6 +187,20 @@ export default function Dashboard() {
 
   return (
     <div className="h-full overflow-y-auto p-8">
+      {upd?.updateAvailable && (
+        <div className="mb-5 rounded-2xl border-2 border-[#E63946] bg-[#FEF2F2] px-5 py-4 flex flex-wrap items-center gap-3" data-testid="update-banner">
+          <AlertTriangle size={20} className="text-[#E63946]" />
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-extrabold text-[#0A0A0A] text-sm">Versi baru tersedia: {upd.latest}</div>
+            <div className="text-xs text-[#52525B]">Server Anda masih di versi {upd.current}. Update membawa fitur & perbaikan terbaru.</div>
+          </div>
+          <button data-testid="update-banner-btn" onClick={startUpdate} disabled={updState !== "idle"}
+            className="tap h-10 px-5 rounded-xl bg-[#E63946] text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-60">
+            <RefreshCw size={15} className={updState !== "idle" ? "animate-spin" : ""} />
+            {updState === "idle" ? "Update Sekarang" : updState === "building" ? "Membangun ulang..." : "Selesai..."}
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-3xl font-extrabold flex items-center gap-2"><LayoutDashboard /> Dashboard</h1>
         <div className="flex items-center gap-2 flex-wrap">

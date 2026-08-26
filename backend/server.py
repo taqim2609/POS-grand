@@ -1401,6 +1401,38 @@ async def update_status(admin: dict = Depends(require_admin)):
     return {"enabled": _update_enabled(), "running": running, "log": log,
             "host_project_dir": os.environ.get("HOST_PROJECT_DIR")}
 
+VIBE_UPDATE_BASE_URL = os.environ.get("VIBE_UPDATE_BASE_URL", "https://taqim258.vibecoder.co.id/pos-grand-update")
+
+@api.get("/update/check")
+async def update_check(admin: dict = Depends(require_admin)):
+    """Cek versi terbaru di vibecoder.co.id (dipakai banner 'Versi baru tersedia' & laporan Diagnostik)."""
+    import urllib.request, json
+    current = ""
+    host_dir = os.environ.get("HOST_PROJECT_DIR")
+    if host_dir:
+        try:
+            with open(os.path.join(host_dir, ".vibecoder-version"), "r") as f:
+                current = f.read().strip()
+        except Exception:
+            current = ""
+    latest = ""
+    reachable = False
+    try:
+        with urllib.request.urlopen(f"{VIBE_UPDATE_BASE_URL}/version.json", timeout=8) as r:
+            data = json.loads(r.read().decode("utf-8", "ignore"))
+            latest = str(data.get("version", "") or "").strip()
+            reachable = True
+    except Exception:
+        pass
+    return {
+        "enabled": bool(current),
+        "current": current,
+        "latest": latest,
+        "updateAvailable": bool(current and latest and latest != current),
+        "updateCenterReachable": reachable,
+        "baseUrl": VIBE_UPDATE_BASE_URL,
+    }
+
 @api.post("/admin/update")
 async def admin_update(admin: dict = Depends(require_admin)):
     if not os.path.exists(DOCKER_SOCK):
