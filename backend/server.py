@@ -2544,6 +2544,18 @@ class ReportChatSendWA(BaseModel):
     text: str
     recipients: Optional[List[str]] = None
 
+# Panduan singkat aplikasi — supaya Tanya AI bisa menjawab pertanyaan operasional
+# (cara pakai fitur), bukan hanya laporan.
+APP_GUIDE = (
+    "POS Grand Aceh Kuliner (web + APK Android). Modul: POS Kasir (dine-in meja, take-away, retail, diskon, "
+    "bayar cash/QRIS/debit), Shift (buka/tutup shift), Kas (setoran/pengambilan), Produk & Stok (kategori, "
+    "stok, import/export Excel, opname), Vendor (bagi hasil), Laporan (harian/mingguan/bulanan, ekspor Excel/PDF, "
+    "kirim WhatsApp), Tanya AI & Asisten AI (tanya-jawab data dan usulan aksi), Pengaturan (pengguna/role, meja, "
+    "perangkat printer, AI provider, installer/update dari vibecoder.co.id, diagnosa/lapor bug, versi, backup/restore, "
+    "reset data). Update server: ./update-vibecoder-pi.sh atau tombol Update Sekarang (vibecoder.co.id). "
+    "APK: isi alamat server http://IP-server di Pengaturan Server saat login. Fitur lapor bug: Pengaturan > Diagnostik."
+)
+
 async def _report_context(date_str):
     today = date_str or datetime.now(WIB).strftime("%Y-%m-%d")
     try:
@@ -2572,15 +2584,19 @@ async def ai_report_chat(body: ReportChatIn, admin: dict = Depends(admin_or_kasi
     msgs = hist.get("messages", [])
     convo = "\n".join([f"{m['role']}: {m['text']}" for m in msgs[-8:]])
     system = (
-        "Anda asisten analis untuk POS Grand Aceh Kuliner. Jawab pertanyaan pemilik toko tentang "
-        "laporan penjualan & belanja secara RINGKAS, jelas, dan dalam Bahasa Indonesia. "
-        "Gunakan HANYA data JSON yang diberikan. Tampilkan nominal dalam Rupiah (mis. Rp1.500.000). "
-        "Jika data tidak cukup untuk menjawab, katakan jujur bahwa data tidak tersedia."
+        "Anda asisten AI untuk POS Grand Aceh Kuliner (restoran & retail). Bisa menjawab SEMUA pertanyaan: "
+        "(1) laporan/penjualan/belanja — gunakan data JSON yang diberikan dan tampilkan nominal dalam Rupiah; "
+        "(2) cara pakai fitur aplikasi (buka/tutup shift, kas, void, backup, update, atur server APK, dll) — "
+        "jawab dari panduan aplikasi yang diberikan; (3) pengetahuan umum terkait usaha/restoran/akuntansi sederhana. "
+        "Jawab RINGKAS, jelas, dalam Bahasa Indonesia. Jika bertanya tentang data spesifik yang TIDAK ada di data "
+        "yang diberikan (mis. bulan lain, stok per produk), katakan jujur bahwa data tersebut tidak tersedia "
+        "di konteks ini dan sarankan cara melihatnya di menu Laporan/Produk. Jangan mengarang angka."
     )
     prompt = (
-        f"DATA LAPORAN (JSON):\n{json.dumps(ctx, ensure_ascii=False, default=str)}\n\n"
+        f"PANDUAN APLIKASI:\n{APP_GUIDE}\n\n"
+        f"DATA LAPORAN HARI INI/KEMARIN (JSON):\n{json.dumps(ctx, ensure_ascii=False, default=str)}\n\n"
         + (f"Riwayat percakapan sebelumnya:\n{convo}\n\n" if convo else "")
-        + f"Pertanyaan pemilik: {body.message.strip()}"
+        + f"Pertanyaan pengguna: {body.message.strip()}"
     )
     try:
         reply = await _gemini_text(system, prompt, feature="summary")
