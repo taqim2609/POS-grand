@@ -1569,11 +1569,19 @@ ASSISTANT_SYSTEM = (
     "2) create_vendor: {\"type\":\"create_vendor\",\"name\":str,\"contact\":str?,\"note\":str?}\n"
     "3) create_payment_method: {\"type\":\"create_payment_method\",\"name\":str,\"pm_type\":\"cash|qris|card\"}\n"
     "4) create_product: {\"type\":\"create_product\",\"name\":str,\"price\":number,\"kind\":\"makanan|minuman|retail|vendor\",\"category_name\":str,\"cost\":number?,\"stock\":number?,\"sku\":str?,\"description\":str?,\"vendor_name\":str?}\n"
-    "5) update_product: {\"type\":\"update_product\",\"name\":str,\"price\":number?,\"cost\":number?,\"stock\":number?,\"sold_out\":bool?,\"active\":bool?,\"description\":str?}\n"
-    "Catatan: DISKON di sistem ini bersifat per-transaksi (diterapkan kasir saat bayar), bukan data master; "
-    "untuk diskon berikan SARAN saja, jangan membuat blok aksi. "
-    "Gunakan KONTEKS DATA untuk mencocokkan nama kategori/vendor yang sudah ada dan hindari duplikat. "
-    "Jangan mengarang id. Selalu konfirmasi bahwa admin akan menekan tombol 'Terapkan' untuk mengeksekusi."
+    "5) create_products_bulk (BANYAK produk sekaligus dari daftar tempel): {\"type\":\"create_products_bulk\",\"items\":[{ ...field sama seperti create_product... }]}\n"
+    "6) update_product: {\"type\":\"update_product\",\"name\":str,\"price\":number?,\"cost\":number?,\"stock\":number?,\"sold_out\":bool?,\"active\":bool?,\"description\":str?}\n"
+    "7) deactivate_product (nonaktifkan produk): {\"type\":\"deactivate_product\",\"name\":str}\n"
+    "8) delete_product (hapus produk): {\"type\":\"delete_product\",\"name\":str}\n"
+    "9) deactivate_category (nonaktifkan kategori): {\"type\":\"deactivate_category\",\"name\":str,\"kind\":\"makanan|minuman|retail|vendor\"?}\n"
+    "10) delete_category (hapus kategori): {\"type\":\"delete_category\",\"name\":str,\"kind\":\"makanan|minuman|retail|vendor\"?}\n"
+    "ATURAN PENTING:\n"
+    "- Jika admin MENEMPEL/menyebut BANYAK produk sekaligus (beberapa baris atau dipisah koma), WAJIB pakai SATU create_products_bulk berisi array items (JANGAN banyak blok aksi). "
+    "Tebak 'kind' & 'category_name' yang masuk akal per item; default kind='retail' bila tak jelas. Jika harga tak tertera, set price 0 dan ingatkan admin melengkapi.\n"
+    "- 'nonaktifkan/matikan' -> deactivate_*, 'hapus/buang' -> delete_*. Catatan: menghapus data yang sudah dipakai transaksi akan otomatis dinonaktifkan (soft delete) demi keamanan.\n"
+    "- DISKON bersifat per-transaksi (diterapkan kasir saat bayar), bukan data master; untuk diskon berikan SARAN saja, jangan buat blok aksi.\n"
+    "- Gunakan KONTEKS DATA untuk mencocokkan nama kategori/vendor yang sudah ada dan hindari duplikat. Jangan mengarang id. "
+    "Selalu ingatkan bahwa admin akan menekan tombol 'Terapkan' untuk mengeksekusi."
 )
 
 async def _assistant_context():
@@ -1630,9 +1638,41 @@ async def assistant_chat(body: AIAssistantChatIn, admin: dict = Depends(require_
     action, clean = _parse_action(reply)
     history = (history + [{"role": "user", "content": body.message},
                           {"role": "assistant", "content": reply}])[-20:]
+    title = (body.message or "").strip()[:60] or "Percakapan"
     await db.ai_assistant_sessions.update_one({"id": sid},
-        {"$set": {"id": sid, "messages": history, "updated_at": now_utc().isoformat()}}, upsert=True)
+        {"$set": {"id": sid, "messages": history, "updated_at": now_utc().isoformat()},
+         "$setOnInsert": {"title": title, "created_at": now_utc().isoformat()}}, upsert=True)
     return {"session_id": sid, "reply": clean or "(tidak ada balasan)", "action": action}
+
+@api.get("/ai/assistant/sessions")
+async def assistant_sessions(admin: dict = Depends(require_admin)):
+    docs = await db.ai_assistant_sessions.find({}, {"_id": 0}).sort("updated_at", -1).to_list(50)
+    out = []
+    for d in docs:
+        msgs = d.get("messages", [])
+        title = d.get("title") or next((m.get("content", "") for m in msgs if m.get("role") == "user"), "Percakapan")
+        out.append({"id": d["id"], "title": (title or "Percakapan")[:60],
+                    "updated_at": d.get("updated_at"), "count": len(msgs)})
+    return {"sessions": out}
+
+@api.get("/ai/assistant/sessions/{sid}")
+async def assistant_session_detail(sid: str, admin: dict = Depends(require_admin)):
+    d = await db.ai_assistant_sessions.find_one({"id": sid}, {"_id": 0})
+    if not d:
+        raise HTTPException(404, "Sesi tidak ditemukan")
+    msgs = []
+    for m in d.get("messages", []):
+        if m.get("role") == "assistant":
+            _, clean = _parse_action(m.get("content", ""))
+            msgs.append({"role": "assistant", "text": clean or m.get("content", "")})
+        else:
+            msgs.append({"role": "user", "text": m.get("content", "")})
+    return {"id": sid, "messages": msgs}
+
+@api.delete("/ai/assistant/sessions/{sid}")
+async def assistant_session_delete(sid: str, admin: dict = Depends(require_admin)):
+    await db.ai_assistant_sessions.delete_one({"id": sid})
+    return {"deleted": True}
 
 async def _resolve_or_create_category(name, kind):
     kind = kind if kind in ("makanan", "minuman", "retail", "vendor") else "retail"
@@ -1644,6 +1684,56 @@ async def _resolve_or_create_category(name, kind):
            "created_at": now_utc().isoformat()}
     await db.categories.insert_one(doc)
     return doc["id"], True
+
+async def _create_one_product(a):
+    """Create a single product from an action dict. Returns a human message. Raises on validation error."""
+    name = (a.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Nama produk wajib diisi")
+    price = _to_num(a.get("price"), 0)
+    cost = _to_num(a.get("cost"), 0)
+    if price < 0 or cost < 0:
+        raise HTTPException(400, f"Harga/HPP '{name}' tidak boleh negatif")
+    kind = a.get("kind") if a.get("kind") in ("makanan", "minuman", "retail", "vendor") else "retail"
+    cat_id, cat_created = await _resolve_or_create_category(a.get("category_name") or "Umum", kind)
+    sku = (a.get("sku") or "").strip() or _slug_sku(name)
+    if await db.products.find_one({"sku": sku}):
+        sku = _slug_sku(name)
+    vendor_id = None
+    if a.get("vendor_name"):
+        v = await db.vendors.find_one({"name": {"$regex": f"^{re.escape(str(a.get('vendor_name')).strip())}$", "$options": "i"}})
+        vendor_id = v["id"] if v else None
+    doc = {"id": new_id(), "name": name, "sku": sku, "category_id": cat_id, "type": kind,
+           "price": price, "cost": cost, "vendor_id": vendor_id, "vendor_share_percent": None,
+           "description": str(a.get("description") or ""), "image": "", "active": True,
+           "sold_out": False, "stock": int(_to_num(a.get("stock"), 0)), "min_stock": 10,
+           "track_stock": kind == "retail", "created_at": now_utc().isoformat()}
+    await db.products.insert_one(doc)
+    extra = " (kategori baru)" if cat_created else ""
+    return f"'{name}' (SKU {sku}, Rp {int(price):,}){extra}".replace(",", ".")
+
+async def _find_product(name):
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(400, "Sebutkan nama/SKU produk")
+    p = await db.products.find_one({"$or": [
+        {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+        {"sku": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}]})
+    if not p:
+        raise HTTPException(404, f"Produk '{name}' tidak ditemukan")
+    return p
+
+async def _find_category(name, kind=None):
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(400, "Sebutkan nama kategori")
+    q = {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+    if kind in ("makanan", "minuman", "retail", "vendor"):
+        q["type"] = kind
+    c = await db.categories.find_one(q)
+    if not c:
+        raise HTTPException(404, f"Kategori '{name}' tidak ditemukan")
+    return c
 
 @api.post("/ai/assistant/apply")
 async def assistant_apply(body: AIAssistantApplyIn, admin: dict = Depends(require_admin)):
@@ -1684,41 +1774,34 @@ async def assistant_apply(body: AIAssistantApplyIn, admin: dict = Depends(requir
         return {"ok": True, "message": f"Metode pembayaran '{name}' ({pm_type}) dibuat.", "entity": "payment_method"}
 
     if t == "create_product":
-        name = (a.get("name") or "").strip()
-        if not name:
-            raise HTTPException(400, "Nama produk wajib diisi")
-        price = _to_num(a.get("price"), 0)
-        cost = _to_num(a.get("cost"), 0)
-        if price < 0 or cost < 0:
-            raise HTTPException(400, "Harga/HPP tidak boleh negatif")
-        kind = a.get("kind") if a.get("kind") in ("makanan", "minuman", "retail", "vendor") else "retail"
-        cat_id, cat_created = await _resolve_or_create_category(a.get("category_name") or "Umum", kind)
-        sku = (a.get("sku") or "").strip() or _slug_sku(name)
-        if await db.products.find_one({"sku": sku}):
-            sku = _slug_sku(name)
-        vendor_id = None
-        if a.get("vendor_name"):
-            v = await db.vendors.find_one({"name": {"$regex": f"^{re.escape(str(a.get('vendor_name')).strip())}$", "$options": "i"}})
-            vendor_id = v["id"] if v else None
-        doc = {"id": new_id(), "name": name, "sku": sku, "category_id": cat_id, "type": kind,
-               "price": price, "cost": cost, "vendor_id": vendor_id, "vendor_share_percent": None,
-               "description": str(a.get("description") or ""), "image": "", "active": True,
-               "sold_out": False, "stock": int(_to_num(a.get("stock"), 0)), "min_stock": 10,
-               "track_stock": kind == "retail", "created_at": now_utc().isoformat()}
-        await db.products.insert_one(doc)
-        extra = " (kategori baru dibuat)" if cat_created else ""
-        return {"ok": True, "message": f"Produk '{name}' (SKU {sku}, Rp {int(price):,}) dibuat{extra}.".replace(",", "."),
-                "entity": "product"}
+        msg = await _create_one_product(a)
+        return {"ok": True, "message": f"Produk {msg} dibuat.", "entity": "product"}
+
+    if t == "create_products_bulk":
+        items = a.get("items") or []
+        if not isinstance(items, list) or not items:
+            raise HTTPException(400, "Daftar produk kosong")
+        if len(items) > 100:
+            raise HTTPException(400, "Maksimal 100 produk per sekali proses")
+        ok_msgs, errors = [], []
+        for it in items:
+            try:
+                ok_msgs.append(await _create_one_product(it if isinstance(it, dict) else {}))
+            except HTTPException as e:
+                errors.append(f"{(it or {}).get('name', '?')}: {e.detail}")
+            except Exception as e:
+                errors.append(f"{(it or {}).get('name', '?')}: {e}")
+        summary = f"{len(ok_msgs)} produk dibuat"
+        if errors:
+            summary += f", {len(errors)} gagal"
+        return {"ok": True, "message": summary + ".", "entity": "product",
+                "results": {"created": ok_msgs, "errors": errors}}
 
     if t == "update_product":
         name = (a.get("name") or a.get("sku") or "").strip()
         if not name:
             raise HTTPException(400, "Sebutkan nama/SKU produk yang akan diubah")
-        p = await db.products.find_one({"$or": [
-            {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
-            {"sku": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}]})
-        if not p:
-            raise HTTPException(404, f"Produk '{name}' tidak ditemukan")
+        p = await _find_product(name)
         upd = {}
         if a.get("price") is not None:
             upd["price"] = _to_num(a.get("price"))
@@ -1739,6 +1822,34 @@ async def assistant_apply(body: AIAssistantApplyIn, admin: dict = Depends(requir
         await db.products.update_one({"id": p["id"]}, {"$set": upd})
         changed = ", ".join(f"{k}={v}" for k, v in upd.items())
         return {"ok": True, "message": f"Produk '{p['name']}' diperbarui ({changed}).", "entity": "product"}
+
+    if t == "deactivate_product":
+        p = await _find_product(a.get("name") or a.get("sku"))
+        await db.products.update_one({"id": p["id"]}, {"$set": {"active": False}})
+        return {"ok": True, "message": f"Produk '{p['name']}' dinonaktifkan.", "entity": "product"}
+
+    if t == "delete_product":
+        p = await _find_product(a.get("name") or a.get("sku"))
+        used = await db.orders.count_documents({"items.product_id": p["id"]})
+        if used:
+            await db.products.update_one({"id": p["id"]}, {"$set": {"active": False}})
+            return {"ok": True, "message": f"Produk '{p['name']}' pernah dipakai transaksi, jadi DINONAKTIFKAN (bukan dihapus).", "entity": "product"}
+        await db.products.delete_one({"id": p["id"]})
+        return {"ok": True, "message": f"Produk '{p['name']}' dihapus.", "entity": "product"}
+
+    if t == "deactivate_category":
+        c = await _find_category(a.get("name"), a.get("kind"))
+        await db.categories.update_one({"id": c["id"]}, {"$set": {"active": False}})
+        return {"ok": True, "message": f"Kategori '{c['name']}' dinonaktifkan.", "entity": "category"}
+
+    if t == "delete_category":
+        c = await _find_category(a.get("name"), a.get("kind"))
+        used = await db.products.count_documents({"category_id": c["id"]})
+        if used:
+            await db.categories.update_one({"id": c["id"]}, {"$set": {"active": False}})
+            return {"ok": True, "message": f"Kategori '{c['name']}' dipakai {used} produk, jadi DINONAKTIFKAN (bukan dihapus).", "entity": "category"}
+        await db.categories.delete_one({"id": c["id"]})
+        return {"ok": True, "message": f"Kategori '{c['name']}' dihapus.", "entity": "category"}
 
     raise HTTPException(400, f"Jenis aksi tidak didukung: {t}")
 

@@ -4,14 +4,15 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import {
   Bot, Send, Loader2, Sparkles, User, Cpu, CheckCircle2, X, Wand2, Settings as SettingsIcon,
+  History, Plus, Trash2, MessageSquare,
 } from "lucide-react";
 
 const SUGGESTIONS = [
   "Buat kategori baru 'Kopi' untuk minuman",
-  "Tambah produk Nasi Goreng harga 20000 kategori Makanan",
-  "Buat vendor baru bernama Toko Sumber Rezeki",
-  "Ubah harga produk Es Teh Manis jadi 6000",
-  "Tambah metode pembayaran QRIS BCA",
+  "Tambah banyak produk: Kopi Susu 18000, Teh Tarik 15000, Roti Bakar 12000",
+  "Nonaktifkan produk Es Teh Manis",
+  "Hapus kategori Kopi",
+  "Ubah harga produk Nasi Goreng jadi 22000",
 ];
 
 const ACTION_LABEL = {
@@ -19,8 +20,15 @@ const ACTION_LABEL = {
   create_vendor: "Buat Vendor",
   create_payment_method: "Buat Metode Pembayaran",
   create_product: "Buat Produk",
+  create_products_bulk: "Buat Banyak Produk",
   update_product: "Ubah Produk",
+  deactivate_product: "Nonaktifkan Produk",
+  delete_product: "Hapus Produk",
+  deactivate_category: "Nonaktifkan Kategori",
+  delete_category: "Hapus Kategori",
 };
+
+const DESTRUCTIVE = new Set(["delete_product", "delete_category"]);
 
 const FIELD_LABEL = {
   name: "Nama", kind: "Tipe", contact: "Kontak", note: "Catatan", pm_type: "Jenis",
@@ -28,34 +36,62 @@ const FIELD_LABEL = {
   category_name: "Kategori", vendor_name: "Vendor", sold_out: "Habis", active: "Aktif",
 };
 
-function ActionCard({ action, state, onApply }) {
-  const rows = Object.entries(action).filter(([k]) => k !== "type");
+function ActionCard({ action, state, result, onApply }) {
+  const danger = DESTRUCTIVE.has(action.type);
+  const isBulk = action.type === "create_products_bulk";
+  const items = isBulk ? (Array.isArray(action.items) ? action.items : []) : [];
+  const rows = Object.entries(action).filter(([k]) => k !== "type" && k !== "items");
+  const border = danger ? "border-[#DC2626] bg-[#FEF2F2]" : "border-[#2563EB] bg-[#EFF6FF]";
+  const titleColor = danger ? "text-[#B91C1C]" : "text-[#1D4ED8]";
   return (
-    <div className="mt-3 rounded-xl border-2 border-[#2563EB] bg-[#EFF6FF] p-3.5" data-testid="assistant-action-card">
+    <div className={`mt-3 rounded-xl border-2 ${border} p-3.5`} data-testid="assistant-action-card">
       <div className="flex items-center gap-2 mb-2">
-        <Wand2 size={16} className="text-[#2563EB]" />
-        <span className="font-extrabold text-[#1D4ED8] text-sm">{ACTION_LABEL[action.type] || action.type}</span>
+        <Wand2 size={16} className={titleColor} />
+        <span className={`font-extrabold text-sm ${titleColor}`}>{ACTION_LABEL[action.type] || action.type}</span>
+        {isBulk && <span className="text-xs font-bold text-[#2563EB] bg-white border border-[#BFDBFE] rounded-full px-2 py-0.5">{items.length} produk</span>}
       </div>
-      <div className="rounded-lg bg-white border border-[#BFDBFE] divide-y text-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-3 px-3 py-1.5">
-            <span className="text-[#52525B]">{FIELD_LABEL[k] || k}</span>
-            <span className="font-bold text-right break-all">{String(v)}</span>
-          </div>
-        ))}
-      </div>
+
+      {isBulk ? (
+        <div className="rounded-lg bg-white border border-[#BFDBFE] max-h-56 overflow-y-auto text-sm" data-testid="assistant-bulk-list">
+          {items.map((it, idx) => (
+            <div key={idx} className="flex justify-between gap-3 px-3 py-1.5 border-b last:border-0">
+              <span className="font-semibold truncate">{it.name || "(tanpa nama)"} <span className="text-[#a1a1aa] font-normal">· {it.category_name || it.kind || "retail"}</span></span>
+              <span className="font-bold shrink-0">Rp {Number(it.price || 0).toLocaleString("id-ID")}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg bg-white border divide-y text-sm" style={{ borderColor: danger ? "#FECACA" : "#BFDBFE" }}>
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3 px-3 py-1.5">
+              <span className="text-[#52525B]">{FIELD_LABEL[k] || k}</span>
+              <span className="font-bold text-right break-all">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {state === "applied" ? (
-        <div className="mt-2.5 flex items-center gap-1.5 text-[#047857] font-bold text-sm">
-          <CheckCircle2 size={16} /> Sudah diterapkan
+        <div className="mt-2.5">
+          <div className="flex items-center gap-1.5 text-[#047857] font-bold text-sm"><CheckCircle2 size={16} /> Sudah diterapkan</div>
+          {result?.results && (
+            <div className="mt-1.5 text-xs text-[#52525B]">
+              <span className="font-bold text-[#047857]">{result.results.created?.length || 0} berhasil</span>
+              {result.results.errors?.length > 0 && <span className="font-bold text-[#B91C1C]"> · {result.results.errors.length} gagal</span>}
+              {result.results.errors?.length > 0 && (
+                <ul className="mt-1 list-disc pl-4 text-[#B91C1C]">
+                  {result.results.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       ) : state === "cancelled" ? (
-        <div className="mt-2.5 flex items-center gap-1.5 text-[#71717A] font-bold text-sm">
-          <X size={16} /> Dibatalkan
-        </div>
+        <div className="mt-2.5 flex items-center gap-1.5 text-[#71717A] font-bold text-sm"><X size={16} /> Dibatalkan</div>
       ) : (
         <div className="mt-2.5 flex gap-2">
           <button data-testid="assistant-apply-btn" onClick={() => onApply("apply")} disabled={state === "applying"}
-            className="tap flex-1 h-10 rounded-lg bg-[#2563EB] text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+            className={`tap flex-1 h-10 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 ${danger ? "bg-[#DC2626]" : "bg-[#2563EB]"}`}>
             {state === "applying" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Terapkan
           </button>
           <button data-testid="assistant-cancel-btn" onClick={() => onApply("cancel")} disabled={state === "applying"}
@@ -76,6 +112,8 @@ export default function AssistantAI() {
   const [provider, setProvider] = useState("gemini");
   const [keySet, setKeySet] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
@@ -86,7 +124,31 @@ export default function AssistantAI() {
       setProvider(a.provider || "gemini");
       setKeySet(!!a.api_key_set);
     }).catch(() => {});
-  useEffect(() => { loadCfg(); }, []);
+  const loadSessions = () =>
+    api.get("/ai/assistant/sessions").then((r) => setSessions(r.data.sessions || [])).catch(() => {});
+  useEffect(() => { loadCfg(); loadSessions(); }, []);
+
+  const newChat = () => { setSid(null); setMessages([]); setShowHistory(false); };
+
+  const openSession = async (id) => {
+    setShowHistory(false);
+    setLoading(true);
+    try {
+      const r = await api.get(`/ai/assistant/sessions/${id}`);
+      setSid(id);
+      setMessages((r.data.messages || []).map((m) => ({ role: m.role, text: m.text })));
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
+  };
+
+  const deleteSession = async (id, e) => {
+    e.stopPropagation();
+    try {
+      await api.delete(`/ai/assistant/sessions/${id}`);
+      setSessions((s) => s.filter((x) => x.id !== id));
+      if (id === sid) newChat();
+      toast.success("Percakapan dihapus");
+    } catch (err) { toast.error(apiError(err.response?.data?.detail)); }
+  };
 
   const pickProvider = async (p) => {
     if (p === provider) return;
@@ -112,6 +174,7 @@ export default function AssistantAI() {
         role: "assistant", text: r.data.reply,
         action: r.data.action || null, actionState: r.data.action ? "pending" : null,
       }]);
+      loadSessions();
     } catch (e) {
       setMessages((m) => [...m, { role: "assistant", text: `⚠️ ${apiError(e.response?.data?.detail)}`, error: true }]);
     } finally { setLoading(false); }
@@ -125,7 +188,7 @@ export default function AssistantAI() {
     setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "applying" } : msg));
     try {
       const r = await api.post("/ai/assistant/apply", { action: messages[idx].action });
-      setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "applied" } : msg));
+      setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "applied", actionResult: r.data } : msg));
       toast.success(r.data.message || "Berhasil diterapkan");
     } catch (e) {
       setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "pending" } : msg));
@@ -137,7 +200,17 @@ export default function AssistantAI() {
     <div className="h-full flex flex-col bg-[#FAFAFA]" data-testid="assistant-ai-page">
       {/* header + provider selector */}
       <div className="border-b bg-white px-4 lg:px-6 py-3 flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-lg font-extrabold flex items-center gap-2"><Sparkles className="text-[#E63946]" size={20} /> Asisten Admin AI</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-extrabold flex items-center gap-2"><Sparkles className="text-[#E63946]" size={20} /> Asisten Admin AI</h1>
+          <button data-testid="assistant-new-chat" onClick={newChat}
+            className="tap h-9 px-3 rounded-lg border-2 border-[#E63946] text-[#E63946] font-bold text-sm flex items-center gap-1.5 hover:bg-[#E63946] hover:text-white transition-colors">
+            <Plus size={15} /> Baru
+          </button>
+          <button data-testid="assistant-history-toggle" onClick={() => { setShowHistory((v) => !v); loadSessions(); }}
+            className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 transition-colors ${showHistory ? "bg-[#0A0A0A] border-[#0A0A0A] text-white" : "border-[#D4D4D8] text-[#0A0A0A] hover:bg-[#FAFAFA]"}`}>
+            <History size={15} /> Riwayat
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-[#71717A] hidden sm:block">Provider:</span>
           <button data-testid="assistant-provider-gemini" onClick={() => pickProvider("gemini")} disabled={savingProvider}
@@ -156,6 +229,27 @@ export default function AssistantAI() {
           <SettingsIcon size={16} className="shrink-0" />
           Provider chenzk belum ada API Key/model. Atur di{" "}
           <Link to="/settings-ai" className="font-extrabold underline">Pengaturan AI</Link>.
+        </div>
+      )}
+
+      {showHistory && (
+        <div className="border-b bg-[#FAFAFA] max-h-64 overflow-y-auto" data-testid="assistant-history-panel">
+          <div className="px-4 lg:px-6 py-2 text-xs font-bold text-[#71717A] uppercase tracking-wider">Riwayat Percakapan</div>
+          {sessions.length === 0 && <div className="px-4 lg:px-6 pb-3 text-sm text-[#a1a1aa]">Belum ada percakapan tersimpan.</div>}
+          {sessions.map((s) => (
+            <div key={s.id} data-testid={`assistant-session-${s.id}`} onClick={() => openSession(s.id)}
+              className={`px-4 lg:px-6 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-white border-t ${s.id === sid ? "bg-white" : ""}`}>
+              <MessageSquare size={16} className="text-[#E63946] shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{s.title}</div>
+                <div className="text-[11px] text-[#a1a1aa]">{s.count} pesan · {s.updated_at ? new Date(s.updated_at).toLocaleString("id-ID") : ""}</div>
+              </div>
+              <button data-testid={`assistant-session-del-${s.id}`} onClick={(e) => deleteSession(s.id, e)}
+                className="tap p-1.5 rounded-lg text-[#a1a1aa] hover:text-[#DC2626] hover:bg-[#FEF2F2]">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -188,7 +282,7 @@ export default function AssistantAI() {
                 {m.text}
               </div>
               {m.action && (
-                <ActionCard action={m.action} state={m.actionState} onApply={(mode) => handleAction(i, mode)} />
+                <ActionCard action={m.action} state={m.actionState} result={m.actionResult} onApply={(mode) => handleAction(i, mode)} />
               )}
             </div>
           </div>
