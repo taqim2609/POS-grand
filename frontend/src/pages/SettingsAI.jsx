@@ -12,6 +12,7 @@ const FEATURE_META = {
   image: { label: "Gambar Produk", icon: ImageIcon, hint: "Model gambar (image generation, mis. dall-e-3). Kosongkan bila ingin pakai Gemini/bawaan.", modelPh: "dall-e-3" },
   summary: { label: "Analisis Laporan", icon: BarChart3, hint: "Model teks (chat) untuk ringkasan & analisis penjualan.", modelPh: "claude-sonnet-5" },
   vision: { label: "Baca Faktur (Vision)", icon: FileText, hint: "Model yang mendukung GAMBAR/vision (mis. claude-sonnet-5, gpt-4o) untuk membaca foto faktur pembelian.", modelPh: "claude-sonnet-5" },
+  assistant: { label: "Asisten Admin AI", icon: Sparkles, hint: "Model teks untuk Asisten AI (tanya soal data, usulan aksi terapkan).", modelPh: "claude-sonnet-5" },
 };
 
 export default function SettingsAI() {
@@ -32,7 +33,7 @@ export default function SettingsAI() {
   return (
     <div className="h-full overflow-y-auto p-8">
       <h1 className="text-3xl font-extrabold flex items-center gap-2 mb-2"><Sparkles /> Pengaturan AI</h1>
-      <p className="text-sm text-[#52525B] mb-6">Atur penyedia AI OpenAI-compatible Anda sendiri, terpisah untuk tiap fungsi: deskripsi, gambar, dan analisis laporan.</p>
+      <p className="text-sm text-[#52525B] mb-6">Atur penyedia AI OpenAI-compatible Anda sendiri, terpisah untuk tiap fungsi: deskripsi, gambar, analisis laporan, dan asisten admin AI.</p>
 
       <div data-testid="ai-warning" className="flex items-start gap-3 bg-[#FEF3C7] border border-[#F59E0B] text-[#92400E] rounded-2xl px-4 py-3 mb-6 max-w-3xl">
         <ShieldAlert size={20} className="shrink-0 mt-0.5" />

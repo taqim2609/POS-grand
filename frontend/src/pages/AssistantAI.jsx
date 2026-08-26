@@ -306,8 +306,8 @@ export default function AssistantAI() {
         <div ref={endRef} />
       </div>
 
-      {/* input */}
-      <div className="border-t bg-white p-3 lg:p-4">
+      {/* input — padding bawah aman dari tombol navigasi Android (safe-area) */}
+      <div className="border-t bg-white p-3 lg:p-4" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}>
         <div className="max-w-2xl mx-auto flex gap-2">
           <input
             data-testid="assistant-input" value={input} onChange={(e) => setInput(e.target.value)}
