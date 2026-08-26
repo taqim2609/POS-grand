@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah, ORDER_TYPE_LABEL, wibToday } from "@/lib/format";
+import { copyText } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   LayoutDashboard, TrendingUp, Utensils, ShoppingBag, Store,
@@ -268,7 +269,11 @@ export default function Dashboard() {
               {aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} {ai ? "Buat Ulang" : "Buat Laporan"}
             </button>
             {ai && (
-              <button data-testid="ai-summary-copy" onClick={() => { navigator.clipboard?.writeText(ai); toast.success("Laporan disalin"); }}
+              <button data-testid="ai-summary-copy" onClick={async () => {
+                  const ok = await copyText(ai);
+                  if (ok) toast.success("Laporan disalin");
+                  else toast.error("Tidak bisa menyalin otomatis — silakan blok & salin teks manual");
+                }}
                 className="tap h-11 px-4 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Salin</button>
             )}
           </div>

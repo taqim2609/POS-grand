@@ -1420,10 +1420,23 @@ async def admin_update(admin: dict = Depends(require_admin)):
             except Exception:
                 pass
         image = os.environ.get("UPDATER_IMAGE", "docker:cli")
-        cmd = ("apk add --no-cache git >/dev/null 2>&1; "
-               "git config --global --add safe.directory /project; "
-               "git -C /project pull --ff-only; "
-               "cd /project && docker compose up -d --build")
+        cmd = (
+            "apk add --no-cache git curl >/dev/null 2>&1; "
+            "if [ -f /project/.vibecoder-version ]; then "
+            "VER=\"$(cat /project/.vibecoder-version 2>/dev/null || true)\"; "
+            "REMOTE=\"$(curl -fsSL -m 20 https://taqim258.vibecoder.co.id/pos-grand-update/version.json | grep -o '\"version\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4 || true)\"; "
+            "if [ -n \"$REMOTE\" ] && [ \"$REMOTE\" != \"$VER\" ]; then "
+            "curl -fsSL -m 300 -o /tmp/gak-pos-update.tar.gz https://taqim258.vibecoder.co.id/pos-grand-update/pos-grand.tar.gz && "
+            "tar xzf /tmp/gak-pos-update.tar.gz -C /project && rm -f /tmp/gak-pos-update.tar.gz && "
+            "echo \"$REMOTE\" > /project/.vibecoder-version && echo \"Update ke versi $REMOTE\"; "
+            "else "
+            "echo 'Sudah versi terbaru, lewati unduhan.'; "
+            "fi; "
+            "else "
+            "git config --global --add safe.directory /project; git -C /project pull --ff-only; "
+            "fi; "
+            "cd /project && docker compose up -d --build"
+        )
         cli.containers.run(
             image,
             command=["sh", "-c", cmd],

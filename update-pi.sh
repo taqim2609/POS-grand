@@ -2,6 +2,12 @@
 set -e
 cd "$(dirname "$0")"
 echo "=== Update Grand Aceh Kuliner POS (Pi/Linux) ==="
+# Bila update sudah dialihkan ke vibecoder.co.id (ada file .vibecoder-version),
+# gunakan jalur vibecoder, bukan git pull.
+if [ -f .vibecoder-version ]; then
+  echo "Mode update vibecoder.co.id terdeteksi — memakai update-vibecoder-pi.sh"
+  exec bash update-vibecoder-pi.sh "$@"
+fi
 if [ -d .git ]; then
   echo "Menarik pembaruan terbaru dari Git..."
   # Tandai folder sebagai aman (cegah error "dubious ownership").

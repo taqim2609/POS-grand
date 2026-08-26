@@ -12,6 +12,12 @@ NOTIFY="${1:-}"
 TS() { date "+%Y-%m-%d %H:%M:%S"; }
 echo "[$(TS)] Cek update dimulai..."
 
+# Bila update sudah dialihkan ke vibecoder.co.id (ada file .vibecoder-version),
+# pakai update-vibecoder-pi.sh (yang juga punya pengecekan versi + notifikasi WA).
+if [ -f .vibecoder-version ]; then
+  exec bash update-vibecoder-pi.sh "$NOTIFY"
+fi
+
 # Docker butuh sudo bila user belum aktif di grup docker
 DOCKER="docker"; docker info >/dev/null 2>&1 || DOCKER="sudo docker"
 
