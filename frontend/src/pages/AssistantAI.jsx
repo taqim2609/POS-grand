@@ -3,9 +3,11 @@ import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { collectVersions } from "@/lib/versions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Bot, Send, Loader2, Sparkles, User, Cpu, CheckCircle2, X, Wand2, Settings as SettingsIcon,
-  History, Plus, Trash2, MessageSquare,
+  History, Plus, Trash2, MessageSquare, Lightbulb,
 } from "lucide-react";
 
 const SUGGESTIONS = [
@@ -118,6 +120,30 @@ export default function AssistantAI() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useState("gemini");
+  const [featOpen, setFeatOpen] = useState(false);
+  const [featText, setFeatText] = useState("");
+  const [featSending, setFeatSending] = useState(false);
+
+  const sendFeature = async () => {
+    const msg = featText.trim();
+    if (!msg) return toast.error("Tulis permintaan fitur dulu");
+    setFeatSending(true);
+    const t = toast.loading("Mengirim permintaan fitur ke VibeCoder...");
+    try {
+      let context = "";
+      try {
+        const v = await collectVersions();
+        context = `Platform: ${v.native ? `APK v${v.apk}` : "Web"} | Bundle: ${v.bundle} | Server: ${v.serverVersion || "-"} | OTA: ${v.otaInstalled || "-"}`;
+      } catch (_) {}
+      await api.post("/feature-request/send", { message: msg, context });
+      toast.success("Permintaan fitur terkirim ke VibeCoder — sebutkan di chat bahwa Anda sudah mengirimnya", { id: t, duration: 8000 });
+      setFeatOpen(false); setFeatText("");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Gagal mengirim (periksa internet server)", { id: t, duration: 10000 });
+    } finally {
+      setFeatSending(false);
+    }
+  };
   const [keySet, setKeySet] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
   const [sessions, setSessions] = useState([]);
@@ -213,6 +239,10 @@ export default function AssistantAI() {
           <button data-testid="assistant-new-chat" onClick={newChat}
             className="tap h-9 px-3 rounded-lg border-2 border-[#E63946] text-[#E63946] font-bold text-sm flex items-center gap-1.5 hover:bg-[#E63946] hover:text-white transition-colors">
             <Plus size={15} /> Baru
+          </button>
+          <button data-testid="assistant-feature-btn" onClick={() => setFeatOpen(true)}
+            className="tap h-9 px-3 rounded-lg border-2 border-[#4F46E5] text-[#4F46E5] font-bold text-sm flex items-center gap-1.5 hover:bg-[#4F46E5] hover:text-white transition-colors">
+            <Lightbulb size={15} /> Usulkan Fitur
           </button>
           <button data-testid="assistant-history-toggle" onClick={() => { setShowHistory((v) => !v); loadSessions(); }}
             className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 transition-colors ${showHistory ? "bg-[#0A0A0A] border-[#0A0A0A] text-white" : "border-[#D4D4D8] text-[#0A0A0A] hover:bg-[#FAFAFA]"}`}>
@@ -320,6 +350,32 @@ export default function AssistantAI() {
           </button>
         </div>
       </div>
+
+      {/* Dialog Usulkan Fitur */}
+      <Dialog open={featOpen} onOpenChange={setFeatOpen}>
+        <DialogContent data-testid="feature-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Lightbulb size={18} className="text-[#4F46E5]" /> Usulkan Fitur untuk VibeCoder</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-[#52525B] -mt-2">Jelaskan fitur yang Anda inginkan. Permintaan ini dikirim ke vibecoder.co.id untuk dipelajari, lalu saya buatkan kodenya dan kirim lewat update berikutnya.</p>
+          <textarea
+            data-testid="feature-input"
+            value={featText}
+            onChange={(e) => setFeatText(e.target.value)}
+            placeholder="Contoh: tambahkan laporan penjualan per shift, atau tombol rekap harian di dashboard kasir…"
+            rows={5}
+            className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-[#4F46E5] resize-y"
+          />
+          <DialogFooter className="flex gap-2">
+            <button data-testid="feature-cancel" onClick={() => setFeatOpen(false)} disabled={featSending}
+              className="tap h-10 px-4 rounded-lg border-2 border-[#D4D4D8] text-[#52525B] font-bold text-sm disabled:opacity-50">Batal</button>
+            <button data-testid="feature-send" onClick={sendFeature} disabled={featSending || !featText.trim()}
+              className="tap h-10 px-5 rounded-lg bg-[#4F46E5] text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50">
+              {featSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Kirim Permintaan
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

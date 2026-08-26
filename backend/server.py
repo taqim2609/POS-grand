@@ -1407,6 +1407,34 @@ VIBE_REPORT_URL = os.environ.get("VIBE_REPORT_URL", "https://taqim258.vibecoder.
 VIBE_REPORT_TOKEN = os.environ.get("VIBE_REPORT_TOKEN", "gak_rpt_7f3c9e1b")
 VIBE_BACKUP_URL = os.environ.get("VIBE_BACKUP_URL", "https://taqim258.vibecoder.co.id/pos-grand-update/bkp.php")
 VIBE_BACKUP_TOKEN = os.environ.get("VIBE_BACKUP_TOKEN", "gak_bkp_2a8d51c4")
+VIBE_FEATURE_URL = os.environ.get("VIBE_FEATURE_URL", "https://taqim258.vibecoder.co.id/pos-grand-update/feat.php")
+VIBE_FEATURE_TOKEN = os.environ.get("VIBE_FEATURE_TOKEN", "gak_feat_5b2d9e77")
+
+class FeatureRequestIn(BaseModel):
+    message: str
+    context: Optional[str] = None
+
+@api.post("/feature-request/send")
+async def feature_request_send(body: FeatureRequestIn, admin: dict = Depends(admin_or_kasir)):
+    """Kirim permintaan fitur dari tombol 'Usulkan Fitur' (Asisten AI) ke pusat vibecoder.co.id."""
+    import urllib.request, json as _json
+    msg = (body.message or "").strip()
+    if not msg:
+        raise HTTPException(400, "Permintaan fitur kosong")
+    if len(msg) > 200_000:
+        raise HTTPException(400, "Permintaan fitur terlalu panjang")
+    ctx = (body.context or "").strip()
+    payload = _json.dumps({"ts": datetime.now(timezone.utc).isoformat(), "message": msg, "context": ctx}).encode("utf-8")
+    req = urllib.request.Request(
+        VIBE_FEATURE_URL, data=payload,
+        headers={"Content-Type": "application/json", "X-Gak-Token": VIBE_FEATURE_TOKEN},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            resp = r.read().decode("utf-8", "ignore")
+        return {"ok": True, "response": resp[:500]}
+    except Exception as e:
+        raise HTTPException(502, f"Gagal mengirim ke vibecoder.co.id: {e}")
 
 class DiagSendIn(BaseModel):
     report: str
