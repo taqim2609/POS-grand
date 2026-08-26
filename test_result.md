@@ -158,7 +158,8 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Login page: tombol 'Koneksi via Tailscale' (Funnel) + panel isian URL"
+    - "Frontend: Asisten AI page (/asisten-ai) - UI, provider selector, chat, action cards"
+    - "Frontend: Pengaturan AI page (/settings-ai) - feature cards, provider selectors"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -216,8 +217,42 @@ agent_communication:
           agent: "testing"
           comment: "✅ ALL TESTS PASSED. Comprehensive testing completed via /app/backend_test.py. (1) AUTH/RBAC: ✅ Both /ai/assistant/chat and /ai/assistant/apply correctly enforce admin-only access - kasir and input tokens get 403, admin gets 200. (2) GET /api/settings/ai: ✅ Response includes 'assistant' feature with 'provider' field set to 'gemini' (default). All 5 features (description, image, summary, vision, assistant) include provider field. (3) PUT /api/settings/ai: ✅ Successfully saves provider='gemini' for assistant feature, persistence verified via GET. (4) POST /ai/assistant/chat: ✅ REAL Gemini API integration working (gemini-flash-latest). Returns correct structure {session_id, reply, action}. Tested with message 'Buatkan kategori Jus Segar untuk minuman' -> returned action: {\"type\":\"create_category\",\"name\":\"Jus Segar\",\"kind\":\"minuman\"}. Multi-turn conversation working correctly with same session_id. Model intelligently checks context to prevent duplicates (e.g., refused to create 'Kopi' category as it already exists). (5) POST /ai/assistant/apply: ✅ All action types working: create_category (✅), create_vendor (✅), create_payment_method (✅), create_product (✅ with auto-generated SKU 'UJIPRODUKAI-556D'), update_product (✅ price updated from 12345 to 15000 verified). (6) Validation: ✅ Duplicate category returns 400, non-existent product returns 404, unknown action type returns 400. (7) Cleanup: ✅ All test entities deleted (products, categories, vendors via DELETE endpoints; payment method via MongoDB as no DELETE endpoint exists). No errors in backend logs. Initial Gemini API 503 error (high demand) resolved after retry - this was temporary external API issue, not code problem."
 
+  - task: "Frontend: Asisten AI page (/asisten-ai) - UI, provider selector, chat, action cards"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AssistantAI.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Frontend implementation of AI Admin Assistant page at /asisten-ai. Features: (1) Provider selector in header (Gemini AI / chenzk buttons with data-testids assistant-provider-gemini/chenzk), (2) Warning banner when chenzk selected without API key (assistant-key-warning), (3) Empty state with suggestion chips (assistant-empty), (4) Chat interface with input (assistant-input) and send button (assistant-send), (5) Action cards (assistant-action-card) with Terapkan (assistant-apply-btn) and Batal (assistant-cancel-btn) buttons, (6) Real-time chat with Gemini API showing assistant replies and structured actions. Need testing: verify all UI elements, provider switching, warning banner, chat flow, action card apply/cancel functionality."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL UI TESTS PASSED. Comprehensive Playwright testing completed. PART A - Asisten AI Page: (1) ✅ Page loads correctly (data-testid='assistant-ai-page'), header 'Asisten Admin AI' present, (2) ✅ Empty state visible with 5 suggestion chips, (3) ✅ Provider selector working: Gemini AI button active by default (blue filled), chenzk button present, (4) ✅ Warning banner functionality: clicking chenzk shows warning banner (data-testid='assistant-key-warning') with text 'Provider chenzk belum ada API Key/model. Atur di Pengaturan AI', clicking Gemini hides banner, (5) ✅ Chat functionality: input field and send button working, messages sent successfully, (6) ✅ Action cards: tested with 'Buat vendor baru bernama VendorTest1069' - action card appeared with 'Buat Vendor' label showing VendorTest1069, both Terapkan and Batal buttons present, (7) ✅ Cancel functionality: clicking 'Batal' button successfully changed action card to show 'Dibatalkan', (8) ✅ Apply functionality: verified in earlier test - clicking 'Terapkan' created category TesAsistenUI with success toast 'Kategori TesAsistenUI (retail) dibuat.' and card changed to 'Sudah diterapkan'. NOTE: During testing, encountered temporary Gemini API 503 errors (high demand) - this is EXTERNAL issue, error handling works correctly (shows error message to user). No console errors or crashes. All data-testids present and functional."
+
+  - task: "Frontend: Pengaturan AI page (/settings-ai) - feature cards, provider selectors"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/SettingsAI.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Frontend implementation of AI Settings page at /settings-ai. Features: (1) Four feature cards (description, image, summary, vision) with data-testids ai-feature-{featKey}, (2) Provider selector buttons per feature (provider-gemini-{featKey}, provider-chenzk-{featKey}), (3) Conditional Base URL field (ai-base-url-{featKey}) visible only when chenzk selected, (4) 'Cek Sisa Kredit' (credit-ai-{featKey}) and 'Muat Model' (load-models-{featKey}) buttons visible for chenzk, (5) Blue Gemini note when Gemini selected explaining default server key usage. Need testing: verify all feature cards present, provider switching per card, Base URL field show/hide, button visibility."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL UI TESTS PASSED. PART B - Pengaturan AI Page: (1) ✅ All 4 feature cards present and found: 'description' (Deskripsi Produk), 'image' (Gambar Produk), 'summary' (Analisis Laporan), 'vision' (Baca Faktur Vision), (2) ✅ Provider selector on description card: both Gemini AI and chenzk buttons found and functional, (3) ✅ Clicking chenzk: Base URL field (data-testid='ai-base-url-description') appeared and is visible, prefilled with 'https://chenzk.top/v1', (4) ✅ Additional buttons visible when chenzk selected: 'Cek Sisa Kredit' button (data-testid='credit-ai-description') visible, 'Muat Model' button (data-testid='load-models-description') visible, (5) ✅ Clicking Gemini AI: Base URL field removed from DOM (properly hidden), blue Gemini note displayed correctly with text 'Mode Gemini memakai kunci Gemini bawaan server (endpoint resmi Google)...'. No console errors. All data-testids present and functional. Screenshots captured for verification."
+
 agent_communication:
     - agent: "main"
       message: "Backend AI assistant added. Auth: admin only (require_admin). Login admin taqim2609@gmail.com / GrandAceh#2026 (see /app/memory/test_credentials.md). Default provider for 'assistant' is gemini using server GEMINI_API_KEY (gemini-flash-latest) — real external calls will be made to Google. Test flow: POST /api/ai/assistant/chat {message:'buat kategori Kopi untuk minuman'} -> expect reply + action {type:create_category,...}; then POST /api/ai/assistant/apply {action:{...}} -> expect ok + entity created. Also test update_product by existing product name (e.g., seeded product). IMPORTANT: clean up any test entities you create (categories/products/vendors/payment methods) via existing DELETE endpoints so seed data stays tidy. Do NOT change provider to chenzk (no key configured)."
     - agent: "testing"
       message: "✅ AI Admin Assistant backend testing COMPLETE - ALL TESTS PASSED. Tested all 6 requirements: (1) RBAC admin-only enforcement working (403 for kasir/input, 200 for admin), (2) GET /settings/ai returns assistant feature with provider field, (3) PUT /settings/ai persists provider correctly, (4) POST /ai/assistant/chat works with REAL Gemini API - returns session_id/reply/action, multi-turn working, (5) POST /ai/assistant/apply works for all 5 action types (create_category/vendor/payment_method/product, update_product), (6) Validation working (400 for duplicate/unknown, 404 for not found). All test entities cleaned up. Action returned by chat: {\"type\":\"create_category\",\"name\":\"Jus Segar\",\"kind\":\"minuman\"}. No code issues found. Ready for production use."
+    - agent: "main"
+      message: "Frontend pages added for AI Assistant and AI Settings. Please test: (1) /asisten-ai page - provider selector (Gemini/chenzk), warning banner when chenzk selected, empty state with suggestions, chat interface, action cards with Terapkan/Batal buttons; (2) /settings-ai page - 4 feature cards (description/image/summary/vision), provider selectors per card, Base URL field show/hide based on provider, Cek Sisa Kredit and Muat Model buttons for chenzk. Login as admin (taqim2609@gmail.com / GrandAceh#2026). NOTE: Assistant uses REAL Gemini API so replies may take 5-15 seconds."
+    - agent: "testing"
+      message: "✅ FRONTEND UI TESTING COMPLETE - ALL TESTS PASSED. Comprehensive Playwright testing of both pages completed successfully. ASISTEN AI PAGE (/asisten-ai): ✅ All UI elements present and functional - page loads correctly, empty state with 5 suggestion chips, provider selector working (Gemini active by default, chenzk shows warning banner), chat functionality working (input/send), action cards appear with correct labels and data, Terapkan button creates entities with success toast (verified: 'Kategori TesAsistenUI (retail) dibuat.'), Batal button changes card to 'Dibatalkan'. PENGATURAN AI PAGE (/settings-ai): ✅ All 4 feature cards present (description/image/summary/vision), provider selectors working on each card, Base URL field appears when chenzk selected and hides when Gemini selected, Cek Sisa Kredit and Muat Model buttons visible for chenzk, blue Gemini note displays correctly. NOTE: Encountered temporary Gemini API 503 errors during testing (high demand) - this is EXTERNAL issue, error handling works correctly. No console errors or crashes. All data-testids present. Implementation is production-ready."
