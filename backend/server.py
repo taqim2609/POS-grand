@@ -1732,6 +1732,35 @@ ASSISTANT_SYSTEM = (
     "Selalu ingatkan bahwa admin akan menekan tombol 'Terapkan' untuk mengeksekusi."
 )
 
+# Panduan singkat aplikasi — dipakai Asisten AI untuk menjawab pertanyaan cara pakai fitur.
+APP_GUIDE = (
+    "POS Grand Aceh Kuliner (web + APK Android). Modul: POS Kasir (dine-in meja, take-away, retail, diskon, "
+    "bayar cash/QRIS/debit), Shift (buka/tutup shift), Kas (setoran/pengambilan), Produk & Stok (kategori, "
+    "stok, import/export Excel, opname), Vendor (bagi hasil), Laporan (harian/mingguan/bulanan, ekspor Excel/PDF, "
+    "kirim WhatsApp), AI (tanya-jawab data dan usulan aksi), Pengaturan (pengguna/role, meja, perangkat printer, "
+    "AI provider, installer/update dari vibecoder.co.id, diagnosa/lapor bug, versi, backup/restore, reset data). "
+    "Update server: ./update-vibecoder-pi.sh atau tombol Update Sekarang (vibecoder.co.id). "
+    "APK: isi alamat server http://IP-server di Pengaturan Server saat login. Fitur lapor bug: Pengaturan > Diagnostik."
+)
+
+async def _report_context(date_str):
+    today = date_str or datetime.now(WIB).strftime("%Y-%m-%d")
+    try:
+        d = datetime.strptime(today, "%Y-%m-%d")
+    except Exception:
+        today = datetime.now(WIB).strftime("%Y-%m-%d")
+        d = datetime.strptime(today, "%Y-%m-%d")
+    yday = (d - timedelta(days=1)).strftime("%Y-%m-%d")
+    s_today = await report_summary(date_str=today, admin={"role": "admin", "id": "chat"})
+    s_yday = await report_summary(date_str=yday, admin={"role": "admin", "id": "chat"})
+    p_items, p_total = await _purchase_summary(today)
+    return {
+        "tanggal": today,
+        "penjualan_hari_ini": s_today,
+        "penjualan_kemarin": s_yday,
+        "belanja_hari_ini": {"total": p_total, "jumlah_item": len(p_items)},
+    }
+
 async def _assistant_context():
     cats = await db.categories.find({}, {"_id": 0, "name": 1, "type": 1, "active": 1}).to_list(500)
     vendors = await db.vendors.find({}, {"_id": 0, "name": 1}).sort("name", 1).to_list(500)
@@ -2546,107 +2575,6 @@ async def whatsapp_test(body: WATestIn, admin: dict = Depends(require_admin)):
     if not any(x.get("ok") for x in res):
         raise HTTPException(400, f"Gagal kirim: {res[0].get('error') if res else 'tidak diketahui'}")
     return {"sent": res}
-
-# ---- AI Chat Laporan (tanya-jawab data penjualan & belanja) ----
-class ReportChatIn(BaseModel):
-    session_id: str
-    message: str
-    date: Optional[str] = None
-
-class ReportChatSendWA(BaseModel):
-    text: str
-    recipients: Optional[List[str]] = None
-
-# Panduan singkat aplikasi — supaya Tanya AI bisa menjawab pertanyaan operasional
-# (cara pakai fitur), bukan hanya laporan.
-APP_GUIDE = (
-    "POS Grand Aceh Kuliner (web + APK Android). Modul: POS Kasir (dine-in meja, take-away, retail, diskon, "
-    "bayar cash/QRIS/debit), Shift (buka/tutup shift), Kas (setoran/pengambilan), Produk & Stok (kategori, "
-    "stok, import/export Excel, opname), Vendor (bagi hasil), Laporan (harian/mingguan/bulanan, ekspor Excel/PDF, "
-    "kirim WhatsApp), Tanya AI & Asisten AI (tanya-jawab data dan usulan aksi), Pengaturan (pengguna/role, meja, "
-    "perangkat printer, AI provider, installer/update dari vibecoder.co.id, diagnosa/lapor bug, versi, backup/restore, "
-    "reset data). Update server: ./update-vibecoder-pi.sh atau tombol Update Sekarang (vibecoder.co.id). "
-    "APK: isi alamat server http://IP-server di Pengaturan Server saat login. Fitur lapor bug: Pengaturan > Diagnostik."
-)
-
-async def _report_context(date_str):
-    today = date_str or datetime.now(WIB).strftime("%Y-%m-%d")
-    try:
-        d = datetime.strptime(today, "%Y-%m-%d")
-    except Exception:
-        today = datetime.now(WIB).strftime("%Y-%m-%d")
-        d = datetime.strptime(today, "%Y-%m-%d")
-    yday = (d - timedelta(days=1)).strftime("%Y-%m-%d")
-    s_today = await report_summary(date_str=today, admin={"role": "admin", "id": "chat"})
-    s_yday = await report_summary(date_str=yday, admin={"role": "admin", "id": "chat"})
-    p_items, p_total = await _purchase_summary(today)
-    return {
-        "tanggal": today,
-        "penjualan_hari_ini": s_today,
-        "penjualan_kemarin": s_yday,
-        "belanja_hari_ini": {"total": p_total, "jumlah_item": len(p_items)},
-    }
-
-@api.post("/ai/report-chat")
-async def ai_report_chat(body: ReportChatIn, admin: dict = Depends(admin_or_kasir)):
-    import json
-    if not body.message.strip():
-        raise HTTPException(400, "Pertanyaan kosong")
-    ctx = await _report_context(body.date)
-    hist = await db.ai_report_chats.find_one({"_id": body.session_id}) or {}
-    msgs = hist.get("messages", [])
-    convo = "\n".join([f"{m['role']}: {m['text']}" for m in msgs[-8:]])
-    system = (
-        "Anda asisten AI untuk POS Grand Aceh Kuliner (restoran & retail). Bisa menjawab SEMUA pertanyaan: "
-        "(1) laporan/penjualan/belanja — gunakan data JSON yang diberikan dan tampilkan nominal dalam Rupiah; "
-        "(2) cara pakai fitur aplikasi (buka/tutup shift, kas, void, backup, update, atur server APK, dll) — "
-        "jawab dari panduan aplikasi yang diberikan; (3) pengetahuan umum terkait usaha/restoran/akuntansi sederhana. "
-        "Jawab RINGKAS, jelas, dalam Bahasa Indonesia. Jika bertanya tentang data spesifik yang TIDAK ada di data "
-        "yang diberikan (mis. bulan lain, stok per produk), katakan jujur bahwa data tersebut tidak tersedia "
-        "di konteks ini dan sarankan cara melihatnya di menu Laporan/Produk. Jangan mengarang angka."
-    )
-    prompt = (
-        f"PANDUAN APLIKASI:\n{APP_GUIDE}\n\n"
-        f"DATA LAPORAN HARI INI/KEMARIN (JSON):\n{json.dumps(ctx, ensure_ascii=False, default=str)}\n\n"
-        + (f"Riwayat percakapan sebelumnya:\n{convo}\n\n" if convo else "")
-        + f"Pertanyaan pengguna: {body.message.strip()}"
-    )
-    try:
-        reply = await _gemini_text(system, prompt, feature="summary")
-    except Exception as e:
-        logger.warning(f"report-chat primary AI failed, fallback to Emergent: {e}")
-        if not EMERGENT_LLM_KEY:
-            raise HTTPException(503, "Provider AI 'Analisis Laporan' sedang tidak tersedia. Cek Pengaturan AI atau coba lagi nanti.")
-        from emergentintegrations.llm.chat import UserMessage
-        chat = _get_chat(body.session_id, system, "gemini-2.5-flash")
-        reply = (await chat.send_message(UserMessage(text=prompt))).strip()
-    ts = now_utc().isoformat()
-    new_msgs = msgs + [
-        {"role": "user", "text": body.message.strip(), "at": ts},
-        {"role": "assistant", "text": reply, "at": ts},
-    ]
-    await db.ai_report_chats.update_one({"_id": body.session_id}, {"$set": {"messages": new_msgs[-40:]}}, upsert=True)
-    return {"reply": reply}
-
-@api.get("/ai/report-chat/{session_id}")
-async def ai_report_chat_history(session_id: str, admin: dict = Depends(admin_or_kasir)):
-    doc = await db.ai_report_chats.find_one({"_id": session_id}) or {}
-    return {"messages": doc.get("messages", [])}
-
-@api.post("/ai/report-chat/send-wa")
-async def ai_report_chat_send_wa(body: ReportChatSendWA, admin: dict = Depends(require_admin)):
-    if not body.text.strip():
-        raise HTTPException(400, "Teks kosong")
-    recips = body.recipients
-    if not recips:
-        rep = await db.settings.find_one({"_id": "report"}) or {}
-        recips = rep.get("recipients", [])
-    if not recips:
-        raise HTTPException(400, "Belum ada nomor tujuan. Atur di 'Laporan & WA' atau kirim nomor.")
-    res = await _send_whatsapp(recips, body.text.strip())
-    if not any(x.get("ok") for x in res):
-        raise HTTPException(400, f"Gagal kirim WA: {res[0].get('error') if res else 'tidak diketahui'}")
-    return {"sent": res, "recipients": recips}
 
 # ================================================================== EXCEL
 IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "harga_beli", "status_aktif", "sold_out", "deskripsi", "stok_awal"]

@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getServerUrl } from "./api";
+import { getBundleVersion } from "./versions";
 
 // ============================================================
 // Diagnostik & Lapor Bug — menangkap error global + menyusun
@@ -54,14 +55,6 @@ export function installDiag() {
       }
     );
   } catch (_) {}
-}
-
-export function getBundleVersion() {
-  try {
-    const s = (document.querySelector('script[src*="main."]') || {}).src || "";
-    const m = s.match(/main\.[\w-]+\.js/);
-    return m ? m[0] : "?";
-  } catch (_) { return "?"; }
 }
 
 export async function buildDiagReport() {

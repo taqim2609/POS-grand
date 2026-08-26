@@ -7,9 +7,9 @@ import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
-  LayoutDashboard, ShoppingCart, Grid3x3, Package, Tags,
-  Armchair, Clock, FileSpreadsheet, Users, LogOut, ShieldCheck, Menu, X, Printer,
-  Boxes, Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, Sparkles, KeyRound, Trash2, Settings, Bot, BarChart3,
+  LayoutDashboard, ShoppingCart, Package,
+  Clock, FileSpreadsheet, LogOut, ShieldCheck, Menu, X, Printer,
+  Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, KeyRound, Settings, Bot, BarChart3,
 } from "lucide-react";
 
 function ChangePasswordDialog({ open, onClose }) {
