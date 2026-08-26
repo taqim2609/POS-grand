@@ -1424,7 +1424,7 @@ async def admin_update(admin: dict = Depends(require_admin)):
             "apk add --no-cache git curl >/dev/null 2>&1; "
             "if [ -f /project/.vibecoder-version ]; then "
             "VER=\"$(cat /project/.vibecoder-version 2>/dev/null || true)\"; "
-            "REMOTE=\"$(curl -fsSL -m 20 https://taqim258.vibecoder.co.id/pos-grand-update/version.json | grep -o '\"version\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4 || true)\"; "
+            "REMOTE=\"$(curl -fsSL -m 20 https://taqim258.vibecoder.co.id/pos-grand-update/version.json | sed -n 's/.*\"version\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p' | head -1 || true)\"; "
             "if [ -n \"$REMOTE\" ] && [ \"$REMOTE\" != \"$VER\" ]; then "
             "curl -fsSL -m 300 -o /tmp/gak-pos-update.tar.gz https://taqim258.vibecoder.co.id/pos-grand-update/pos-grand.tar.gz && "
             "tar xzf /tmp/gak-pos-update.tar.gz -C /project && rm -f /tmp/gak-pos-update.tar.gz && "
