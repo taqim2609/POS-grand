@@ -12,7 +12,12 @@ Anda tinggal membuka & build di **Android Studio** di komputer Anda.
 - App ID / package: `host.emergent.hybridposaceh`
 - Nama app: **Grand Aceh Kuliner POS**
 - Orientasi: **bebas** (landscape & portrait — mendukung tablet & HP)
-- minSdk 22, target/compile SDK 34
+- minSdk 23, target/compile SDK 35 — **kompatibel Android 6.0+**, termasuk **Android 7 (Nougat, API 24)**.
+  Android 7 memakai WebView lama (Chrome ~51-57) yang tidak punya `globalThis`, `Object.hasOwn`,
+  `structuredClone`, `AbortController`, `ResizeObserver`, `Promise.prototype.finally`, dll — karena itu
+  `build/polyfills.js` **wajib ikut di-bundle** dan di-load SEBELUM bundle utama (lihat `index.html`).
+  Jangan hapus tag `<script src="./polyfills.js">` dari `index.html` (sumber: `public/index.html`).
+  Setiap kali build ulang web, pastikan `public/polyfills.js` ada di `build/polyfills.js`.
 - Aset web di-*bundle* dari folder `build/`.
 - **Alamat server diatur SAAT PEMAKAIAN (runtime), bukan di-bake.** Setelah pasang APK, buka
   layar Login → **"Pengaturan Server (LAN)"** → isi `http://IP-komputer-server`. Jadi 1 APK bisa
