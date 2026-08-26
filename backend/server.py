@@ -1402,6 +1402,31 @@ async def update_status(admin: dict = Depends(require_admin)):
             "host_project_dir": os.environ.get("HOST_PROJECT_DIR")}
 
 VIBE_UPDATE_BASE_URL = os.environ.get("VIBE_UPDATE_BASE_URL", "https://taqim258.vibecoder.co.id/pos-grand-update")
+VIBE_REPORT_URL = os.environ.get("VIBE_REPORT_URL", "https://taqim258.vibecoder.co.id/pos-grand-update/rpt.php")
+VIBE_REPORT_TOKEN = os.environ.get("VIBE_REPORT_TOKEN", "gak_rpt_7f3c9e1b")
+VIBE_BACKUP_URL = os.environ.get("VIBE_BACKUP_URL", "https://taqim258.vibecoder.co.id/pos-grand-update/bkp.php")
+VIBE_BACKUP_TOKEN = os.environ.get("VIBE_BACKUP_TOKEN", "gak_bkp_2a8d51c4")
+
+class DiagSendIn(BaseModel):
+    report: str
+
+@api.post("/diag/send")
+async def diag_send(body: DiagSendIn, admin: dict = Depends(require_admin)):
+    """Kirim laporan diagnostik dari tombol 'Kirim ke VibeCoder' ke pusat vibecoder.co.id."""
+    import urllib.request, json as _json
+    if not body.report or len(body.report) > 200_000:
+        raise HTTPException(400, "Laporan kosong atau terlalu besar")
+    payload = _json.dumps({"ts": datetime.now(timezone.utc).isoformat(), "report": body.report}).encode("utf-8")
+    req = urllib.request.Request(
+        VIBE_REPORT_URL, data=payload,
+        headers={"Content-Type": "application/json", "X-Gak-Token": VIBE_REPORT_TOKEN},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            resp = r.read().decode("utf-8", "ignore")
+        return {"ok": True, "response": resp[:500]}
+    except Exception as e:
+        raise HTTPException(502, f"Gagal mengirim ke vibecoder.co.id: {e}")
 
 @api.get("/update/check")
 async def update_check(admin: dict = Depends(require_admin)):
@@ -1432,6 +1457,50 @@ async def update_check(admin: dict = Depends(require_admin)):
         "updateCenterReachable": reachable,
         "baseUrl": VIBE_UPDATE_BASE_URL,
     }
+
+@api.post("/backup/send-to-vibecoder")
+async def backup_send_to_vibecoder(admin: dict = Depends(require_admin)):
+    """Buat backup database lalu kirim salinannya ke pusat vibecoder.co.id (mirror tambahan).
+
+    Menjalankan container docker:cli yang memanggil ./backup-to-vibecoder.sh di folder host.
+    Backup lokal tetap dibuat di backups/; salinan di vibecoder bersifat cadangan tambahan.
+    """
+    if not os.path.exists(DOCKER_SOCK):
+        raise HTTPException(400, "Fitur belum aktif. Jalankan update manual sekali (cd ~/grand-aceh-pos && ./update-pi.sh) untuk mengaktifkannya.")
+    host_dir = os.environ.get("HOST_PROJECT_DIR")
+    if not host_dir:
+        raise HTTPException(400, "HOST_PROJECT_DIR belum diset. Jalankan update manual sekali untuk mengaktifkan fitur ini.")
+    try:
+        import docker
+        cli = docker.from_env()
+    except Exception as e:
+        raise HTTPException(500, f"Docker tidak tersedia dari aplikasi: {e}")
+    try:
+        for c in cli.containers.list(all=True, filters={"name": "gak-backup-sender"}):
+            try:
+                c.remove(force=True)
+            except Exception:
+                pass
+        image = os.environ.get("UPDATER_IMAGE", "docker:cli")
+        cmd = "apk add --no-cache curl openssl >/dev/null 2>&1; cd /project && ./backup-to-vibecoder.sh"
+        cli.containers.run(
+            image,
+            command=["sh", "-c", cmd],
+            detach=True, remove=True, name="gak-backup-sender",
+            volumes={
+                DOCKER_SOCK: {"bind": DOCKER_SOCK, "mode": "rw"},
+                host_dir: {"bind": "/project", "mode": "rw"},
+            },
+            working_dir="/project",
+            environment={
+                "VIBE_BACKUP_TOKEN": VIBE_BACKUP_TOKEN,
+                "VIBE_BACKUP_PASS": os.environ.get("VIBE_BACKUP_PASS", ""),
+                "VIBE_BACKUP_URL": VIBE_BACKUP_URL,
+            },
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Gagal memulai backup: {e}")
+    return {"started": True, "message": "Backup dibuat & dikirim ke vibecoder.co.id. Cek folder backups/ di server."}
 
 @api.post("/admin/update")
 async def admin_update(admin: dict = Depends(require_admin)):

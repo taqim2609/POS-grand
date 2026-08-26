@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks, Globe } from "lucide-react";
+import { Download, Monitor, Cpu, CheckCircle2, RefreshCw, DatabaseBackup, ListChecks, Globe, CloudUpload } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { BOOTSTRAP_PI_SH, BOOTSTRAP_WINDOWS_BAT, downloadText } from "@/lib/installers";
@@ -108,6 +108,17 @@ export default function SettingsInstaller() {
     } catch (e) { toast.error("Gagal membuat backup", { id: t }); }
   };
 
+  const backupToVibe = async () => {
+    if (!window.confirm("Buat backup database di server lalu kirim salinannya ke vibecoder.co.id? Backup lokal tetap dibuat di folder backups/.")) return;
+    const t = toast.loading("Membuat & mengirim backup ke vibecoder.co.id...");
+    try {
+      const r = await api.post("/backup/send-to-vibecoder");
+      toast.success(r.data?.message || "Backup sedang dibuat & dikirim di server", { id: t, duration: 9000 });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Gagal memulai backup (periksa internet server)", { id: t, duration: 10000 });
+    }
+  };
+
   const restoreFile = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -214,10 +225,11 @@ update-windows.bat`}</Code>
             <div className="font-bold text-sm">Cara cepat (langsung dari aplikasi)</div>
             <div className="flex flex-wrap gap-2">
               <button data-testid="inapp-backup" onClick={backupNow} className="tap h-10 px-4 rounded-lg bg-[#10B981] text-white font-bold text-sm inline-flex items-center gap-2"><DatabaseBackup size={15} /> Backup Sekarang</button>
+              <button data-testid="inapp-backup-vibecoder" onClick={backupToVibe} className="tap h-10 px-4 rounded-lg bg-[#4F46E5] text-white font-bold text-sm inline-flex items-center gap-2"><CloudUpload size={15} /> Kirim Backup ke Vibecoder</button>
               <button data-testid="inapp-restore" onClick={() => fileRef.current?.click()} className="tap h-10 px-4 rounded-lg bg-white border font-bold text-sm">Restore dari File...</button>
               <input ref={fileRef} type="file" accept=".zip" className="hidden" onChange={restoreFile} data-testid="inapp-restore-input" />
             </div>
-            <p className="text-[11px] text-[#52525B]">Backup mengunduh seluruh data ke satu file <b>.zip</b>. Restore menimpa data saat ini dengan isi file.</p>
+            <p className="text-[11px] text-[#52525B]">Backup mengunduh seluruh data ke satu file <b>.zip</b>. <b>Kirim ke Vibecoder</b> membuat backup di server lalu mengirim salinannya ke vibecoder.co.id sebagai cadangan tambahan (backup lokal tetap dibuat).</p>
           </div>
           <div className="rounded-xl border border-[#E4E4E7] bg-white p-4 text-sm text-[#3f3f46] space-y-2">
             <div className="font-bold">Atau lewat skrip di dalam folder proyek (hasil unduhan):</div>
