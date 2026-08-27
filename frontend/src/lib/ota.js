@@ -1,5 +1,9 @@
 import { toast } from "sonner";
 import { getServerUrl } from "./api";
+// Static imports — dynamic import() tidak didukung WebView Android 7 (Chrome <63)
+// -> "Unexpected token import". Plugin ini aman di-import di web (tidak dipakai bila bukan native).
+import { Capacitor } from "@capacitor/core";
+import { CapacitorUpdater } from "@capgo/capacitor-updater";
 
 // Kirim status OTA ke UI (komponen OtaIndicator mendengarkan event ini).
 function emitOta(show, percent) {
@@ -30,11 +34,8 @@ export async function checkOtaUpdate({ silent = false } = {}) {
     }
   } catch (e) {}
 
-  let Capacitor, CapacitorUpdater;
   try {
-    ({ Capacitor } = await import("@capacitor/core"));
     if (!Capacitor?.isNativePlatform?.()) return { status: "not-native" };
-    ({ CapacitorUpdater } = await import("@capgo/capacitor-updater"));
     await CapacitorUpdater.notifyAppReady();
   } catch {
     return { status: "not-native" }; // bukan native / plugin tak tersedia

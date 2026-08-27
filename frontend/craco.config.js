@@ -84,6 +84,20 @@ let webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+      // Nonaktifkan code-splitting: hasil jadi SATU file main.*.js TANPA
+      // dynamic import() — WebView Android 7 (Chrome <63) gagal parse `import(`.
+      webpackConfig.optimization = {
+        ...(webpackConfig.optimization || {}),
+        splitChunks: false,
+        runtimeChunk: false,
+      };
+      // Paksa webpack TIDAK memakai native import() untuk memuat chunk
+      // (pakai script injection jsonp) — Chrome <63 tidak bisa parse `import(`.
+      webpackConfig.output = {
+        ...(webpackConfig.output || {}),
+        chunkLoading: "jsonp",
+        environment: { ...(webpackConfig.output?.environment || {}), dynamicImport: false },
+      };
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
