@@ -10,7 +10,9 @@ const esc = (v) =>
 // Works on Sunmi T2/T2+ when the app runs inside a Sunmi WebView exposing the printer interface.
 function trySunmiPrinter(order, cfg) {
   try {
-    const sp = window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.sunmi;
+    // Bridge Sunmi: (a) bawaan WebView Sunmi (SunmiInnerPrinter), atau
+    // (b) bridge native dari MainActivity APK ini (SunmiPrinterBridge, via AIDL).
+    const sp = window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.sunmi || window.SunmiPrinterBridge;
     if (!sp || typeof sp.printText !== "function") return false;
     if (sp.printerInit) sp.printerInit();
     if (sp.setAlignment) sp.setAlignment(1);

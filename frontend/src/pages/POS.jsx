@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah } from "@/lib/format";
 import { printReceipt } from "@/lib/receipt";
+import { getDeviceConfig, setDeviceConfig } from "@/lib/device";
 import { useOffline } from "@/context/OfflineContext";
 import { toast } from "sonner";
 import {
@@ -105,6 +106,26 @@ export default function POS() {
   const resetSale = () => {
     setCart([]); setTable(null); setCurrentOrderId(null);
     setDiscType("none"); setDiscVal(0);
+  };
+
+  // Cetak BILL SEMENTARA (struk pratinjau tanpa pembayaran) — untuk dine-in/open bill.
+  const printInterimBill = () => {
+    if (!cart.length) return toast.error("Keranjang kosong");
+    setDeviceConfig(getDeviceConfig());
+    let cashier = "-";
+    try { cashier = JSON.parse(localStorage.getItem("gak_user") || "{}").name || "-"; } catch (e) {}
+    printReceipt({
+      order_number: currentOrderId ? `BILL-${currentOrderId.slice(-6)}` : `BILL-${Date.now().toString().slice(-8)}`,
+      order_type: orderType,
+      items: cart,
+      subtotal,
+      discount,
+      total,
+      cashier_name: cashier,
+      note: "BILL SEMENTARA",
+      created_at: new Date().toISOString(),
+    });
+    toast.success("Bill sementara dicetak");
   };
 
   const switchType = (key) => {
@@ -442,12 +463,20 @@ export default function POS() {
             </div>
             <div className="flex gap-2">
               {orderType === "dine_in" && (
-                <button
-                  data-testid="save-openbill-btn" onClick={saveOpenBill} disabled={!cart.length || !table}
-                  className="tap flex-1 h-13 py-3 rounded-xl bg-[#0A0A0A] text-white font-bold disabled:opacity-40"
-                >
-                  Simpan Bill
-                </button>
+                <>
+                  <button
+                    data-testid="save-openbill-btn" onClick={saveOpenBill} disabled={!cart.length || !table}
+                    className="tap flex-1 h-13 py-3 rounded-xl bg-[#0A0A0A] text-white font-bold disabled:opacity-40"
+                  >
+                    Simpan Bill
+                  </button>
+                  <button
+                    data-testid="interim-bill-btn" onClick={printInterimBill} disabled={!cart.length}
+                    className="tap h-13 px-3 rounded-xl bg-white border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-xs disabled:opacity-40"
+                  >
+                    <Receipt size={15} /> Bill Sementara
+                  </button>
+                </>
               )}
               <button
                 data-testid="pay-btn"
