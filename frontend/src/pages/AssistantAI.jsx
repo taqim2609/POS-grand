@@ -7,7 +7,7 @@ import { collectVersions } from "@/lib/versions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Bot, Send, Loader2, Sparkles, User, Cpu, CheckCircle2, X, Wand2, Settings as SettingsIcon,
-  History, Plus, Trash2, MessageSquare, Lightbulb, ShoppingCart,
+  History, Plus, Trash2, MessageSquare, Lightbulb, ShoppingCart, FileUp,
 } from "lucide-react";
 
 const SUGGESTIONS = [
@@ -46,19 +46,43 @@ const FIELD_LABEL = {
 function ActionCard({ action, state, result, onApply, canApply }) {
   const danger = DESTRUCTIVE.has(action.type);
   const isBulk = action.type === "create_products_bulk";
+  const isExcel = action.type === "import_excel";
   const items = isBulk ? (Array.isArray(action.items) ? action.items : []) : [];
-  const rows = Object.entries(action).filter(([k]) => k !== "type" && k !== "items");
+  const rows = Object.entries(action).filter(([k]) => k !== "type" && k !== "items" && k !== "rows" && k !== "summary");
   const border = danger ? "border-[#DC2626] bg-[#FEF2F2]" : "border-[#2563EB] bg-[#EFF6FF]";
   const titleColor = danger ? "text-[#B91C1C]" : "text-[#1D4ED8]";
+  const excelRows = isExcel && Array.isArray(action.rows) ? action.rows : [];
+  const s = action.summary || {};
   return (
     <div className={`mt-3 rounded-xl border-2 ${border} p-3.5`} data-testid="assistant-action-card">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <Wand2 size={16} className={titleColor} />
-        <span className={`font-extrabold text-sm ${titleColor}`}>{ACTION_LABEL[action.type] || action.type}</span>
+        <span className={`font-extrabold text-sm ${titleColor}`}>{ACTION_LABEL[action.type] || (isExcel ? "Import Excel" : action.type)}</span>
         {isBulk && <span className="text-xs font-bold text-[#2563EB] bg-white border border-[#BFDBFE] rounded-full px-2 py-0.5">{items.length} produk</span>}
+        {isExcel && <span className="text-xs font-bold text-[#2563EB] bg-white border border-[#BFDBFE] rounded-full px-2 py-0.5">{s.valid_count ?? excelRows.length} valid · {s.error_count ?? 0} error</span>}
       </div>
 
-      {isBulk ? (
+      {isExcel ? (
+        <div className="rounded-lg bg-white border border-[#BFDBFE] overflow-hidden max-h-64 overflow-y-auto text-xs" data-testid="assistant-excel-list">
+          <table className="w-full">
+            <thead className="bg-[#F4F5F7] sticky top-0"><tr>
+              <th className="p-1.5 text-left">Nama</th><th className="p-1.5 text-left">SKU</th><th className="p-1.5 text-left">Kat</th><th className="p-1.5 text-left">Tipe</th><th className="p-1.5 text-right">Harga</th><th className="p-1.5 text-left">Status</th>
+            </tr></thead>
+            <tbody>
+              {excelRows.map((r, i) => (
+                <tr key={i} className={`border-t ${r.valid ? "" : "bg-[#FEF2F2]"}`}>
+                  <td className="p-1.5 font-semibold">{r.nama_produk || "-"}</td>
+                  <td className="p-1.5 font-num">{r.sku || "-"}</td>
+                  <td className="p-1.5">{r.kategori || "-"}</td>
+                  <td className="p-1.5">{r.tipe_produk || "-"}</td>
+                  <td className="p-1.5 text-right font-num">{Number(r.harga || 0).toLocaleString("id-ID")}</td>
+                  <td className="p-1.5">{r.valid ? <span className="text-[#047857] font-bold">{r.exists ? "Update" : "Baru"}</span> : <span className="text-[#EF4444] font-bold">{(r.errors || []).join(", ")}</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : isBulk ? (
         <div className="rounded-lg bg-white border border-[#BFDBFE] max-h-56 overflow-y-auto text-sm" data-testid="assistant-bulk-list">
           {items.map((it, idx) => (
             <div key={idx} className="flex justify-between gap-3 px-3 py-1.5 border-b last:border-0">
@@ -237,13 +261,45 @@ export default function AssistantAI() {
     }
     setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "applying" } : msg));
     try {
-      const r = await api.post("/ai/assistant/apply", { action: messages[idx].action });
+      let r;
+      const act = messages[idx].action;
+      if (act?.type === "import_excel") {
+        // Import Excel via chat: commit-fix (validasi ulang server)
+        r = await api.post("/products/import/commit-fix", { rows: act.rows });
+      } else {
+        r = await api.post("/ai/assistant/apply", { action: act });
+      }
       setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "applied", actionResult: r.data } : msg));
       toast.success(r.data.message || "Berhasil diterapkan");
     } catch (e) {
       setMessages((m) => m.map((msg, i) => i === idx ? { ...msg, actionState: "pending" } : msg));
       toast.error(apiError(e.response?.data?.detail));
     }
+  };
+
+  const excelRef = useRef(null);
+  const [excelLoading, setExcelLoading] = useState(false);
+  const handleExcel = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!/\.xlsx?$/i.test(f.name)) return toast.error("File harus .xlsx");
+    setExcelLoading(true);
+    const t = toast.loading("Membaca file Excel...");
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const { data } = await api.post("/ai/assistant/import-excel", fd);
+      if (!data.rows?.length) return toast.error("File tidak berisi baris valid", { id: t });
+      setMessages((m) => [...m, {
+        role: "assistant",
+        text: `📊 File **${f.name}** siap diimpor: ${data.valid_count} valid (${data.new_count} baru, ${data.update_count} update), ${data.error_count} error. Tekan Terapkan untuk menyimpan.`,
+        action: { type: "import_excel", rows: data.rows, summary: data },
+        actionState: "pending",
+      }]);
+      toast.success("File dibaca — periksa pratinjau lalu Terapkan", { id: t });
+    } catch (err) {
+      toast.error(apiError(err.response?.data?.detail) || "Gagal membaca file", { id: t, duration: 9000 });
+    } finally { setExcelLoading(false); }
   };
 
   return (
@@ -359,10 +415,14 @@ export default function AssistantAI() {
       {/* input — padding bawah aman dari tombol navigasi Android (safe-area) */}
       <div className="border-t bg-white p-3 lg:p-4" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}>
         <div className="max-w-2xl mx-auto flex gap-2">
+          <label className="tap h-12 w-12 shrink-0 rounded-xl bg-[#4F46E5] text-white grid place-items-center cursor-pointer" title="Import produk dari Excel">
+            {excelLoading ? <Loader2 size={18} className="animate-spin" /> : <FileUp size={18} />}
+            <input ref={excelRef} type="file" accept=".xlsx" className="hidden" onChange={handleExcel} data-testid="assistant-excel-input" />
+          </label>
           <input
             data-testid="assistant-input" value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") ask(); }}
-            placeholder="Mis. buat produk Kopi Susu harga 18000 kategori Minuman…"
+            placeholder="Tanya / perintah, atau upload Excel di kiri…"
             className="flex-1 h-12 rounded-xl border px-4 outline-none focus:border-[#E63946]" />
           <button data-testid="assistant-send" onClick={() => ask()} disabled={loading || !input.trim()}
             className="tap h-12 w-12 rounded-xl bg-[#E63946] text-white grid place-items-center disabled:opacity-50">

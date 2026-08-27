@@ -3186,6 +3186,29 @@ async def import_commit_fix(body: ImportRowsFixIn, admin: dict = Depends(admin_o
 async def import_logs(admin: dict = Depends(require_admin)):
     return await db.import_logs.find({}, {"_id": 0}).sort("at", -1).to_list(100)
 
+@api.post("/ai/assistant/import-excel")
+async def assistant_import_excel(file: UploadFile = File(...), admin: dict = Depends(admin_or_input)):
+    """Parse file Excel yang diupload di chat Asisten AI — return baris siap
+    commit (commit-fix). Tidak menyimpan apa pun sampai admin klik Terapkan."""
+    content = await file.read()
+    if len(content) > 5_000_000:
+        raise HTTPException(400, "File terlalu besar (maks 5MB)")
+    parsed, file_errors = await _parse_import(content)
+    if file_errors:
+        raise HTTPException(400, file_errors[0])
+    rows = [{
+        "nama_produk": p["name"], "sku": p["sku"], "kategori": p.get("category_name") or "",
+        "tipe_produk": p["type"], "harga": p["price"], "harga_beli": p["cost"],
+        "exists": p["exists"], "errors": p["errors"], "valid": p["valid"],
+    } for p in parsed]
+    return {
+        "rows": rows, "total": len(rows),
+        "valid_count": sum(1 for r in rows if r["valid"]),
+        "error_count": sum(1 for r in rows if not r["valid"]),
+        "new_count": sum(1 for r in rows if r["valid"] and not r["exists"]),
+        "update_count": sum(1 for r in rows if r["valid"] and r["exists"]),
+    }
+
 # ------------------------------------------------------------------ startup
 @app.on_event("startup")
 async def startup():
