@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError, getServerUrl, setServerUrl, discoverServer } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail, Server, Radar, Download, Globe } from "lucide-react";
+import { Loader2, Lock, Mail, Server, Radar, Download, Globe, Smartphone } from "lucide-react";
+import { collectVersions } from "@/lib/versions";
 
 const TAILSCALE_FUNNEL_URL = "https://grandpos.tailf3a839.ts.net";
 
@@ -22,6 +23,13 @@ export default function Login() {
   });
   const [scanning, setScanning] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [version, setVersion] = useState(null);
+
+  useEffect(() => {
+    let stop = false;
+    collectVersions().then((v) => { if (!stop) setVersion(v); }).catch(() => {});
+    return () => { stop = true; };
+  }, []);
 
   const testConn = async () => {
     const base = (srv || getServerUrl()).replace(/\/+$/, "");
@@ -258,6 +266,19 @@ export default function Login() {
             </div>
           )}
         </form>
+
+        {/* Footer versi — tampil di layar login */}
+        <div className="mt-4 text-center" data-testid="login-version">
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-[#8b87a8] font-mono">
+            <Smartphone size={11} />
+            {version?.native
+              ? `APK v${version.apk} · OTA ${version.otaInstalled || version.otaServer || "-"}`
+              : `Web · bundle ${version?.bundle || "-"}`}
+          </div>
+          {version?.native && version.otaServer && version.otaInstalled && version.otaServer > version.otaInstalled && (
+            <div className="mt-1 text-[10px] text-[#B45309]">Update OTA tersedia ({version.otaServer}) — buka aplikasi untuk memasang.</div>
+          )}
+        </div>
       </div>
     </div>
   );
