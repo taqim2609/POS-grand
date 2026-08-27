@@ -103,3 +103,37 @@ export function sampleOrder() {
     change: 2000,
   };
 }
+
+// ============================================================
+// Status printer — untuk ditampilkan di Pengaturan > Perangkat & layar POS
+// ============================================================
+export function getPrinterStatus() {
+  const cfg = getDeviceConfig();
+  const mode = cfg.printerMode || "auto";
+  const bluetoothSupported = typeof navigator !== "undefined" && !!navigator.bluetooth;
+  let label = "";
+  let level = "info"; // ok | warn | error
+  switch (mode) {
+    case "auto":
+      label = "Otomatis (Sunmi → browser)";
+      break;
+    case "sunmi":
+      label = "Sunmi (printer internal)";
+      break;
+    case "epson":
+      label = cfg.epsonIp ? `Epson ${cfg.epsonIp}` : "Epson (IP belum diisi)";
+      if (!cfg.epsonIp) level = "warn";
+      break;
+    case "bluetooth":
+      if (!bluetoothSupported) { label = "Bluetooth (tidak didukung browser ini)"; level = "error"; }
+      else if (cfg.bluetoothDevice) { label = `Bluetooth: ${cfg.bluetoothDevice}`; }
+      else { label = "Bluetooth (belum dipasang)"; level = "warn"; }
+      break;
+    case "browser":
+      label = "Cetak lewat browser";
+      break;
+    default:
+      label = mode;
+  }
+  return { mode, label, level, bluetoothSupported, deviceName: cfg.bluetoothDevice || cfg.epsonIp || "" };
+}

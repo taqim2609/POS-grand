@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import api, { apiError } from "@/lib/api";
 import { rupiah } from "@/lib/format";
 import { printReceipt } from "@/lib/receipt";
-import { getDeviceConfig, setDeviceConfig } from "@/lib/device";
+import { getDeviceConfig, setDeviceConfig, getPrinterStatus } from "@/lib/device";
 import { useOffline } from "@/context/OfflineContext";
 import { toast } from "sonner";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Utensils, ShoppingBag, Store, Plus, Minus, Trash2, Armchair,
-  Search, Receipt, X, CheckCircle2, Layers, Database, ScanLine, Clock, Play,
+  Search, Receipt, X, CheckCircle2, Layers, Database, ScanLine, Clock, Play, Printer,
 } from "lucide-react";
 
 const ORDER_TYPES = [
@@ -21,6 +21,7 @@ const ORDER_TYPES = [
 
 export default function POS() {
   const { online, addPending } = useOffline();
+  const printerStatus = getPrinterStatus();
   const [orderType, setOrderType] = useState("take_away");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -490,6 +491,9 @@ export default function POS() {
               >
                 Bayar
               </button>
+            </div>
+            <div data-testid="pos-printer-status" className={`mt-2 text-[11px] font-bold flex items-center gap-1 ${printerStatus.level === "error" ? "text-[#B91C1C]" : printerStatus.level === "warn" ? "text-[#B45309]" : "text-[#047857]"}`}>
+              <Printer size={12} /> Printer: {printerStatus.label}
             </div>
           </div>
         </div>
