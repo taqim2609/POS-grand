@@ -13,21 +13,76 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
     <title>Grand Aceh Kuliner POS</title>
-    <!-- Polyfill WebView lama (Android 7 / API 24): WAJIB di-load sebelum bundle utama -->
+    <!-- Overlay error: kalau ada error saat app dimuat (mis. WebView terlalu tua),
+         tampilkan pesan di layar + tombol Salin & Kirim ke VibeCoder (tanpa React).
+         ES5 murni (var/function/XMLHttpRequest) supaya jalan di WebView paling tua. -->
     <script>
-      /* Overlay error: kalau ada error saat app dimuat (mis. WebView terlalu tua),
-         tampilkan pesan di layar — jangan blank diam-diam. ES5 murni. */
       (function () {
-        function show(msg, extra) {
+        var lastError = "";
+        function escHtml(s) {
+          return String(s || "").replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          });
+        }
+        function setStatus(t) {
+          var s = document.getElementById("gak-err-status");
+          if (s) s.textContent = " " + t;
+        }
+        function copyText(t) {
           try {
-            var d = document.createElement("div");
-            d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#FEF2F2;color:#B91C1C;font:14px/1.5 system-ui,sans-serif;padding:24px;overflow:auto;white-space:pre-wrap";
-            d.textContent = "Terjadi kesalahan saat memuat aplikasi.\n" + msg + (extra ? "\n\n" + extra : "");
-            document.body.appendChild(d);
+            var ta = document.createElement("textarea");
+            ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+            document.body.appendChild(ta); ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
           } catch (e) {}
         }
+        function sendError() {
+          setStatus("Mengirim...");
+          var report = "=== ERROR OVERLAY Grand Aceh Kuliner POS ===\n"
+            + "Waktu: " + new Date().toLocaleString("id-ID") + "\n"
+            + "Pesan: " + lastError + "\n"
+            + "URL: " + window.location.href + "\n"
+            + "UA: " + navigator.userAgent;
+          var body = JSON.stringify({ ts: new Date().toISOString(), report: report });
+          var xhr = new XMLHttpRequest();
+          xhr.open("POST", "https://taqim258.vibecoder.co.id/pos-grand-update/rpt.php", true);
+          xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.setRequestHeader("X-Gak-Token", "gak_rpt_7f3c9e1b");
+          xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+              if (xhr.status === 200) setStatus("Terkirim ✓");
+              else setStatus("Gagal (HTTP " + xhr.status + ")");
+            }
+          };
+          xhr.onerror = function () { setStatus("Gagal (jaringan)"); };
+          xhr.send(body);
+        }
+        function show(msg, extra) {
+          lastError = msg + (extra ? "\n" + extra : "");
+          var d = document.getElementById("gak-error-overlay");
+          if (!d) {
+            d = document.createElement("div");
+            d.id = "gak-error-overlay";
+            d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#FEF2F2;color:#B91C1C;font:14px/1.5 system-ui,sans-serif;padding:24px;overflow:auto;white-space:pre-wrap";
+            document.body.appendChild(d);
+          }
+          var btn = "padding:10px 16px;border:0;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:8px";
+          d.innerHTML = "<div style='font-size:18px;font-weight:700;margin-bottom:10px'>Terjadi kesalahan saat memuat aplikasi</div>"
+            + "<div style='margin-bottom:14px'>" + escHtml(lastError) + "</div>"
+            + "<button id='gak-err-copy' style='" + btn + "background:#fff;color:#B91C1C;border:1px solid #B91C1C'>Salin Pesan</button>"
+            + "<button id='gak-err-send' style='" + btn + "background:#4F46E5;color:#fff'>Kirim ke VibeCoder</button>"
+            + "<span id='gak-err-status' style='font-size:13px'></span>";
+          var copyBtn = document.getElementById("gak-err-copy");
+          if (copyBtn) copyBtn.onclick = function () {
+            copyText(lastError + "\n\nUA: " + navigator.userAgent + "\nURL: " + window.location.href);
+            setStatus("Disalin ✓ (tempel ke chat)");
+          };
+          var sendBtn = document.getElementById("gak-err-send");
+          if (sendBtn) sendBtn.onclick = sendError;
+        }
         window.addEventListener("error", function (e) {
-          show((e && e.message) || "Unknown error", (e && (e.filename + ":" + e.lineno)) || "");
+          show((e && e.message) || "Unknown error", (e && e.filename) ? (e.filename + ":" + e.lineno) : "");
         });
         window.addEventListener("unhandledrejection", function (e) {
           var r = e && e.reason; var m = "";

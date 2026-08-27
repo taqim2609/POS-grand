@@ -271,7 +271,7 @@ export default function Login() {
           {/* Baris 2: Unduh Aplikasi | Koneksi via Tailscale */}
           <div className="grid grid-cols-2 gap-3 mt-3">
             <a
-              href="https://taqim258.vibecoder.co.id/pos-grand-update/apk/Grand-Aceh-Kuliner-POS-v2.1.apk"
+              href="https://taqim258.vibecoder.co.id/pos-grand-update/apk/Grand-Aceh-Kuliner-POS-v2.2.apk"
               target="_blank" rel="noopener noreferrer" data-testid="download-app-btn"
               className="tap h-11 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight hover:bg-[#0A0A0A] hover:text-white transition-colors"
             >
