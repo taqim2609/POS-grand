@@ -2,7 +2,7 @@
 import { getServerUrl } from "./api";
 
 // Wajib sinkron dengan android/app/build.gradle (versionName) setiap kali rebuild APK.
-export const APK_VERSION = "1.3";
+export const APK_VERSION = "1.4";
 
 export function isNativeApp() {
   try {
@@ -20,10 +20,19 @@ export function getBundleVersion() {
 
 export async function collectVersions() {
   const native = isNativeApp();
+  // Versi OTA yang disajikan SERVER — via API (jalur CORS pasti bekerja).
   let otaServer = "";
   try {
+    const srv = getServerUrl();
+    const u = srv ? `${srv}/api/ota/version` : "/api/ota/version";
+    const r = await fetch(u, { cache: "no-store" });
+    if (r.ok) { const j = await r.json(); otaServer = j.version || ""; }
+  } catch (_) {}
+  // Versi OTA bawaan APK (lokal).
+  let otaLocal = "";
+  try {
     const j = await (await fetch("ota/version.json", { cache: "no-store" })).json();
-    otaServer = j.version || "";
+    otaLocal = j.version || "";
   } catch (_) {}
   let otaInstalled = "";
   try { otaInstalled = localStorage.getItem("gak_ota_version") || ""; } catch (_) {}
@@ -45,6 +54,7 @@ export async function collectVersions() {
     bundle: getBundleVersion(),
     otaInstalled,
     otaServer,
+    otaLocal,
     serverVersion,
     latestVersion,
     authError,

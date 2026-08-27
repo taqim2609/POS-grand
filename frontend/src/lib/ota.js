@@ -42,11 +42,25 @@ export async function checkOtaUpdate({ silent = false } = {}) {
   try {
     const base = getServerUrl();
     if (!base) return { status: "no-server" };
-    const res = await fetch(`${base}/ota/version.json`, { cache: "no-store" });
+    // Cek versi lewat API dulu (jalur /api CORS sudah pasti bekerja di APK),
+    // fallback ke /ota/version.json (nginx) untuk kompatibilitas.
+    let res = null;
+    try {
+      res = await fetch(`${base}/api/ota/version`, { cache: "no-store" });
+    } catch (_) {}
+    if (!res || !res.ok) {
+      res = await fetch(`${base}/ota/version.json`, { cache: "no-store" });
+    }
     if (!res.ok) return { status: "error", reason: `Server balas HTTP ${res.status}` };
     const { version, url } = await res.json();
-    if (!version) return { status: "error", reason: "version.json server kosong" };
-    let current = localStorage.getItem("gak_ota_version") || "";
+    if (!version) return { status: "error", reason: "version server kosong" };
+    // Versi bundle yang BENAR-BENAR aktif: dari plugin Capgo (paling akurat).
+    let current = "";
+    try {
+      const cur = await CapacitorUpdater.current();
+      current = (cur && cur.version) || "";
+    } catch (_) {}
+    if (!current) current = localStorage.getItem("gak_ota_version") || "";
     if (!current) current = await localBundleVersion(); // seed dari versi bundle bawaan APK
     // Hanya update bila server BENAR-BENAR lebih baru. Mencegah APK baru menarik
     // bundle LAMA dari Pi (yang belum di-update) yang menyebabkan layar blank.

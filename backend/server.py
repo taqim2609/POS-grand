@@ -1454,6 +1454,27 @@ async def _save_image_local(src: str) -> str:
 async def health():
     return {"app": "gak-pos", "ok": True}
 
+@api.get("/ota/version")
+async def ota_version():
+    """Versi OTA yang disajikan server — lewat API (CORS FastAPI *), jadi APK
+    tidak perlu fetch /ota/version.json (nginx) yang rawan masalah CORS.
+    Membaca file versi dari mount /host-project (ro)."""
+    import json as _json
+    version = ""
+    for base in ("/host-project", os.environ.get("HOST_PROJECT_DIR", "")):
+        if not base:
+            continue
+        p = os.path.join(base, "frontend", "build", "ota", "version.json")
+        try:
+            with open(p) as f:
+                d = _json.load(f)
+                version = str(d.get("version", "") or "").strip()
+            if version:
+                break
+        except Exception:
+            continue
+    return {"version": version, "url": "/ota/bundle.zip"}
+
 @api.get("/uploads/{fname}")
 async def get_upload(fname: str):
     fp = UPLOAD_DIR / os.path.basename(fname)

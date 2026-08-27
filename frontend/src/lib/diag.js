@@ -65,9 +65,18 @@ export async function buildDiagReport() {
   out.push(`Bundle frontend: ${getBundleVersion()}`);
   try {
     const base = getServerUrl();
-    const url = base ? `${base}/ota/version.json` : "ota/version.json";
-    const j = await (await fetch(url, { cache: "no-store" })).json();
-    out.push(`OTA version (server): ${j.version || "-"}`);
+    // Via API dulu (jalur CORS pasti bekerja), fallback ke /ota/version.json
+    let j = null;
+    try {
+      const u = base ? `${base}/api/ota/version` : "/api/ota/version";
+      const r = await fetch(u, { cache: "no-store" });
+      if (r.ok) j = await r.json();
+    } catch (_) {}
+    if (!j) {
+      const url = base ? `${base}/ota/version.json` : "ota/version.json";
+      j = await (await fetch(url, { cache: "no-store" })).json();
+    }
+    out.push(`OTA version (server): ${j?.version || "-"}`);
   } catch (_) { out.push("OTA version (server): (tidak terbaca)"); }
   try {
     const j = await (await fetch("ota/version.json", { cache: "no-store" })).json();
