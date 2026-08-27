@@ -125,8 +125,9 @@ export default function DeviceSettings() {
 
         {/* PRINTER */}
         <Card icon={ReceiptText} title="Printer Struk">
-          <div data-testid="printer-status" className={`rounded-xl px-3 py-2 text-sm font-bold ${cfg.printerMode === "bluetooth" && !cfg.bluetoothDevice ? "bg-[#FEF3C7] text-[#B45309]" : cfg.printerMode === "bluetooth" && typeof navigator !== "undefined" && !navigator.bluetooth ? "bg-[#FEE2E2] text-[#B91C1C]" : cfg.printerMode === "epson" && !cfg.epsonIp ? "bg-[#FEF3C7] text-[#B45309]" : "bg-[#ECFDF5] text-[#047857]"}`}>
+          <div data-testid="printer-status" className={`rounded-xl px-3 py-2 text-sm font-bold ${cfg.printerMode === "bluetooth" && !cfg.bluetoothDevice ? "bg-[#FEF3C7] text-[#B45309]" : cfg.printerMode === "bluetooth" && typeof navigator !== "undefined" && !navigator.bluetooth ? "bg-[#FEE2E2] text-[#B91C1C]" : cfg.printerMode === "epson" && !cfg.epsonIp ? "bg-[#FEF3C7] text-[#B45309]" : (cfg.printerMode === "sunmi" || cfg.printerMode === "auto") && getPrinterStatus().sunmiConnected === false ? "bg-[#FEE2E2] text-[#B91C1C]" : "bg-[#ECFDF5] text-[#047857]"}`}>
             Status: {getPrinterStatus().label}
+            {getPrinterStatus().debug && <span className="block text-[10px] font-mono mt-1 opacity-80">{getPrinterStatus().debug}</span>}
           </div>
           <Field label="Mode Printer">
             <select data-testid="dev-printer-mode" value={cfg.printerMode} onChange={(e) => upd({ printerMode: e.target.value })} className={`${inp} bg-white`}>

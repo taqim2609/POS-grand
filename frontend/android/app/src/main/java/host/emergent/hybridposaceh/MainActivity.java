@@ -17,47 +17,99 @@ import woyou.aidlservice.jiuiv5.IPrinterService;
 /**
  * MainActivity + bridge printer Sunmi (AIDL).
  *
- * Aplikasi Capacitor memakai WebView standar Android yang TIDAK menyediakan
- * window.SunmiInnerPrinter (hanya ada di WebView bawaan Sunmi). Agar cetak thermal
- * Sunmi T2 jalan dari dalam APK, kita bind ke layanan AIDL Sunmi
- * (woyou.aidlservice.jiuiv5) dan ekspos ke JavaScript sebagai window.SunmiPrinterBridge.
+ * WebView Capacitor TIDAK menyediakan window.SunmiInnerPrinter (hanya WebView
+ * bawaan Sunmi). Agar cetak thermal Sunmi T2 jalan dari dalam APK, kita bind ke
+ * layanan AIDL Sunmi dan ekspos ke JS sebagai window.SunmiPrinterBridge.
  *
- * Metode yang dipakai (semua sinkron, return int 0=sukses):
- *   printerInit(), setAlignment(int), printText(String), lineWrap(int),
- *   cutPaper(), openDrawer()
+ * Kandidat service (paket, action) dicoba berurutan — sebagian ROM Sunmi memakai
+ * nama/action berbeda. BindService bisa gagal bila paket tidak terlihat (Android
+ * 11+ package visibility) — diatasi dengan <queries> di manifest + retry onResume.
  */
 public class MainActivity extends BridgeActivity {
 
+    // Kandidat (paket, action) layanan printer Sunmi.
+    private static final String[][] CANDIDATES = {
+            {"woyou.aidlservice.jiuiv5", "woyou.aidlservice.jiuiv5"},
+            {"woyou.aidlservice.jiuiv5", "woyou.aidlservice.jiuiv5.IPrinterService"},
+            {"sunmi.peripheral", "sunmi.peripheral"},
+    };
+
     private IPrinterService printerService = null;
+    private String boundPackage = "";
+    private String lastBindError = "";
+    private boolean bound = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private final ServiceConnection conn = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            printerService = IPrinterService.Stub.asInterface(service);
+            try {
+                printerService = IPrinterService.Stub.asInterface(service);
+                bound = true;
+            } catch (Exception e) {
+                printerService = null;
+                bound = false;
+                lastBindError = "asInterface: " + e;
+            }
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             printerService = null;
+            bound = false;
         }
     };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Bind layanan printer Sunmi (T2/T2+/T1, dsb.)
-        try {
-            Intent intent = new Intent();
-            intent.setPackage("woyou.aidlservice.jiuiv5");
-            intent.setAction("woyou.aidlservice.jiuiv5");
-            bindService(intent, conn, Context.BIND_AUTO_CREATE);
-        } catch (Exception ignored) {
+        bindPrinter();
+        injectBridge();
+        // Retry bind beberapa kali (layanan Sunmi bisa menyala belakangan).
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (printerService == null) bindPrinter();
+                injectBridge();
+                mainHandler.postDelayed(this, 3000);
+            }
+        }, 3000);
+    }
+
+    private void bindPrinter() {
+        for (String[] c : CANDIDATES) {
+            try {
+                Intent intent = new Intent();
+                intent.setPackage(c[0]);
+                intent.setAction(c[1]);
+                if (bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
+                    boundPackage = c[0];
+                    lastBindError = "";
+                    return; // bind berhasil (onServiceConnected akan dipanggil)
+                }
+            } catch (Exception e) {
+                lastBindError = c[0] + " -> " + e;
+            }
         }
-        // Ekspos bridge ke JS
+        if (boundPackage.isEmpty()) lastBindError = lastBindError.isEmpty() ? "semua kandidat gagal bind" : lastBindError;
+    }
+
+    private void injectBridge() {
         try {
-            getBridge().getWebView().addJavascriptInterface(new SunmiBridge(), "SunmiPrinterBridge");
-        } catch (Exception ignored) {
+            final android.webkit.WebView wv = getBridge().getWebView();
+            if (wv == null) return;
+            wv.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        wv.addJavascriptInterface(new SunmiBridge(), "SunmiPrinterBridge");
+                    } catch (Exception e) {
+                        lastBindError = "jsInterface: " + e;
+                    }
+                }
+            });
+        } catch (Exception e) {
+            lastBindError = "inject: " + e;
         }
     }
 
@@ -68,10 +120,16 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public String getDebugInfo() {
+            return "bound=" + bound + " pkg=" + boundPackage + (lastBindError.isEmpty() ? "" : " err=" + lastBindError);
+        }
+
+        @JavascriptInterface
         public boolean printerInit() {
             try {
                 return printerService != null && printerService.printerInit() == 0;
             } catch (Exception e) {
+                lastBindError = "printerInit: " + e;
                 return false;
             }
         }
@@ -81,6 +139,7 @@ public class MainActivity extends BridgeActivity {
             try {
                 return printerService != null && printerService.setAlignment(alignment) == 0;
             } catch (Exception e) {
+                lastBindError = "setAlignment: " + e;
                 return false;
             }
         }
@@ -90,6 +149,7 @@ public class MainActivity extends BridgeActivity {
             try {
                 return printerService != null && printerService.printText(text == null ? "" : text) == 0;
             } catch (Exception e) {
+                lastBindError = "printText: " + e;
                 return false;
             }
         }
@@ -99,6 +159,7 @@ public class MainActivity extends BridgeActivity {
             try {
                 return printerService != null && printerService.lineWrap(n) == 0;
             } catch (Exception e) {
+                lastBindError = "lineWrap: " + e;
                 return false;
             }
         }
@@ -108,6 +169,7 @@ public class MainActivity extends BridgeActivity {
             try {
                 return printerService != null && printerService.cutPaper(1) == 0;
             } catch (Exception e) {
+                lastBindError = "cutPaper: " + e;
                 return false;
             }
         }
@@ -117,6 +179,7 @@ public class MainActivity extends BridgeActivity {
             try {
                 return printerService != null && printerService.openDrawer() == 0;
             } catch (Exception e) {
+                lastBindError = "openDrawer: " + e;
                 return false;
             }
         }

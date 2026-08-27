@@ -495,6 +495,9 @@ export default function POS() {
             <div data-testid="pos-printer-status" className={`mt-2 text-[11px] font-bold flex items-center gap-1 ${printerStatus.level === "error" ? "text-[#B91C1C]" : printerStatus.level === "warn" ? "text-[#B45309]" : "text-[#047857]"}`}>
               <Printer size={12} /> Printer: {printerStatus.label}
             </div>
+            {printerStatus.debug && (
+              <div className="mt-1 text-[10px] font-mono text-[#B91C1C]">Debug: {printerStatus.debug}</div>
+            )}
           </div>
         </div>
       </div>

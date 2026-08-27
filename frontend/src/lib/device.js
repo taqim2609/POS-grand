@@ -113,12 +113,23 @@ export function getPrinterStatus() {
   const bluetoothSupported = typeof navigator !== "undefined" && !!navigator.bluetooth;
   let label = "";
   let level = "info"; // ok | warn | error
+  let debug = "";
+  // Cek bridge Sunmi (untuk mode sunmi/auto) — status koneksi AIDL
+  let sunmiConnected = null;
+  try {
+    const sp = window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.sunmi || window.SunmiPrinterBridge;
+    if (sp && typeof sp.isConnected === "function") sunmiConnected = !!sp.isConnected();
+    if (sp && typeof sp.getDebugInfo === "function" && sunmiConnected === false) debug = sp.getDebugInfo();
+  } catch (e) {}
   switch (mode) {
     case "auto":
       label = "Otomatis (Sunmi → browser)";
+      if (sunmiConnected === false) { label = "Otomatis (Sunmi tidak terdeteksi → browser)"; level = "warn"; }
       break;
     case "sunmi":
-      label = "Sunmi (printer internal)";
+      if (sunmiConnected === false) { label = "Sunmi (printer tidak terdeteksi)"; level = "error"; }
+      else if (sunmiConnected === null) { label = "Sunmi (periksa di APK — bridge tidak ada)"; level = "warn"; }
+      else { label = "Sunmi (printer internal)"; }
       break;
     case "epson":
       label = cfg.epsonIp ? `Epson ${cfg.epsonIp}` : "Epson (IP belum diisi)";
@@ -135,5 +146,5 @@ export function getPrinterStatus() {
     default:
       label = mode;
   }
-  return { mode, label, level, bluetoothSupported, deviceName: cfg.bluetoothDevice || cfg.epsonIp || "" };
+  return { mode, label, level, bluetoothSupported, deviceName: cfg.bluetoothDevice || cfg.epsonIp || "", sunmiConnected, debug };
 }

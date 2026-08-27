@@ -2,7 +2,7 @@
 import { getServerUrl } from "./api";
 
 // Wajib sinkron dengan android/app/build.gradle (versionName) setiap kali rebuild APK.
-export const APK_VERSION = "2.4";
+export const APK_VERSION = "2.5";
 
 export function isNativeApp() {
   try {
