@@ -1,7 +1,40 @@
 import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
 import { getDeviceConfig, printViaEpson } from "@/lib/device";
 import { printViaBluetooth } from "@/lib/bluetooth";
+import { getServerUrl } from "@/lib/api";
 import { toast } from "sonner";
+
+// ============================================================
+// Logo outlet untuk struk — diambil dari server (settings/outlet),
+// di-cache sebagai dataURL di localStorage supaya cetak tetap cepat.
+// ============================================================
+async function getOutletLogoB64() {
+  try {
+    const cached = localStorage.getItem("gak_logo_b64");
+    if (cached) return cached;
+    const base = getServerUrl();
+    if (!base) return "";
+    const token = localStorage.getItem("gak_token") || "";
+    const r = await fetch(`${base}/api/settings/outlet`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    if (!r.ok) return "";
+    const j = await r.json();
+    const logoUrl = j.logo_url;
+    if (!logoUrl) return "";
+    const img = await fetch(`${base}${logoUrl}`, { cache: "no-store" });
+    if (!img.ok) return "";
+    const blob = await img.blob();
+    const b64 = await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ""));
+      fr.onerror = () => resolve("");
+      fr.readAsDataURL(blob);
+    });
+    if (b64) localStorage.setItem("gak_logo_b64", b64);
+    return b64;
+  } catch (e) {
+    return "";
+  }
+}
 
 // HTML-escape any user-controlled value before it enters printable markup (prevents XSS)
 const esc = (v) =>
@@ -9,16 +42,21 @@ const esc = (v) =>
 
 // Attempt native Sunmi built-in printer (80mm) via its WebView JS bridge.
 // Works on Sunmi T2/T2+ when the app runs inside a Sunmi WebView exposing the printer interface.
-function trySunmiPrinter(order, cfg) {
+function trySunmiPrinter(order, cfg, logoB64) {
   try {
     // Bridge Sunmi: (a) bawaan WebView Sunmi (SunmiInnerPrinter), atau
-    // (b) bridge native dari MainActivity APK ini (SunmiPrinterBridge, via AIDL).
+    // (b) bridge native dari MainActivity APK ini (SunmiPrinterBridge, via SDK resmi).
     const sp = window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.sunmi || window.SunmiPrinterBridge;
     if (!sp || typeof sp.printText !== "function") return false;
     // Bridge APK SELALU ada (addJavascriptInterface) walau service belum ter-bind —
     // cek koneksi sungguhan supaya tidak "diam tanpa cetak".
     if (typeof sp.isConnected === "function" && !sp.isConnected()) return false;
     if (sp.printerInit) sp.printerInit();
+    // Logo outlet (kalau ada)
+    if (logoB64 && sp.printBitmap) {
+      try { sp.printBitmap(logoB64); } catch (e) {}
+      if (sp.lineWrap) sp.lineWrap(1);
+    }
     if (sp.setAlignment) sp.setAlignment(1);
     sp.printText(`${cfg.outletName}\n`);
     if (cfg.outletAddress) sp.printText(`${cfg.outletAddress}\n`);
@@ -40,6 +78,11 @@ function trySunmiPrinter(order, cfg) {
     if (order.payment_method_name) sp.printText(`${order.payment_method_name}: ${rupiah(order.amount_paid || order.total)}\n`);
     if (order.change) sp.printText(`Kembali: ${rupiah(order.change)}\n`);
     if (order.points_earned) sp.printText(`Poin member: +${order.points_earned}\n`);
+    // QR (mis. QRIS/Netzme di masa depan) — kalau order punya qr_content
+    if (order.qr_content && sp.printQRCode) {
+      if (sp.lineWrap) sp.lineWrap(1);
+      try { sp.printQRCode(order.qr_content, 8, 2); } catch (e) {}
+    }
     sp.printText(`\n${cfg.footerText || "Terima kasih"}\n`);
     if (sp.lineWrap) sp.lineWrap(3);
     if (sp.cutPaper) sp.cutPaper(); // auto-cut
@@ -50,7 +93,7 @@ function trySunmiPrinter(order, cfg) {
   }
 }
 
-function browserPrint(order, cfg) {
+function browserPrint(order, cfg, logoB64) {
   const dt = new Date(order.paid_at || order.created_at).toLocaleString("id-ID");
   const rows = order.items
     .map(
@@ -70,7 +113,9 @@ function browserPrint(order, cfg) {
     .tot{font-weight:700;font-size:14px}
     .badge{display:inline-block;border:1px solid #000;border-radius:4px;padding:1px 6px;font-size:10px}
     .off{background:#000;color:#fff;text-align:center;padding:2px;font-weight:700;font-size:10px}
+    .logo{max-width:60mm;max-height:20mm;object-fit:contain}
   </style></head><body>
+    ${logoB64 ? `<div class="c"><img class="logo" src="${logoB64}" alt="logo" /></div>` : ""}
     <h1>${esc(cfg.outletName)}</h1>
     <div class="c s">${esc(cfg.outletAddress || "")}</div>
     ${order.offline ? '<div class="off">STRUK OFFLINE — BELUM DISINKRON</div>' : ""}
@@ -105,26 +150,27 @@ function browserPrint(order, cfg) {
 
 export async function printReceipt(order) {
   const cfg = getDeviceConfig();
+  const logoB64 = await getOutletLogoB64();
   if (cfg.printerMode === "epson") {
     try {
       await printViaEpson(order, cfg);
     } catch (e) {
       toast.error(e.message || "Gagal mencetak ke printer Epson");
-      browserPrint(order, cfg); // fallback so struk tetap keluar
+      browserPrint(order, cfg, logoB64); // fallback so struk tetap keluar
     }
     return;
   }
-  if (cfg.printerMode === "browser") return browserPrint(order, cfg);
+  if (cfg.printerMode === "browser") return browserPrint(order, cfg, logoB64);
   if (cfg.printerMode === "bluetooth") {
     try {
       await printViaBluetooth(order);
     } catch (e) {
       toast.error(e.message || "Gagal mencetak ke printer Bluetooth");
-      browserPrint(order, cfg);
+      browserPrint(order, cfg, logoB64);
     }
     return;
   }
   // "auto" or "sunmi": coba printer Sunmi bawaan, jatuh ke browser bila tak ada
-  if (trySunmiPrinter(order, cfg)) return;
-  browserPrint(order, cfg);
+  if (trySunmiPrinter(order, cfg, logoB64)) return;
+  browserPrint(order, cfg, logoB64);
 }

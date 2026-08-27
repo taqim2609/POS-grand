@@ -172,12 +172,29 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
-        public boolean openDrawer() {
+        public boolean printQRCode(String data, int modulesize, int errorlevel) {
             try {
                 if (printerService == null) return false;
-                printerService.openDrawer(resultCallback);
+                printerService.printQRCode(data == null ? "" : data, modulesize, errorlevel, resultCallback);
                 return true;
-            } catch (Exception e) { lastBindError = "openDrawer: " + e; return false; }
+            } catch (Exception e) { lastBindError = "printQRCode: " + e; return false; }
+        }
+
+        @JavascriptInterface
+        public boolean printBitmap(String dataUrl) {
+            try {
+                if (printerService == null) return false;
+                if (dataUrl == null || dataUrl.isEmpty()) return false;
+                // Format: data:image/png;base64,<...>
+                int comma = dataUrl.indexOf(',');
+                if (comma < 0) return false;
+                String b64 = dataUrl.substring(comma + 1);
+                byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                if (bmp == null) return false;
+                printerService.printBitmap(bmp, resultCallback);
+                return true;
+            } catch (Exception e) { lastBindError = "printBitmap: " + e; return false; }
         }
     }
 }
