@@ -238,17 +238,42 @@ function ImportDialog({ open, onClose, onDone }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  // edits[row] = { name, sku, category_name, type, price, cost } — hasil perbaikan user
+  const [edits, setEdits] = useState({});
+  const [cats, setCats] = useState([]);
 
-  useEffect(() => { if (!open) { setFile(null); setPreview(null); } }, [open]);
+  useEffect(() => {
+    if (!open) { setFile(null); setPreview(null); setEdits({}); return; }
+    api.get("/categories").then((r) => setCats(r.data || [])).catch(() => {});
+  }, [open]);
 
   const doPreview = async (f) => {
     setFile(f); setLoading(true);
     try {
       const fd = new FormData(); fd.append("file", f);
       const { data } = await api.post("/products/import/preview", fd);
-      setPreview(data);
+      setPreview(data); setEdits({});
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
   };
+
+  const setEdit = (row, patch) => setEdits((e) => ({ ...e, [row]: { ...(e[row] || {}), ...patch } }));
+
+  // Gabungkan baris asli + perbaikan user; validasi lokal ringan untuk UI.
+  const mergedRows = (preview?.rows || []).map((r) => {
+    const e = edits[r.row] || {};
+    return { ...r, name: e.name ?? r.name, sku: e.sku ?? r.sku, category_name: e.category_name ?? r.category_name, type: e.type ?? r.type, price: e.price ?? r.price, cost: e.cost ?? r.cost };
+  });
+
+  const validCount = mergedRows.filter((r) => {
+    const errs = [];
+    if (!String(r.name || "").trim()) errs.push("nama kosong");
+    if (!String(r.sku || "").trim()) errs.push("SKU kosong");
+    if (!String(r.price || "").trim() || isNaN(Number(r.price))) errs.push("harga bukan angka");
+    if (!String(r.category_name || "").trim()) errs.push("kategori kosong");
+    if (!["makanan", "minuman", "retail"].includes(String(r.type || "").trim().toLowerCase())) errs.push("tipe tidak valid");
+    return errs.length === 0;
+  }).length;
+
   const commit = async () => {
     setLoading(true);
     try {
@@ -259,9 +284,26 @@ function ImportDialog({ open, onClose, onDone }) {
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
   };
 
+  // Commit dari data YANG SUDAH DIPERBAIKI (semua baris, termasuk yang diedit)
+  const commitFixed = async () => {
+    setLoading(true);
+    try {
+      const rows = mergedRows.map((r) => ({
+        nama_produk: r.name, sku: r.sku, kategori: r.category_name,
+        tipe_produk: String(r.type || "").toLowerCase(), harga: r.price, harga_beli: r.cost,
+      }));
+      const { data } = await api.post("/products/import/commit-fix", { rows });
+      toast.success(`Import selesai: ${data.created} baru, ${data.updated} update, ${data.errors} error`);
+      onClose(); onDone();
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setLoading(false); }
+  };
+
+  const inp = "w-full min-w-[80px] h-8 rounded border px-2 text-xs";
+  const hasEdits = Object.keys(edits).length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Import Produk dari Excel</DialogTitle></DialogHeader>
         {!preview ? (
           <div className="border-2 border-dashed rounded-2xl p-10 text-center">
@@ -275,19 +317,41 @@ function ImportDialog({ open, onClose, onDone }) {
         ) : (
           <div>
             <div className="flex gap-3 mb-3 flex-wrap text-sm font-bold">
-              <span className="px-3 py-1 rounded-lg bg-[#D1FAE5] text-[#047857]">Valid: {preview.valid_count}</span>
-              <span className="px-3 py-1 rounded-lg bg-[#FEE2E2] text-[#EF4444]">Error: {preview.error_count}</span>
-              <span className="px-3 py-1 rounded-lg bg-[#E0E7FF] text-[#4338CA]">Baru: {preview.new_count}</span>
-              <span className="px-3 py-1 rounded-lg bg-[#FEF3C7] text-[#B45309]">Update: {preview.update_count}</span>
+              <span className="px-3 py-1 rounded-lg bg-[#D1FAE5] text-[#047857]">Valid: {validCount}</span>
+              <span className="px-3 py-1 rounded-lg bg-[#FEE2E2] text-[#EF4444]">Error: {mergedRows.length - validCount}</span>
+              <span className="px-3 py-1 rounded-lg bg-[#E0E7FF] text-[#4338CA]">Baru: {mergedRows.filter((r) => !r.exists).length}</span>
+              <span className="px-3 py-1 rounded-lg bg-[#FEF3C7] text-[#B45309]">Update: {mergedRows.filter((r) => r.exists).length}</span>
+              {hasEdits && <span className="px-3 py-1 rounded-lg bg-[#4F46E5] text-white">✏️ {Object.keys(edits).length} baris diperbaiki</span>}
             </div>
+            <p className="text-[11px] text-[#52525B] mb-2">Baris error bisa langsung <b>diperbaiki di tabel</b> (ubah kolom lalu Commit). Data akan divalidasi ulang server-side.</p>
             <div className="border rounded-xl max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
-                <thead className="bg-[#F4F5F7] sticky top-0"><tr><th className="p-2 text-left">Baris</th><th className="p-2 text-left">Nama</th><th className="p-2 text-left">SKU</th><th className="p-2 text-left">Status</th></tr></thead>
+                <thead className="bg-[#F4F5F7] sticky top-0">
+                  <tr>
+                    <th className="p-2 text-left">Baris</th><th className="p-2 text-left">Nama</th><th className="p-2 text-left">SKU</th>
+                    <th className="p-2 text-left">Kategori</th><th className="p-2 text-left">Tipe</th><th className="p-2 text-left">Harga</th><th className="p-2 text-left">Status</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {preview.rows.map((r) => (
-                    <tr key={r.row} className="border-t">
-                      <td className="p-2 font-num">{r.row}</td><td className="p-2">{r.name}</td><td className="p-2 font-num">{r.sku}</td>
-                      <td className="p-2">{r.valid ? <span className="text-[#047857] flex items-center gap-1"><CheckCircle2 size={13} />{r.exists ? "Update" : "Baru"}</span> : <span className="text-[#EF4444] flex items-center gap-1"><Ban size={13} />{r.errors.join(", ")}</span>}</td>
+                  {mergedRows.map((r) => (
+                    <tr key={r.row} className={`border-t ${!r.valid ? "bg-[#FEF2F2]" : ""}`}>
+                      <td className="p-1.5 font-num">{r.row}</td>
+                      <td className="p-1.5"><input className={inp} value={r.name} onChange={(e) => setEdit(r.row, { name: e.target.value })} /></td>
+                      <td className="p-1.5"><input className={inp} value={r.sku} onChange={(e) => setEdit(r.row, { sku: e.target.value })} /></td>
+                      <td className="p-1.5">
+                        <input className={inp} value={r.category_name} list={`cat-list-${r.row}`} onChange={(e) => setEdit(r.row, { category_name: e.target.value })} />
+                        <datalist id={`cat-list-${r.row}`}>{cats.map((c) => <option key={c.id} value={c.name} />)}</datalist>
+                      </td>
+                      <td className="p-1.5">
+                        <select className={inp} value={String(r.type || "").toLowerCase()} onChange={(e) => setEdit(r.row, { type: e.target.value })}>
+                          <option value="">—</option><option value="makanan">makanan</option><option value="minuman">minuman</option><option value="retail">retail</option>
+                        </select>
+                      </td>
+                      <td className="p-1.5"><input className={`${inp} font-num`} type="number" value={r.price} onChange={(e) => setEdit(r.row, { price: e.target.value })} /></td>
+                      <td className="p-1.5">
+                        {r.valid ? <span className="text-[#047857] flex items-center gap-1"><CheckCircle2 size={13} />{r.exists ? "Update" : "Baru"}</span>
+                          : <span className="text-[#EF4444] flex items-center gap-1"><Ban size={13} />{r.errors.join(", ")}</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -295,9 +359,15 @@ function ImportDialog({ open, onClose, onDone }) {
             </div>
             <DialogFooter className="mt-4 gap-2">
               <button onClick={() => setPreview(null)} className="tap h-12 px-5 rounded-xl bg-[#F4F5F7] font-bold">Ganti File</button>
-              <button data-testid="commit-import-btn" onClick={commit} disabled={loading || preview.valid_count === 0} className="tap flex-1 h-12 rounded-xl bg-[#E63946] text-white font-bold disabled:opacity-40">
-                Commit {preview.valid_count} Baris Valid
-              </button>
+              {!hasEdits ? (
+                <button data-testid="commit-import-btn" onClick={commit} disabled={loading || preview.valid_count === 0} className="tap flex-1 h-12 rounded-xl bg-[#E63946] text-white font-bold disabled:opacity-40">
+                  Commit {preview.valid_count} Baris Valid
+                </button>
+              ) : (
+                <button data-testid="commit-fix-btn" onClick={commitFixed} disabled={loading || validCount === 0} className="tap flex-1 h-12 rounded-xl bg-[#4F46E5] text-white font-bold disabled:opacity-40">
+                  Simpan Hasil Perbaikan ({validCount} valid)
+                </button>
+              )}
             </DialogFooter>
           </div>
         )}

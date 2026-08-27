@@ -3056,12 +3056,16 @@ async def _parse_import(file_bytes):
     if not rows:
         return [], ["File kosong"]
     header = [str(h).strip().lower() if h else "" for h in rows[0]]
+    dict_rows = [{header[i]: raw[i] if i < len(raw) else None for i in range(len(header))} for raw in rows[1:]]
+    return await _validate_import_rows(dict_rows)
+
+async def _validate_import_rows(dict_rows):
+    """Validasi baris import (dari file Excel atau JSON hasil perbaikan) -> parsed."""
     cats = {c["name"].strip().lower(): c for c in await db.categories.find({}, {"_id": 0}).to_list(500)}
     existing_skus = {p["sku"] for p in await db.products.find({}, {"_id": 0, "sku": 1}).to_list(5000)}
     parsed = []
     seen_skus = set()
-    for idx, raw in enumerate(rows[1:], start=2):
-        row = {header[i]: raw[i] if i < len(raw) else None for i in range(len(header))}
+    for idx, row in enumerate(dict_rows, start=2):
         errors = []
         name = str(row.get("nama_produk") or "").strip()
         sku = str(row.get("sku") or "").strip()
@@ -3142,6 +3146,37 @@ async def import_commit(file: UploadFile = File(...), admin: dict = Depends(admi
             await db.products.insert_one(doc)
             created += 1
     log = {"id": new_id(), "filename": file.filename, "at": now_utc().isoformat(), "by": admin["name"],
+           "created": created, "updated": updated, "errors": len([p for p in parsed if not p["valid"]])}
+    await db.import_logs.insert_one(log)
+    log.pop("_id", None)
+    return log
+
+class ImportRowsFixIn(BaseModel):
+    rows: List[dict]
+
+@api.post("/products/import/commit-fix")
+async def import_commit_fix(body: ImportRowsFixIn, admin: dict = Depends(admin_or_input)):
+    """Commit hasil PERBAIKAN import (JSON) — baris yang diedit user di UI.
+    Validasi ulang server-side lalu simpan yang valid."""
+    if not body.rows:
+        raise HTTPException(400, "Tidak ada baris untuk diimpor")
+    parsed, file_errors = await _validate_import_rows(body.rows)
+    created = updated = 0
+    for p in parsed:
+        if not p["valid"]:
+            continue
+        doc = {"name": p["name"], "sku": p["sku"], "category_id": p["category_id"], "type": p["type"],
+               "price": p["price"], "cost": p["cost"], "description": p["description"], "active": p["active"],
+               "sold_out": p["sold_out"], "stock": p["stock"], "track_stock": p["type"] == "retail",
+               "image": ""}
+        if p["exists"]:
+            await db.products.update_one({"sku": p["sku"]}, {"$set": doc})
+            updated += 1
+        else:
+            doc.update({"id": new_id(), "created_at": now_utc().isoformat()})
+            await db.products.insert_one(doc)
+            created += 1
+    log = {"id": new_id(), "filename": "perbaikan-import", "at": now_utc().isoformat(), "by": admin["name"],
            "created": created, "updated": updated, "errors": len([p for p in parsed if not p["valid"]])}
     await db.import_logs.insert_one(log)
     log.pop("_id", None)
