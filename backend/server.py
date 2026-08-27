@@ -3209,3 +3209,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Private Network Access (PNA): Chrome/WebView memblokir panggilan cross-origin ke
+# IP privat (LAN 192.168.x / tailnet 100.x) bila respons tidak menyertakan
+# Access-Control-Allow-Private-Network: true. Middleware ini dipasang PALING LUAR
+# (setelah CORSMiddleware) sehingga menambah header ke SEMUA respons, termasuk
+# preflight OPTIONS yang ditangani CORSMiddleware.
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class PrivateNetworkAccessMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        try:
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        except Exception:
+            pass
+        return response
+
+app.add_middleware(PrivateNetworkAccessMiddleware)
