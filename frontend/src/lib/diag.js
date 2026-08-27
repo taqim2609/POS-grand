@@ -97,7 +97,8 @@ export async function buildDiagReport() {
     out.push(`Server mode: ${d.enabled ? "vibecoder" : "belum vibecoder"}`);
     out.push(`Versi server: ${d.current || "-"} | terbaru: ${d.latest || "-"}${d.updateAvailable ? " (UPDATE TERSEDIA)" : ""} | update center: ${d.updateCenterReachable ? "dijangkau" : "tidak dijangkau"}`);
   } catch (e) {
-    out.push(`Cek versi server: gagal (${(e.response && e.response.status) || e.message})`);
+    const status = e.response && e.response.status;
+    out.push(`Cek versi server: ${status === 401 ? "sesi login tidak aktif (401) — login ulang untuk melihat versi" : `gagal (${status || e.message})`}`);
   }
 
   out.push("");

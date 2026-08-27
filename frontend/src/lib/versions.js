@@ -29,9 +29,11 @@ export async function collectVersions() {
   try { otaInstalled = localStorage.getItem("gak_ota_version") || ""; } catch (_) {}
   let serverVersion = "";
   let latestVersion = "";
+  let authError = false;
   try {
     const r = await fetch(`${getServerUrl() || ""}/api/update/check`, { headers: { Authorization: `Bearer ${localStorage.getItem("gak_token") || ""}` } });
-    if (r.ok) {
+    if (r.status === 401) { authError = true; }
+    else if (r.ok) {
       const j = await r.json();
       serverVersion = j.current || "";
       latestVersion = j.latest || "";
@@ -45,6 +47,7 @@ export async function collectVersions() {
     otaServer,
     serverVersion,
     latestVersion,
+    authError,
     serverUrl: getServerUrl() || "(web - same origin)",
   };
 }
