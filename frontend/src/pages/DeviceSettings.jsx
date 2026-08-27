@@ -1,13 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Printer, Server, Store, Save, ReceiptText } from "lucide-react";
+import { Printer, Server, Store, Save, ReceiptText, Upload, Loader2 } from "lucide-react";
+import api, { apiError } from "@/lib/api";
 import { getDeviceConfig, setDeviceConfig, getServerUrl, setServerUrl, sampleOrder } from "@/lib/device";
 import { printReceipt } from "@/lib/receipt";
 
 export default function DeviceSettings() {
   const [cfg, setCfg] = useState(getDeviceConfig());
   const [srv, setSrv] = useState(getServerUrl());
+  const [outlet, setOutlet] = useState(null); // data global server (outlet & logo)
+  const [upLogo, setUpLogo] = useState(false);
   const upd = (patch) => setCfg((c) => ({ ...c, ...patch }));
+
+  useEffect(() => {
+    api.get("/settings/outlet")
+      .then((r) => {
+        setOutlet(r.data);
+        // Sinkronkan nama/alamat server ke config lokal bila lokal masih default kosong
+        setCfg((c) => ({
+          ...c,
+          outletName: r.data?.name || c.outletName,
+          outletAddress: r.data?.address || c.outletAddress,
+        }));
+      })
+      .catch(() => {});
+  }, []);
 
   const save = () => {
     setDeviceConfig(cfg);
@@ -23,21 +40,67 @@ export default function DeviceSettings() {
     printReceipt(sampleOrder());
     toast.message("Mengirim struk uji ke printer...");
   };
+  const saveOutlet = async () => {
+    if (!outlet) return;
+    try {
+      await api.put("/settings/outlet", { name: outlet.name, address: outlet.address, phone: outlet.phone });
+      // ikutkan ke header struk lokal
+      setCfg((c) => ({ ...c, outletName: outlet.name || c.outletName, outletAddress: outlet.address || c.outletAddress }));
+      toast.success("Identitas outlet disimpan (server)");
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
+  const uploadLogo = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUpLogo(true);
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const { data } = await api.post("/settings/outlet/logo", fd);
+      setOutlet((o) => ({ ...o, logo_url: data.url }));
+      toast.success("Logo terunggah");
+    } catch (err) { toast.error(apiError(err.response?.data?.detail)); }
+    finally { setUpLogo(false); e.target.value = ""; }
+  };
 
   return (
     <div className="h-full overflow-y-auto p-6 lg:p-8" data-testid="device-settings-page">
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-extrabold flex items-center gap-2"><Printer className="text-[#E63946]" /> Pengaturan Perangkat</h1>
-          <p className="text-[#52525B] text-sm mt-1">Pengaturan ini tersimpan di perangkat ini saja (tiap kasir/tablet punya setelan sendiri).</p>
+          <p className="text-[#52525B] text-sm mt-1">Identitas outlet & logo disimpan di server (dipakai semua perangkat); setelan printer/server tersimpan per perangkat ini.</p>
         </div>
 
-        {/* OUTLET */}
-        <Card icon={Store} title="Identitas Outlet (Header Struk)">
+        {/* OUTLET & LOGO (global server) */}
+        <Card icon={Store} title="Outlet & Logo (Identitas Outlet)">
+          <div className="flex items-center gap-4 flex-wrap">
+            {outlet?.logo_url ? (
+              <img src={outlet.logo_url} alt="logo" className="h-16 w-16 rounded-xl border object-contain bg-white" data-testid="outlet-logo" />
+            ) : (
+              <div className="h-16 w-16 rounded-xl border bg-[#F4F5F7] grid place-items-center text-[#a1a1aa]"><Store size={24} /></div>
+            )}
+            <label className="tap h-10 px-4 rounded-lg bg-[#0A0A0A] text-white font-bold text-sm inline-flex items-center gap-2 cursor-pointer">
+              <Upload size={15} /> {upLogo ? "Mengunggah..." : "Unggah Logo"}
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={uploadLogo} data-testid="outlet-logo-input" />
+            </label>
+          </div>
           <Field label="Nama Outlet">
-            <input data-testid="dev-outlet-name" value={cfg.outletName} onChange={(e) => upd({ outletName: e.target.value })} className={inp} />
+            <input data-testid="outlet-name" value={outlet?.name || ""} onChange={(e) => setOutlet({ ...outlet, name: e.target.value })} className={inp} />
           </Field>
           <Field label="Alamat">
+            <input data-testid="outlet-address" value={outlet?.address || ""} onChange={(e) => setOutlet({ ...outlet, address: e.target.value })} className={inp} />
+          </Field>
+          <Field label="Telepon">
+            <input data-testid="outlet-phone" value={outlet?.phone || ""} onChange={(e) => setOutlet({ ...outlet, phone: e.target.value })} className={inp} />
+          </Field>
+          <button data-testid="outlet-save" onClick={saveOutlet} className="tap h-11 px-5 rounded-xl bg-[#E63946] text-white font-bold flex items-center gap-2"><Save size={16} /> Simpan Outlet</button>
+        </Card>
+
+        {/* IDENTITAS STRUK LOKAL (header per perangkat) */}
+        <Card icon={ReceiptText} title="Header Struk (per perangkat)">
+          <Field label="Nama Header Struk">
+            <input data-testid="dev-outlet-name" value={cfg.outletName} onChange={(e) => upd({ outletName: e.target.value })} className={inp} />
+          </Field>
+          <Field label="Alamat Header">
             <input data-testid="dev-outlet-address" value={cfg.outletAddress} onChange={(e) => upd({ outletAddress: e.target.value })} className={inp} />
           </Field>
           <Field label="Teks Penutup Struk">
