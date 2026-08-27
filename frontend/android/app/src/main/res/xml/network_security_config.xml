@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Izinkan cleartext (http://) ke SEMUA host — diperlukan agar APK bisa
+         terhubung ke server LAN (http://192.168.x.x) & tailnet (http://100.x.x.x)
+         meski Android versi baru menolak HTTP secara default. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
