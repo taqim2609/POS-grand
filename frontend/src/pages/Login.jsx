@@ -227,7 +227,7 @@ export default function Login() {
           {/* Baris 2: Unduh Aplikasi | Koneksi via Tailscale */}
           <div className="grid grid-cols-2 gap-3 mt-3">
             <a
-              href="https://taqim258.vibecoder.co.id/pos-grand-update/apk/Grand-Aceh-Kuliner-POS-v1.4.apk"
+              href="https://taqim258.vibecoder.co.id/pos-grand-update/apk/Grand-Aceh-Kuliner-POS-v1.5.apk"
               target="_blank" rel="noopener noreferrer" data-testid="download-app-btn"
               className="tap h-11 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight hover:bg-[#0A0A0A] hover:text-white transition-colors"
             >
@@ -267,14 +267,15 @@ export default function Login() {
           )}
         </form>
 
-        {/* Footer versi — tampil di layar login */}
-        <div className="mt-4 text-center" data-testid="login-version">
-          <div className="inline-flex items-center gap-1.5 text-[11px] text-[#8b87a8] font-mono">
+        {/* Footer versi — tampil di layar login (bertumpuk: APK di atas, OTA di bawah) */}
+        <div className="mt-4 text-center text-[11px] text-[#8b87a8] font-mono" data-testid="login-version">
+          <div className="flex items-center justify-center gap-1.5">
             <Smartphone size={11} />
-            {version?.native
-              ? `APK v${version.apk} · OTA ${version.otaInstalled || version.otaServer || "-"}`
-              : `Web · bundle ${version?.bundle || "-"}`}
+            <span>{version?.native ? `APK v${version.apk}` : `Web · bundle ${version?.bundle || "-"}`}</span>
           </div>
+          {version?.native && (
+            <div className="mt-0.5">OTA {version.otaInstalled || version.otaServer || "-"}</div>
+          )}
           {version?.native && version.otaServer && version.otaInstalled && version.otaServer > version.otaInstalled && (
             <div className="mt-1 text-[10px] text-[#B45309]">Update OTA tersedia ({version.otaServer}) — buka aplikasi untuk memasang.</div>
           )}
