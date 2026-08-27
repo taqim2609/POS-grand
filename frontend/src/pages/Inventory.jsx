@@ -195,6 +195,9 @@ function InvoiceScan({ open, onClose, onDone }) {
   const [camOpen, setCamOpen] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  // getUserMedia HANYA berjalan di secure context (HTTPS / http://localhost).
+  // Di http://IP-server (LAN biasa), kamera tidak diizinkan browser.
+  const canUseCam = typeof window !== "undefined" && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
 
   const stopCam = () => {
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
@@ -300,9 +303,15 @@ function InvoiceScan({ open, onClose, onDone }) {
               <Camera size={16} /> Pilih / Foto Faktur
               <input data-testid="invoice-file" type="file" accept="image/*" capture="environment" className="hidden" onChange={pickFile} />
             </label>
-            <button type="button" data-testid="invoice-camera-btn" onClick={openCam} className="tap inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-[#F4F5F7] border font-bold text-sm">
+            <button type="button" data-testid="invoice-camera-btn" onClick={openCam} disabled={!canUseCam}
+              className="tap inline-flex items-center gap-2 h-11 px-4 rounded-xl bg-[#F4F5F7] border font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">
               <Camera size={16} /> Buka Kamera
             </button>
+            {!canUseCam && (
+              <span className="text-[11px] text-[#B45309] max-w-[200px]">
+                Kamera butuh <b>HTTPS</b> (atau localhost). Pakai <b>Pilih / Foto Faktur</b>, atau buka via APK / HTTPS.
+              </span>
+            )}
             <button data-testid="invoice-parse-btn" onClick={parse} disabled={!image || loading}
               className="tap h-11 px-5 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center gap-2 disabled:opacity-50">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <ScanLine size={16} />} Baca dengan AI
