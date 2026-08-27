@@ -63,6 +63,11 @@ public class MainActivity extends BridgeActivity {
 
     public class SunmiBridge {
         @JavascriptInterface
+        public boolean isConnected() {
+            return printerService != null;
+        }
+
+        @JavascriptInterface
         public boolean printerInit() {
             try {
                 return printerService != null && printerService.printerInit() == 0;

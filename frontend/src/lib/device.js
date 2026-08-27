@@ -7,9 +7,10 @@ export { getServerUrl, setServerUrl };
 const KEY = "gak_device_cfg";
 
 export const DEVICE_DEFAULTS = {
-  printerMode: "auto", // auto | sunmi | browser | epson
+  printerMode: "auto", // auto | sunmi | browser | epson | bluetooth
   epsonIp: "",
   epsonPort: "80", // Epson ePOS-Print over HTTP
+  bluetoothDevice: "", // nama printer Bluetooth yang dipasang
   cashDrawer: true,
   outletName: "GRAND ACEH KULINER",
   outletAddress: "Jl. Contoh No. 1, Banda Aceh",

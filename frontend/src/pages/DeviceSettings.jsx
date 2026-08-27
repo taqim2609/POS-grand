@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Printer, Server, Store, Save, ReceiptText, Upload, Loader2 } from "lucide-react";
+import { Printer, Server, Store, Save, ReceiptText, Upload, Loader2, Bluetooth } from "lucide-react";
 import api, { apiError } from "@/lib/api";
 import { getDeviceConfig, setDeviceConfig, getServerUrl, setServerUrl, sampleOrder } from "@/lib/device";
 import { printReceipt } from "@/lib/receipt";
+import { requestBluetoothPrinter, clearBluetoothPrinter } from "@/lib/bluetooth";
 
 export default function DeviceSettings() {
   const [cfg, setCfg] = useState(getDeviceConfig());
@@ -39,6 +40,20 @@ export default function DeviceSettings() {
     setDeviceConfig(cfg);
     printReceipt(sampleOrder());
     toast.message("Mengirim struk uji ke printer...");
+  };
+  const [btBusy, setBtBusy] = useState(false);
+  const pairBt = async () => {
+    setBtBusy(true);
+    const t = toast.loading("Memilih printer Bluetooth...");
+    try {
+      const r = await requestBluetoothPrinter();
+      const name = r.name || "Printer Bluetooth";
+      setDeviceConfig({ ...getDeviceConfig(), printerMode: "bluetooth", bluetoothDevice: name });
+      setCfg((c) => ({ ...c, printerMode: "bluetooth", bluetoothDevice: name }));
+      toast.success(`Printer "${name}" terpasang`, { id: t });
+    } catch (e) {
+      toast.error(e.message || "Gagal memasang printer Bluetooth", { id: t, duration: 9000 });
+    } finally { setBtBusy(false); }
   };
   const saveOutlet = async () => {
     if (!outlet) return;
@@ -114,10 +129,28 @@ export default function DeviceSettings() {
             <select data-testid="dev-printer-mode" value={cfg.printerMode} onChange={(e) => upd({ printerMode: e.target.value })} className={`${inp} bg-white`}>
               <option value="auto">Otomatis (Sunmi bawaan → browser)</option>
               <option value="sunmi">Sunmi bawaan (T2/T2+)</option>
+              <option value="bluetooth">Bluetooth (ESC/POS)</option>
               <option value="epson">Epson jaringan (POS Komputer)</option>
               <option value="browser">Cetak lewat browser</option>
             </select>
           </Field>
+          {cfg.printerMode === "bluetooth" && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-[#a1a1aa] -mt-1">Butuh Chrome/WebView modern (Web Bluetooth). Di APK otomatis tersedia (http://localhost = secure).</p>
+              <button data-testid="dev-bt-pair" onClick={pairBt} disabled={btBusy}
+                className="tap h-11 px-4 rounded-lg bg-[#0A0A0A] text-white font-bold text-xs inline-flex items-center gap-2 disabled:opacity-50">
+                {btBusy ? <Loader2 size={14} className="animate-spin" /> : <Bluetooth size={14} />} Pasang Printer Bluetooth…
+              </button>
+              {cfg.bluetoothDevice && (
+                <div className="flex items-center gap-2 text-sm bg-[#ECFDF5] border border-[#A7F3D0] rounded-lg px-3 py-2">
+                  <Bluetooth size={14} className="text-[#047857]" />
+                  <span className="font-bold">{cfg.bluetoothDevice}</span>
+                  <button data-testid="dev-bt-remove" onClick={() => { clearBluetoothPrinter(); setDeviceConfig({ ...getDeviceConfig(), bluetoothDevice: "" }); setCfg((c) => ({ ...c, bluetoothDevice: "" })); toast.success("Printer Bluetooth dilepas"); }}
+                    className="ml-auto text-[#DC2626] font-bold text-xs">Lepas</button>
+                </div>
+              )}
+            </div>
+          )}
           {cfg.printerMode === "epson" && (
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">

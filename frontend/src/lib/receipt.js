@@ -1,5 +1,6 @@
 import { rupiah, ORDER_TYPE_LABEL } from "@/lib/format";
 import { getDeviceConfig, printViaEpson } from "@/lib/device";
+import { printViaBluetooth } from "@/lib/bluetooth";
 import { toast } from "sonner";
 
 // HTML-escape any user-controlled value before it enters printable markup (prevents XSS)
@@ -14,6 +15,9 @@ function trySunmiPrinter(order, cfg) {
     // (b) bridge native dari MainActivity APK ini (SunmiPrinterBridge, via AIDL).
     const sp = window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.sunmi || window.SunmiPrinterBridge;
     if (!sp || typeof sp.printText !== "function") return false;
+    // Bridge APK SELALU ada (addJavascriptInterface) walau service belum ter-bind —
+    // cek koneksi sungguhan supaya tidak "diam tanpa cetak".
+    if (typeof sp.isConnected === "function" && !sp.isConnected()) return false;
     if (sp.printerInit) sp.printerInit();
     if (sp.setAlignment) sp.setAlignment(1);
     sp.printText(`${cfg.outletName}\n`);
@@ -111,6 +115,15 @@ export async function printReceipt(order) {
     return;
   }
   if (cfg.printerMode === "browser") return browserPrint(order, cfg);
+  if (cfg.printerMode === "bluetooth") {
+    try {
+      await printViaBluetooth(order);
+    } catch (e) {
+      toast.error(e.message || "Gagal mencetak ke printer Bluetooth");
+      browserPrint(order, cfg);
+    }
+    return;
+  }
   // "auto" or "sunmi": coba printer Sunmi bawaan, jatuh ke browser bila tak ada
   if (trySunmiPrinter(order, cfg)) return;
   browserPrint(order, cfg);
