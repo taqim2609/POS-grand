@@ -1610,13 +1610,18 @@ async def update_check(admin: dict = Depends(require_admin)):
     """Cek versi terbaru di vibecoder.co.id (dipakai banner 'Versi baru tersedia' & laporan Diagnostik)."""
     import urllib.request, json
     current = ""
-    host_dir = os.environ.get("HOST_PROJECT_DIR")
-    if host_dir:
+    # Folder proyek di-mount ke /host-project (ro) sejak docker-compose diperbarui;
+    # fallback ke HOST_PROJECT_DIR untuk kompatibilitas.
+    for base in ("/host-project", os.environ.get("HOST_PROJECT_DIR")):
+        if not base:
+            continue
         try:
-            with open(os.path.join(host_dir, ".vibecoder-version"), "r") as f:
+            with open(os.path.join(base, ".vibecoder-version"), "r") as f:
                 current = f.read().strip()
+            if current:
+                break
         except Exception:
-            current = ""
+            continue
     latest = ""
     reachable = False
     try:

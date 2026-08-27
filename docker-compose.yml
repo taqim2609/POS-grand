@@ -26,6 +26,7 @@ services:
     volumes:
       - uploads_data:/app/uploads   # gambar AI & unggahan tersimpan permanen
       - /var/run/docker.sock:/var/run/docker.sock   # untuk tombol "Update Sekarang" (1-klik)
+      - ${HOST_PROJECT_DIR:-.}:/host-project:ro   # baca .vibecoder-version (versi terpasang)
 
   whatsapp:
     build: ./whatsapp-service
