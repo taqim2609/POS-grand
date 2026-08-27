@@ -33,6 +33,12 @@ public class MainActivity extends BridgeActivity {
             {"woyou.aidlservice.jiuiv5", "woyou.aidlservice.jiuiv5.IPrinterService"},
             {"sunmi.peripheral", "sunmi.peripheral"},
     };
+    // Kandidat ComponentName EKSPLISIT (beberapa ROM hanya merespons ini)
+    private static final String[][] COMPONENTS = {
+            {"woyou.aidlservice.jiuiv5", "woyou.aidlservice.jiuiv5.PrinterService"},
+            {"woyou.aidlservice.jiuiv5", "woyou.aidlservice.jiuiv5.IPrinterService"},
+            {"sunmi.peripheral", "sunmi.peripheral.printer.SunmiPrinterService"},
+    };
 
     private IPrinterService printerService = null;
     private String boundPackage = "";
@@ -77,6 +83,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void bindPrinter() {
+        // 1) coba action-based
         for (String[] c : CANDIDATES) {
             try {
                 Intent intent = new Intent();
@@ -85,10 +92,24 @@ public class MainActivity extends BridgeActivity {
                 if (bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
                     boundPackage = c[0];
                     lastBindError = "";
-                    return; // bind berhasil (onServiceConnected akan dipanggil)
+                    return;
                 }
             } catch (Exception e) {
                 lastBindError = c[0] + " -> " + e;
+            }
+        }
+        // 2) coba ComponentName eksplisit
+        for (String[] c : COMPONENTS) {
+            try {
+                Intent intent = new Intent();
+                intent.setComponent(new ComponentName(c[0], c[1]));
+                if (bindService(intent, conn, Context.BIND_AUTO_CREATE)) {
+                    boundPackage = c[0] + ":" + c[1];
+                    lastBindError = "";
+                    return;
+                }
+            } catch (Exception e) {
+                lastBindError = c[0] + ":" + c[1] + " -> " + e;
             }
         }
         if (boundPackage.isEmpty()) lastBindError = lastBindError.isEmpty() ? "semua kandidat gagal bind" : lastBindError;
@@ -121,7 +142,21 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public String getDebugInfo() {
-            return "bound=" + bound + " pkg=" + boundPackage + (lastBindError.isEmpty() ? "" : " err=" + lastBindError);
+            // Cek apakah paket layanan printer TERPASANG di perangkat
+            StringBuilder pkgs = new StringBuilder();
+            String[] names = {"woyou.aidlservice.jiuiv5", "sunmi.peripheral"};
+            for (String p : names) {
+                boolean installed = false;
+                try {
+                    getPackageManager().getPackageInfo(p, 0);
+                    installed = true;
+                } catch (Exception e) {
+                    installed = false;
+                }
+                pkgs.append(p).append("=").append(installed ? "ADA" : "TIDAK").append("; ");
+            }
+            return "pkg:" + pkgs + "bound=" + bound + " pkg=" + boundPackage
+                    + (lastBindError.isEmpty() ? "" : " err=" + lastBindError);
         }
 
         @JavascriptInterface
