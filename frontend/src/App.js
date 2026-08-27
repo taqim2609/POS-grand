@@ -28,6 +28,8 @@ import DeviceSettings from "@/pages/DeviceSettings";
 import Catalog from "@/pages/Catalog";
 import AssistantAI from "@/pages/AssistantAI";
 import Reports from "@/pages/Reports";
+import Members from "@/pages/Members";
+import Promos from "@/pages/Promos";
 
 const wrap = (el, roles) => (
   <ProtectedRoute roles={roles}>
@@ -55,6 +57,8 @@ function App() {
               <Route path="/categories" element={wrap(<Categories />, ["admin", "input"])} />
               <Route path="/catalog" element={wrap(<Catalog />, ["admin", "input"])} />
               <Route path="/laporan" element={wrap(<Reports />, ["admin", "kasir"])} />
+              <Route path="/members" element={wrap(<Members />, ["admin"])} />
+              <Route path="/promos" element={wrap(<Promos />, ["admin"])} />
               <Route path="/tanya-ai" element={<Navigate to="/asisten-ai" replace />} />
               <Route path="/asisten-ai" element={wrap(<AssistantAI />, ["admin", "kasir"])} />
               <Route path="/tables" element={wrap(<Tables />, ["admin"])} />

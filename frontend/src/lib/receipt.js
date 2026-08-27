@@ -28,9 +28,12 @@ function trySunmiPrinter(order, cfg) {
     sp.printText("--------------------------------\n");
     sp.printText(`Subtotal: ${rupiah(order.subtotal)}\n`);
     if (order.discount) sp.printText(`Diskon: -${rupiah(order.discount)}\n`);
+    (order.promos_applied || []).forEach((p) => sp.printText(`Promo ${p}: -${rupiah(order.promo_discount || 0)}\n`));
+    if (order.redeem_discount) sp.printText(`Tukar poin: -${rupiah(order.redeem_discount)}\n`);
     sp.printText(`TOTAL: ${rupiah(order.total)}\n`);
     if (order.payment_method_name) sp.printText(`${order.payment_method_name}: ${rupiah(order.amount_paid || order.total)}\n`);
     if (order.change) sp.printText(`Kembali: ${rupiah(order.change)}\n`);
+    if (order.points_earned) sp.printText(`Poin member: +${order.points_earned}\n`);
     sp.printText(`\n${cfg.footerText || "Terima kasih"}\n`);
     if (sp.lineWrap) sp.lineWrap(3);
     if (sp.cutPaper) sp.cutPaper(); // auto-cut
@@ -76,6 +79,8 @@ function browserPrint(order, cfg) {
     <table>
       <tr><td>Subtotal</td><td class="r">${rupiah(order.subtotal)}</td></tr>
       ${order.discount ? `<tr><td>Diskon</td><td class="r">-${rupiah(order.discount)}</td></tr>` : ""}
+      ${(order.promos_applied || []).length ? `<tr><td>Promo ${esc(order.promos_applied.join(", "))}</td><td class="r">-${rupiah(order.promo_discount || 0)}</td></tr>` : ""}
+      ${order.redeem_discount ? `<tr><td>Tukar poin</td><td class="r">-${rupiah(order.redeem_discount)}</td></tr>` : ""}
       <tr class="tot"><td>TOTAL</td><td class="r">${rupiah(order.total)}</td></tr>
       ${order.payment_method_name ? `<tr><td>${esc(order.payment_method_name)}</td><td class="r">${rupiah(order.amount_paid || order.total)}</td></tr>` : ""}
       ${order.change ? `<tr><td>Kembali</td><td class="r">${rupiah(order.change)}</td></tr>` : ""}

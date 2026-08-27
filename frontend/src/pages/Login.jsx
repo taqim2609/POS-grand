@@ -119,8 +119,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
-      <div className="hidden lg:flex flex-col justify-between bg-[#0A0A0A] text-white p-12 relative overflow-hidden">
-        <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-[#E63946]/30 blur-3xl" />
+      <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-[#450A0A] via-[#BE123C] to-[#B45309] text-white p-12 relative overflow-hidden">
+        <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-[#F97316]/40 blur-3xl" />
+        <div className="absolute -left-24 -bottom-24 h-96 w-96 rounded-full bg-[#4F46E5]/30 blur-3xl" />
         <div className="flex items-center gap-3 relative">
           <div className="h-11 w-11 rounded-xl bg-[#E63946] grid place-items-center font-heading font-extrabold text-xl">G</div>
           <span className="font-heading font-extrabold text-lg">Grand Aceh Kuliner</span>

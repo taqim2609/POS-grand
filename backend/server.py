@@ -17,7 +17,7 @@ from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, timedelta
-import logging, uuid, io, bcrypt, jwt, asyncio, re, zipfile
+import logging, uuid, io, bcrypt, jwt, asyncio, re, zipfile, math
 from bson import json_util
 
 # ------------------------------------------------------------------ DB
@@ -193,6 +193,9 @@ class OrderIn(BaseModel):
     pay_now: bool = False
     payment_method: Optional[str] = None
     client_ref: Optional[str] = None
+    member_id: Optional[str] = None
+    redeem_points: float = 0
+    discount_reason: Optional[str] = None
 
 class ItemsUpdate(BaseModel):
     items: List[OrderItem]
@@ -202,6 +205,9 @@ class PayIn(BaseModel):
     discount_type: Literal["none", "percent", "amount"] = "none"
     discount_value: float = Field(0, ge=0)
     amount_paid: Optional[float] = None
+    member_id: Optional[str] = None
+    redeem_points: float = 0
+    discount_reason: Optional[str] = None
 
 class VoidIn(BaseModel):
     reason: str
@@ -238,6 +244,117 @@ def compute_totals(items, discount_type, discount_value):
         discount = 0
     total = max(0, round(subtotal - discount, 2))
     return round(subtotal, 2), round(discount, 2), total
+
+# ================================================================== PROMO & MEMBER (fitur baru)
+async def _active_promos():
+    return await db.promos.find({"active": True}, {"_id": 0}).to_list(100)
+
+async def _apply_promos(items, subtotal, now=None):
+    """Hitung diskon otomatis dari promo aktif. Return (promo_discount, [nama_promo])."""
+    now = now or datetime.now(WIB)
+    t = now.strftime("%H:%M")
+    wd = now.weekday()  # 0=Senin..6=Minggu
+    names = []
+    d = 0.0
+    for p in await _active_promos():
+        try:
+            days = p.get("days") or []
+            if days and wd not in days:
+                continue
+            ptype = p.get("type")
+            if ptype in ("percent", "happy_hour"):
+                if ptype == "happy_hour":
+                    st, en = p.get("start_time", ""), p.get("end_time", "")
+                    if not (st and en) or not (st <= t <= en):
+                        continue
+                pct = min(float(p.get("value") or 0), 100)
+                d += round(subtotal * pct / 100.0, 2)
+                names.append(p.get("name"))
+            elif ptype == "min_spend":
+                if subtotal >= float(p.get("value") or 0):
+                    bonus = float(p.get("bonus") or 0)
+                    d += min(bonus, subtotal)
+                    names.append(p.get("name"))
+            elif ptype == "package":
+                # paket: semua produk dalam paket harus ada di keranjang (cocokkan nama)
+                pkg = p.get("package_items") or []
+                ok = True
+                for need in pkg:
+                    nm = (need.get("product_name") or "").lower().strip()
+                    q = int(need.get("qty") or 1)
+                    if nm:
+                        have = sum(i["qty"] for i in items if (i["name"] or "").lower().strip() == nm)
+                        if have < q:
+                            ok = False
+                            break
+                if ok:
+                    bundle = float(p.get("value") or 0)
+                    normal = 0.0
+                    for need in pkg:
+                        nm = (need.get("product_name") or "").lower().strip()
+                        q = int(need.get("qty") or 1)
+                        for i in items:
+                            if (i["name"] or "").lower().strip() == nm:
+                                normal += i["price"] * q
+                                break
+                    d += max(0.0, normal - bundle)
+                    names.append(p.get("name"))
+            elif ptype == "bogo":
+                # beli N gratis 1 (produk sama, unit paling murah dihitung)
+                buy = int(p.get("value") or 2)
+                for it in items:
+                    if it["qty"] >= buy + 1:
+                        free = it["price"]
+                        d += min(free, subtotal)
+                        names.append(p.get("name"))
+                        break
+        except Exception:
+            continue
+    promo_discount = min(d, subtotal)
+    return round(promo_discount, 2), names
+
+def _discount_needs_reason(discount_type, discount_value, subtotal):
+    if discount_type == "percent":
+        return discount_value > 15
+    if discount_type == "amount":
+        return discount_value > 50000
+    return False
+
+async def _apply_redeem(member_id, redeem_points, total_before):
+    """Validasi & potong poin member; return potongan rupiah (1 poin = Rp100)."""
+    if not member_id or not redeem_points or redeem_points <= 0:
+        return 0.0, None
+    m = await db.members.find_one({"id": member_id})
+    if not m:
+        raise HTTPException(400, "Member tidak ditemukan")
+    pts = float(m.get("points") or 0)
+    if redeem_points > pts:
+        raise HTTPException(400, f"Poin member tidak cukup (sisa {pts:,.0f})")
+    value = round(redeem_points * 100, 2)
+    value = min(value, total_before)
+    await db.members.update_one({"id": member_id}, {"$inc": {"points": -redeem_points}})
+    return value, m
+
+async def _award_member_points(order):
+    """Setelah order lunas, tambah poin & total belanja member + kirim notifikasi WA."""
+    mid = order.get("member_id")
+    if not mid:
+        return
+    m = await db.members.find_one({"id": mid})
+    if not m:
+        return
+    pts = int(order.get("total", 0) // 10000)  # 1 poin per Rp10.000
+    if pts <= 0:
+        return
+    await db.members.update_one({"id": mid}, {"$inc": {"points": pts, "total_spend": order.get("total", 0)}})
+    await db.orders.update_one({"id": order["id"]}, {"$set": {"points_earned": pts}})
+    phone = m.get("phone", "")
+    if phone and await _wa_configured():
+        try:
+            await _send_whatsapp([phone],
+                f"*Grand Aceh Kuliner*\nTerima kasih sudah berbelanja!\nTotal: Rp{order.get('total',0):,.0f}\nPoin +{pts} (total poin {float(m.get('points') or 0)+pts:,.0f})\nTukarkan poin 1pt=Rp100 saat pembayaran.")
+        except Exception:
+            pass
 
 async def gen_order_number():
     today = wib_today().replace("-", "")
@@ -593,6 +710,7 @@ async def _finalize_payment(order, payment_method, amount_paid, user):
            "change": round(paid - order["total"], 2),
            "paid_at": now_utc().isoformat(), "shift_id": shift["id"] if shift else None}
     await db.orders.update_one({"id": order["id"]}, {"$set": upd})
+    await _award_member_points({**order, **upd})
     return {**order, **upd}
 
 @api.post("/orders")
@@ -606,11 +724,22 @@ async def create_order(body: OrderIn, user: dict = Depends(get_current_user)):
     items = await _resolve_items(body.items)
     await _validate_order_rules(body.order_type, body.table_id, items)
     subtotal, discount, total = compute_totals(items, body.discount_type, body.discount_value)
+    promo_discount, promo_names = await _apply_promos(items, subtotal)
+    if _discount_needs_reason(body.discount_type, body.discount_value, subtotal) and not (body.discount_reason or "").strip():
+        raise HTTPException(400, "Alasan diskon wajib diisi untuk diskon besar (>15% atau >Rp50.000)")
+    total = max(0.0, round(total - promo_discount, 2))
+    redeem_discount = 0.0
+    if body.member_id and body.redeem_points:
+        rd, m = await _apply_redeem(body.member_id, body.redeem_points, total)
+        redeem_discount = rd
+        total = max(0.0, round(total - rd, 2))
     doc = {
         "id": new_id(), "order_number": await gen_order_number(),
         "order_type": body.order_type, "table_id": body.table_id, "items": items,
         "subtotal": subtotal, "discount_type": body.discount_type, "discount_value": body.discount_value,
-        "discount": discount, "total": total, "note": body.note,
+        "discount": discount, "promo_discount": promo_discount, "promos_applied": promo_names,
+        "redeem_discount": redeem_discount, "member_id": body.member_id,
+        "discount_reason": body.discount_reason, "total": total, "note": body.note,
         "status": "open", "cashier_id": user["id"], "cashier_name": user["name"],
         "client_ref": body.client_ref,
         "created_at": now_utc().isoformat(),
@@ -620,7 +749,7 @@ async def create_order(body: OrderIn, user: dict = Depends(get_current_user)):
     if body.pay_now:
         if not body.payment_method:
             raise HTTPException(400, "Pilih metode pembayaran")
-        doc = await _finalize_payment(doc, body.payment_method, total, user)
+        doc = await _finalize_payment(doc, body.payment_method, None, user)
     return doc
 
 @api.get("/orders")
@@ -654,8 +783,11 @@ async def update_order_items(oid: str, body: ItemsUpdate, user: dict = Depends(g
     items = await _resolve_items(body.items)
     await _validate_order_rules(o["order_type"], o.get("table_id"), items)
     subtotal, discount, total = compute_totals(items, o["discount_type"], o["discount_value"])
+    promo_discount, promo_names = await _apply_promos(items, subtotal)
+    total = max(0.0, round(total - promo_discount, 2))
     await db.orders.update_one({"id": oid}, {"$set": {"items": items, "subtotal": subtotal,
-                                                       "discount": discount, "total": total}})
+                                                       "discount": discount, "promo_discount": promo_discount,
+                                                       "promos_applied": promo_names, "total": total}})
     return await db.orders.find_one({"id": oid}, {"_id": 0})
 
 @api.post("/orders/{oid}/pay")
@@ -666,10 +798,26 @@ async def pay_order(oid: str, body: PayIn, user: dict = Depends(get_current_user
     if o["status"] != "open":
         raise HTTPException(400, "Order sudah lunas / tidak bisa dibayar")
     subtotal, discount, total = compute_totals(o["items"], body.discount_type, body.discount_value)
+    promo_discount, promo_names = await _apply_promos(o["items"], subtotal)
+    if _discount_needs_reason(body.discount_type, body.discount_value, subtotal) and not (body.discount_reason or "").strip():
+        raise HTTPException(400, "Alasan diskon wajib diisi untuk diskon besar (>15% atau >Rp50.000)")
+    total = max(0.0, round(total - promo_discount, 2))
+    redeem_discount = 0.0
+    if body.member_id and body.redeem_points:
+        rd, m = await _apply_redeem(body.member_id, body.redeem_points, total)
+        redeem_discount = rd
+        total = max(0.0, round(total - rd, 2))
     await db.orders.update_one({"id": oid}, {"$set": {"discount_type": body.discount_type,
                                                       "discount_value": body.discount_value,
-                                                      "discount": discount, "total": total, "subtotal": subtotal}})
-    o.update({"discount": discount, "total": total, "subtotal": subtotal})
+                                                      "discount": discount, "promo_discount": promo_discount,
+                                                      "promos_applied": promo_names,
+                                                      "redeem_discount": redeem_discount,
+                                                      "member_id": body.member_id,
+                                                      "discount_reason": body.discount_reason,
+                                                      "total": total, "subtotal": subtotal}})
+    o.update({"discount": discount, "promo_discount": promo_discount, "promos_applied": promo_names,
+              "redeem_discount": redeem_discount, "member_id": body.member_id,
+              "discount_reason": body.discount_reason, "total": total, "subtotal": subtotal})
     return await _finalize_payment(o, body.payment_method, body.amount_paid, user)
 
 @api.post("/orders/{oid}/void")
@@ -2575,6 +2723,266 @@ async def whatsapp_test(body: WATestIn, admin: dict = Depends(require_admin)):
     if not any(x.get("ok") for x in res):
         raise HTTPException(400, f"Gagal kirim: {res[0].get('error') if res else 'tidak diketahui'}")
     return {"sent": res}
+
+# ================================================================== MEMBERS (poin loyalitas)
+class MemberIn(BaseModel):
+    name: str
+    phone: str = ""
+    points: float = 0
+
+@api.get("/members")
+async def list_members(q: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {}
+    if q:
+        import re as _re
+        rx = _re.compile(re.escape(q), _re.I)
+        query["$or"] = [{"name": rx}, {"phone": rx}]
+    return await db.members.find(query, {"_id": 0}).sort("name", 1).to_list(500)
+
+@api.post("/members")
+async def create_member(body: MemberIn, user: dict = Depends(get_current_user)):
+    m = {"id": new_id(), "name": body.name.strip(), "phone": body.phone.strip(),
+         "points": float(body.points or 0), "total_spend": 0.0, "created_at": now_utc().isoformat()}
+    if not m["name"]:
+        raise HTTPException(400, "Nama wajib diisi")
+    await db.members.insert_one(m)
+    m.pop("_id", None)
+    return m
+
+@api.put("/members/{mid}")
+async def update_member(mid: str, body: MemberIn, user: dict = Depends(get_current_user)):
+    upd = {"name": body.name.strip(), "phone": body.phone.strip(), "points": float(body.points or 0)}
+    r = await db.members.update_one({"id": mid}, {"$set": upd})
+    if not r.matched_count:
+        raise HTTPException(404, "Member tidak ditemukan")
+    return {"ok": True}
+
+@api.delete("/members/{mid}")
+async def delete_member(mid: str, admin: dict = Depends(require_admin)):
+    await db.members.delete_one({"id": mid})
+    return {"ok": True}
+
+@api.get("/members/search")
+async def search_member(phone: str, user: dict = Depends(get_current_user)):
+    if not phone.strip():
+        return {"member": None}
+    m = await db.members.find_one({"phone": phone.strip()}, {"_id": 0})
+    return {"member": m}
+
+# ================================================================== PROMOS
+class PromoIn(BaseModel):
+    name: str
+    type: Literal["percent", "happy_hour", "min_spend", "package", "bogo"]
+    value: float = 0
+    bonus: float = 0
+    start_time: str = ""
+    end_time: str = ""
+    days: List[int] = []
+    package_items: List[dict] = []
+    active: bool = True
+
+@api.get("/promos")
+async def list_promos(user: dict = Depends(get_current_user)):
+    return await db.promos.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+@api.post("/promos")
+async def create_promo(body: PromoIn, admin: dict = Depends(require_admin)):
+    p = {"id": new_id(), "name": body.name.strip(), "type": body.type, "value": body.value,
+         "bonus": body.bonus, "start_time": body.start_time, "end_time": body.end_time,
+         "days": body.days, "package_items": body.package_items, "active": body.active,
+         "created_at": now_utc().isoformat()}
+    if not p["name"]:
+        raise HTTPException(400, "Nama promo wajib diisi")
+    await db.promos.insert_one(p)
+    p.pop("_id", None)
+    return p
+
+@api.put("/promos/{pid}")
+async def update_promo(pid: str, body: PromoIn, admin: dict = Depends(require_admin)):
+    upd = {"name": body.name.strip(), "type": body.type, "value": body.value, "bonus": body.bonus,
+           "start_time": body.start_time, "end_time": body.end_time, "days": body.days,
+           "package_items": body.package_items, "active": body.active}
+    r = await db.promos.update_one({"id": pid}, {"$set": upd})
+    if not r.matched_count:
+        raise HTTPException(404, "Promo tidak ditemukan")
+    return {"ok": True}
+
+@api.delete("/promos/{pid}")
+async def delete_promo(pid: str, admin: dict = Depends(require_admin)):
+    await db.promos.delete_one({"id": pid})
+    return {"ok": True}
+
+# ================================================================== SPLIT / PINDAH / GABUNG MEJA
+class SplitIn(BaseModel):
+    items: List[OrderItem]
+
+@api.post("/orders/{oid}/split")
+async def split_order(oid: str, body: SplitIn, admin: dict = Depends(require_admin)):
+    if not body.items:
+        raise HTTPException(400, "Pilih item yang akan dipindah")
+    o = await db.orders.find_one({"id": oid})
+    if not o or o["status"] != "open":
+        raise HTTPException(400, "Order tidak ditemukan / bukan open bill")
+    moved_ids = {it.product_id: it.qty for it in body.items}
+    keep, moved = [], []
+    for it in o["items"]:
+        need = moved_ids.get(it["product_id"], 0)
+        if need >= it["qty"]:
+            moved.append({**it})
+            moved_ids[it["product_id"]] = need - it["qty"]
+        elif need > 0:
+            moved.append({**it, "qty": need})
+            keep.append({**it, "qty": it["qty"] - need})
+            moved_ids[it["product_id"]] = 0
+        else:
+            keep.append({**it})
+    if not moved:
+        raise HTTPException(400, "Tidak ada item yang valid untuk dipindah")
+    st_k, d_k, _ = compute_totals(keep, o["discount_type"], o["discount_value"])
+    pr_k, pn_k = await _apply_promos(keep, st_k)
+    t_k = max(0.0, round(st_k - d_k - pr_k, 2))
+    new_doc = {
+        "id": new_id(), "order_number": await gen_order_number(),
+        "order_type": o["order_type"], "table_id": o.get("table_id"), "items": moved,
+        "subtotal": sum(i["price"] * i["qty"] for i in moved),
+        "discount_type": "none", "discount_value": 0, "discount": 0,
+        "promo_discount": 0, "promos_applied": [], "redeem_discount": 0,
+        "total": sum(i["price"] * i["qty"] for i in moved),
+        "note": f"Split dari {o['order_number']}", "status": "open",
+        "cashier_id": admin["id"], "cashier_name": admin["name"],
+        "created_at": now_utc().isoformat(), "parent_order": o["id"],
+    }
+    await db.orders.insert_one(new_doc)
+    await db.orders.update_one({"id": oid}, {"$set": {"items": keep, "subtotal": st_k,
+                                                      "discount": d_k, "promo_discount": pr_k,
+                                                      "promos_applied": pn_k, "total": t_k}})
+    new_doc.pop("_id", None)
+    return {"original": await db.orders.find_one({"id": oid}, {"_id": 0}), "new_order": new_doc}
+
+class TableMoveIn(BaseModel):
+    table_id: str
+
+@api.patch("/orders/{oid}/table")
+async def move_order_table(oid: str, body: TableMoveIn, user: dict = Depends(get_current_user)):
+    o = await db.orders.find_one({"id": oid})
+    if not o or o["status"] != "open":
+        raise HTTPException(400, "Order tidak ditemukan / bukan open bill")
+    await db.orders.update_one({"id": oid}, {"$set": {"table_id": body.table_id}})
+    return {"ok": True}
+
+class MergeIn(BaseModel):
+    target_id: str
+
+@api.post("/orders/{oid}/merge")
+async def merge_orders(oid: str, body: MergeIn, admin: dict = Depends(require_admin)):
+    o = await db.orders.find_one({"id": oid})
+    t = await db.orders.find_one({"id": body.target_id})
+    if not o or not t or o["status"] != "open" or t["status"] != "open":
+        raise HTTPException(400, "Kedua order harus open bill")
+    if o["id"] == t["id"]:
+        raise HTTPException(400, "Target tidak boleh sama")
+    merged_items = t["items"] + o["items"]
+    st, d, _ = compute_totals(merged_items, t["discount_type"], t["discount_value"])
+    pr, pn = await _apply_promos(merged_items, st)
+    tot = max(0.0, round(st - d - pr, 2))
+    await db.orders.update_one({"id": t["id"]}, {"$set": {"items": merged_items, "subtotal": st,
+                                                          "discount": d, "promo_discount": pr,
+                                                          "promos_applied": pn, "total": tot}})
+    await db.orders.update_one({"id": oid}, {"$set": {"status": "merged", "merged_into": t["id"],
+                                                      "void_reason": f"Digabung ke {t['order_number']}"}})
+    return {"ok": True, "target": await db.orders.find_one({"id": t["id"]}, {"_id": 0})}
+
+# ================================================================== LABA KOTOR PER PRODUK
+@api.get("/reports/profit")
+async def report_profit(start: str, end: str, admin: dict = Depends(admin_or_kasir)):
+    s, e = wib_day_range(start[:10]), wib_day_range(end[:10])
+    q = {"status": "paid", "created_at": {"$gte": s[0], "$lte": e[1]}}
+    orders = await db.orders.find(q, {"_id": 0}).to_list(5000)
+    rows = {}
+    for o in orders:
+        for it in o.get("items", []):
+            pid = it["product_id"]
+            r = rows.setdefault(pid, {"name": it["name"], "qty": 0, "revenue": 0.0, "cost": 0.0})
+            r["qty"] += it["qty"]
+            r["revenue"] += it["price"] * it["qty"]
+            r["cost"] += (it.get("cost") or 0) * it["qty"]
+    out = []
+    for pid, r in rows.items():
+        out.append({"product_id": pid, "name": r["name"], "qty": r["qty"],
+                    "revenue": round(r["revenue"], 2), "cost": round(r["cost"], 2),
+                    "profit": round(r["revenue"] - r["cost"], 2),
+                    "margin": round((r["revenue"] - r["cost"]) / r["revenue"] * 100, 1) if r["revenue"] else 0})
+    out.sort(key=lambda x: x["profit"], reverse=True)
+    return {"rows": out, "total_revenue": round(sum(r["revenue"] for r in rows.values()), 2),
+            "total_cost": round(sum(r["cost"] for r in rows.values()), 2),
+            "total_profit": round(sum(r["revenue"] - r["cost"] for r in rows.values()), 2)}
+
+# ================================================================== REKOMENDASI PEMBELIAN STOK (AI)
+@api.post("/ai/purchase-recommendation")
+async def purchase_recommendation(admin: dict = Depends(admin_or_kasir)):
+    import json
+    end = datetime.now(WIB)
+    start = end - timedelta(days=30)
+    days = 30
+    sold = {}
+    for o in await db.orders.find({"status": "paid", "created_at": {"$gte": start.isoformat()}}, {"_id": 0, "items": 1}).to_list(5000):
+        for it in o.get("items", []):
+            if it.get("type") == "retail":
+                sold[it["product_id"]] = sold.get(it["product_id"], 0) + it["qty"]
+    recs = []
+    for p in await db.products.find({"type": "retail", "track_stock": True}, {"_id": 0}).to_list(2000):
+        qty30 = sold.get(p["id"], 0)
+        avg = qty30 / days
+        stock = float(p.get("stock") or 0)
+        min_stock = float(p.get("min_stock") or 10)
+        suggest = max(0.0, (avg * 14) - stock)
+        recs.append({"product_id": p["id"], "name": p["name"], "stock": stock,
+                     "min_stock": min_stock, "sold_30d": qty30, "daily_avg": round(avg, 2),
+                     "suggest": math.ceil(suggest)})
+    recs.sort(key=lambda x: x["sold_30d"], reverse=True)
+    ai_text = ""
+    try:
+        top = recs[:12]
+        prompt = ("Buat ringkasan rekomendasi pembelian stok dalam 3-5 baris Bahasa Indonesia. "
+                  f"Data (produk, stok, terjual 30 hari, saran beli):\n{json.dumps(top, ensure_ascii=False, default=str)}")
+        ai_text = await _gemini_text("Anda analis stok restoran.", prompt, feature="summary")
+    except Exception:
+        ai_text = ""
+    return {"rows": recs, "ai_summary": ai_text}
+
+# ================================================================== SETTINGS OUTLET (nama/alamat/logo)
+class OutletIn(BaseModel):
+    name: str = ""
+    address: str = ""
+    phone: str = ""
+
+@api.get("/settings/outlet")
+async def get_outlet(admin: dict = Depends(require_admin)):
+    doc = await db.settings.find_one({"_id": "outlet"}, {"_id": 0}) or {}
+    return {"name": doc.get("name", ""), "address": doc.get("address", ""),
+            "phone": doc.get("phone", ""), "logo_url": doc.get("logo_url", "")}
+
+@api.put("/settings/outlet")
+async def put_outlet(body: OutletIn, admin: dict = Depends(require_admin)):
+    await db.settings.update_one({"_id": "outlet"}, {"$set": {
+        "name": body.name.strip(), "address": body.address.strip(), "phone": body.phone.strip()}}, upsert=True)
+    return {"ok": True}
+
+@api.post("/settings/outlet/logo")
+async def upload_logo(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    import mimetypes
+    ok_types = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}
+    ext = ok_types.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(400, "Format logo harus PNG/JPG/WEBP/GIF")
+    data = await file.read()
+    if len(data) > 2_000_000:
+        raise HTTPException(400, "Logo maksimal 2MB")
+    fname = f"logo-{new_id()}{ext}"
+    (UPLOAD_DIR / fname).write_bytes(data)
+    url = f"/uploads/{fname}"
+    await db.settings.update_one({"_id": "outlet"}, {"$set": {"logo_url": url}}, upsert=True)
+    return {"ok": True, "url": url}
 
 # ================================================================== EXCEL
 IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "harga_beli", "status_aktif", "sold_out", "deskripsi", "stok_awal"]

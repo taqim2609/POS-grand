@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
-import { MessageCircle, Save, Loader2, ShieldAlert, ShoppingCart, TrendingUp } from "lucide-react";
+import { MessageCircle, Save, Loader2, ShieldAlert, ShoppingCart, TrendingUp, Store, Upload } from "lucide-react";
 
 export default function SettingsReport() {
   const [form, setForm] = useState({ whatsapp_enabled: false, whatsapp_time: "22:00", recipients: "", include_ai: true, send_sales: true, send_purchases: false });
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [outlet, setOutlet] = useState({ name: "", address: "", phone: "", logo_url: "" });
+  const [upLogo, setUpLogo] = useState(false);
 
   useEffect(() => {
     api.get("/settings/report")
@@ -24,6 +26,7 @@ export default function SettingsReport() {
       })
       .catch((e) => toast.error(apiError(e.response?.data?.detail)))
       .finally(() => setLoading(false));
+    api.get("/settings/outlet").then((r) => setOutlet(r.data)).catch(() => {});
   }, []);
 
   const save = async () => {
@@ -35,12 +38,63 @@ export default function SettingsReport() {
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setSaving(false); }
   };
 
+  const saveOutlet = async () => {
+    try {
+      await api.put("/settings/outlet", { name: outlet.name, address: outlet.address, phone: outlet.phone });
+      toast.success("Data outlet disimpan");
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
+
+  const uploadLogo = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUpLogo(true);
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const { data } = await api.post("/settings/outlet/logo", fd);
+      setOutlet((o) => ({ ...o, logo_url: data.url }));
+      toast.success("Logo terunggah");
+    } catch (err) { toast.error(apiError(err.response?.data?.detail)); }
+    finally { setUpLogo(false); e.target.value = ""; }
+  };
+
   if (loading) return <div className="h-full grid place-items-center"><Loader2 className="animate-spin text-[#E63946]" /></div>;
 
   return (
     <div className="h-full overflow-y-auto p-8">
       <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1"><MessageCircle /> Laporan &amp; WhatsApp</h1>
       <p className="text-sm text-[#52525B] mb-5">Kirim laporan harian otomatis ke WhatsApp lewat wacloud.id, atau kirim manual dari Dashboard.</p>
+
+      {/* Outlet & Logo */}
+      <div className="bg-white rounded-2xl border p-6 max-w-2xl space-y-4 mb-6" data-testid="outlet-section">
+        <div className="flex items-center gap-2 font-extrabold"><Store size={18} className="text-[#E63946]" /> Outlet &amp; Logo (dipakai di struk)</div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Nama Outlet</label>
+            <input data-testid="outlet-name" value={outlet.name} onChange={(e) => setOutlet({ ...outlet, name: e.target.value })} className="mt-1 w-full h-11 rounded-xl border px-3" />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Telepon</label>
+            <input data-testid="outlet-phone" value={outlet.phone} onChange={(e) => setOutlet({ ...outlet, phone: e.target.value })} className="mt-1 w-full h-11 rounded-xl border px-3" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Alamat</label>
+          <input data-testid="outlet-address" value={outlet.address} onChange={(e) => setOutlet({ ...outlet, address: e.target.value })} className="mt-1 w-full h-11 rounded-xl border px-3" />
+        </div>
+        <div className="flex items-center gap-4">
+          {outlet.logo_url ? (
+            <img src={outlet.logo_url} alt="logo" className="h-16 w-16 rounded-xl border object-contain bg-white" data-testid="outlet-logo" />
+          ) : (
+            <div className="h-16 w-16 rounded-xl border bg-[#F4F5F7] grid place-items-center text-[#a1a1aa]"><Store size={24} /></div>
+          )}
+          <label className="tap h-10 px-4 rounded-lg bg-[#0A0A0A] text-white font-bold text-sm inline-flex items-center gap-2 cursor-pointer">
+            <Upload size={15} /> {upLogo ? "Mengunggah..." : "Unggah Logo"}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={uploadLogo} data-testid="outlet-logo-input" />
+          </label>
+          <button onClick={saveOutlet} className="tap h-10 px-4 rounded-lg bg-[#E63946] text-white font-bold text-sm">Simpan Outlet</button>
+        </div>
+      </div>
 
       {!configured && (
         <div data-testid="wa-not-configured" className="flex items-start gap-3 bg-[#FEF3C7] border border-[#F59E0B] text-[#92400E] rounded-2xl px-4 py-3 mb-5 max-w-2xl">

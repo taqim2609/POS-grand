@@ -7,7 +7,7 @@ import { collectVersions } from "@/lib/versions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Bot, Send, Loader2, Sparkles, User, Cpu, CheckCircle2, X, Wand2, Settings as SettingsIcon,
-  History, Plus, Trash2, MessageSquare, Lightbulb,
+  History, Plus, Trash2, MessageSquare, Lightbulb, ShoppingCart,
 } from "lucide-react";
 
 const SUGGESTIONS = [
@@ -127,6 +127,18 @@ export default function AssistantAI() {
   const [featOpen, setFeatOpen] = useState(false);
   const [featText, setFeatText] = useState("");
   const [featSending, setFeatSending] = useState(false);
+  const [recOpen, setRecOpen] = useState(false);
+  const [recData, setRecData] = useState(null);
+  const [recLoading, setRecLoading] = useState(false);
+
+  const loadRec = async () => {
+    setRecLoading(true); setRecData(null); setRecOpen(true);
+    try {
+      const { data } = await api.post("/ai/purchase-recommendation");
+      setRecData(data);
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); setRecOpen(false); }
+    finally { setRecLoading(false); }
+  };
 
   const sendFeature = async () => {
     const msg = featText.trim();
@@ -248,6 +260,10 @@ export default function AssistantAI() {
             className="tap h-9 px-3 rounded-lg border-2 border-[#4F46E5] text-[#4F46E5] font-bold text-sm flex items-center gap-1.5 hover:bg-[#4F46E5] hover:text-white transition-colors">
             <Lightbulb size={15} /> Usulkan Fitur
           </button>
+          <button data-testid="assistant-rec-btn" onClick={loadRec}
+            className="tap h-9 px-3 rounded-lg border-2 border-[#047857] text-[#047857] font-bold text-sm flex items-center gap-1.5 hover:bg-[#047857] hover:text-white transition-colors">
+            <ShoppingCart size={15} /> Rekomendasi Stok
+          </button>
           <button data-testid="assistant-history-toggle" onClick={() => { setShowHistory((v) => !v); loadSessions(); }}
             className={`tap h-9 px-3 rounded-lg border-2 font-bold text-sm flex items-center gap-1.5 transition-colors ${showHistory ? "bg-[#0A0A0A] border-[#0A0A0A] text-white" : "border-[#D4D4D8] text-[#0A0A0A] hover:bg-[#FAFAFA]"}`}>
             <History size={15} /> Riwayat
@@ -354,6 +370,38 @@ export default function AssistantAI() {
           </button>
         </div>
       </div>
+
+      {/* Dialog Rekomendasi Stok */}
+      <Dialog open={recOpen} onOpenChange={setRecOpen}>
+        <DialogContent data-testid="rec-dialog" className="max-h-[88vh] overflow-y-auto max-w-2xl">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart size={18} className="text-[#047857]" /> Rekomendasi Pembelian Stok</DialogTitle></DialogHeader>
+          {recLoading && <div className="py-10 grid place-items-center"><Loader2 size={28} className="animate-spin text-[#E63946]" /></div>}
+          {recData?.ai_summary && (
+            <div className="rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] px-4 py-3 text-sm whitespace-pre-wrap" data-testid="rec-ai">{recData.ai_summary}</div>
+          )}
+          {recData && (
+            <div className="rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-[#F4F5F7] text-[#52525B] text-xs uppercase tracking-wider">
+                  <tr><th className="text-left p-2.5">Produk</th><th className="text-right p-2.5">Stok</th><th className="text-right p-2.5">Terjual 30hr</th><th className="text-right p-2.5">Rata/hari</th><th className="text-right p-2.5">Saran Beli</th></tr>
+                </thead>
+                <tbody>
+                  {(recData.rows || []).slice(0, 40).map((r) => (
+                    <tr key={r.product_id} className="border-t">
+                      <td className="p-2.5 font-bold">{r.name}</td>
+                      <td className={`p-2.5 text-right font-num ${r.stock <= r.min_stock ? "text-[#EF4444] font-bold" : ""}`}>{r.stock}</td>
+                      <td className="p-2.5 text-right font-num">{r.sold_30d}</td>
+                      <td className="p-2.5 text-right font-num">{r.daily_avg}</td>
+                      <td className="p-2.5 text-right font-num font-bold text-[#047857]">{r.suggest}</td>
+                    </tr>
+                  ))}
+                  {!recData.rows?.length && <tr><td colSpan={5} className="p-6 text-center text-[#a1a1aa]">Tidak ada produk retail ber-stok.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Usulkan Fitur */}
       <Dialog open={featOpen} onOpenChange={setFeatOpen}>

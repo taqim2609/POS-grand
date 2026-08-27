@@ -189,7 +189,7 @@ export default function POS() {
     } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
   };
 
-  const doPay = async (pm, amountPaid) => {
+  const doPay = async (pm, amountPaid, opts = {}) => {
     if (!online) {
       if (orderType === "dine_in" || currentOrderId) {
         return toast.error("Mode offline hanya untuk take away & retail (bukan open bill dine-in)");
@@ -198,6 +198,8 @@ export default function POS() {
         order_type: orderType, table_id: null,
         items: cart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
         discount_type: discType, discount_value: Number(discVal),
+        member_id: opts.member_id || null, redeem_points: Number(opts.redeem_points || 0),
+        discount_reason: opts.discount_reason || null,
         pay_now: true, payment_method: pm.id,
       };
       addPending(payload, { order_type: orderType, total, item_count: cart.length, preview: cart.map((i) => `${i.qty}x ${i.name}`).join(", ") });
@@ -218,6 +220,8 @@ export default function POS() {
       const { data } = await api.post(`/orders/${oid}/pay`, {
         payment_method: pm.id, discount_type: discType, discount_value: Number(discVal),
         amount_paid: amountPaid,
+        member_id: opts.member_id || null, redeem_points: Number(opts.redeem_points || 0),
+        discount_reason: opts.discount_reason || null,
       });
       setPayOpen(false);
       setReceipt(data);
@@ -463,7 +467,8 @@ export default function POS() {
       </div>
 
       <TableDialog open={tableOpen} onClose={() => setTableOpen(false)} tables={tables} onSelect={selectTable} />
-      <PayDialog open={payOpen} onClose={() => setPayOpen(false)} pms={pms} total={total} onPay={doPay} />
+      <PayDialog open={payOpen} onClose={() => setPayOpen(false)} pms={pms} total={total}
+        discountType={discType} discountValue={Number(discVal)} subtotal={subtotal} onPay={doPay} />
       <ReceiptDialog order={receipt} onClose={() => setReceipt(null)} />
     </div>
   );
@@ -501,22 +506,75 @@ function TableDialog({ open, onClose, tables, onSelect }) {
   );
 }
 
-function PayDialog({ open, onClose, pms, total, onPay }) {
+function PayDialog({ open, onClose, pms, total, discountType, discountValue, subtotal, onPay }) {
   const [method, setMethod] = useState(null);
   const [paid, setPaid] = useState("");
-  useEffect(() => { if (open) { setMethod(null); setPaid(""); } }, [open]);
+  const [member, setMember] = useState(null);
+  const [phone, setPhone] = useState("");
+  const [redeemPts, setRedeemPts] = useState("");
+  const [discReason, setDiscReason] = useState("");
+  const [searching, setSearching] = useState(false);
+  useEffect(() => { if (open) { setMethod(null); setPaid(""); setMember(null); setPhone(""); setRedeemPts(""); setDiscReason(""); } }, [open]);
   const isCash = method?.type === "cash";
   const amt = isCash ? Number(paid || 0) : total;
   const change = amt - total;
   const quick = [total, 50000, 100000, 150000, 200000];
+  const redeemVal = Math.min(Number(redeemPts || 0) || 0, member?.points || 0) * 100;
+  const finalTotal = Math.max(0, total - redeemVal);
+  const needReason = (discountType === "percent" && discountValue > 15) || (discountType === "amount" && discountValue > 50000);
+
+  const findMember = async () => {
+    if (!phone.trim()) return toast.error("Masukkan nomor WA member dulu");
+    setSearching(true);
+    try {
+      const { data } = await api.get("/members/search", { params: { phone: phone.trim() } });
+      if (data.member) { setMember(data.member); toast.success(`${data.member.name} — poin ${(data.member.points || 0).toLocaleString("id-ID")}`); }
+      else { setMember(null); toast.error("Member tidak ditemukan. Daftarkan di menu Member."); }
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); } finally { setSearching(false); }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[88vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Pembayaran</DialogTitle></DialogHeader>
         <div className="text-center py-2">
           <div className="text-xs uppercase tracking-wider text-[#52525B] font-bold">Total Tagihan</div>
           <div className="font-num text-4xl font-extrabold text-[#E63946]">{rupiah(total)}</div>
         </div>
+
+        {/* Member & poin */}
+        <div className="rounded-xl border border-[#E4E4E7] p-3 space-y-2">
+          <div className="text-xs font-bold text-[#52525B] uppercase tracking-wider">Member (poin loyalitas)</div>
+          <div className="flex gap-2">
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="No. WA member"
+              className="flex-1 h-10 rounded-lg border px-3 text-sm" />
+            <button onClick={findMember} disabled={searching} className="tap h-10 px-3 rounded-lg bg-[#0A0A0A] text-white text-sm font-bold disabled:opacity-50">
+              {searching ? "..." : "Cari"}
+            </button>
+          </div>
+          {member && (
+            <div className="text-sm bg-[#F4F5F7] rounded-lg p-2 flex flex-wrap items-center gap-2">
+              <span className="font-bold">{member.name}</span>
+              <span className="text-[#047857] font-bold">Poin {(member.points || 0).toLocaleString("id-ID")}</span>
+              <input type="number" min="0" max={member.points} value={redeemPts} onChange={(e) => setRedeemPts(e.target.value)}
+                placeholder="Tukar poin (1pt=Rp100)" className="ml-auto w-40 h-9 rounded-lg border px-2 font-num text-sm" />
+            </div>
+          )}
+          {redeemVal > 0 && (
+            <div className="flex justify-between text-sm font-bold"><span>Potongan poin</span><span className="text-[#E63946] font-num">-{rupiah(redeemVal)}</span></div>
+          )}
+        </div>
+
+        {/* Alasan diskon besar */}
+        {needReason && (
+          <div>
+            <label className="text-xs uppercase tracking-wider font-bold text-[#52525B]">Alasan diskon (wajib)</label>
+            <textarea value={discReason} onChange={(e) => setDiscReason(e.target.value)} rows={2}
+              placeholder="Contoh: diskon member, promo perayaan, komplain pelanggan…"
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#E63946]" />
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-2">
           {pms.map((pm) => (
             <button
@@ -548,11 +606,15 @@ function PayDialog({ open, onClose, pms, total, onPay }) {
         <DialogFooter>
           <button
             data-testid="confirm-pay-btn"
-            disabled={!method || (isCash && amt < total)}
-            onClick={() => onPay(method, isCash ? amt : total)}
+            disabled={!method || (isCash && amt < finalTotal) || (needReason && !discReason.trim())}
+            onClick={() => onPay(method, isCash ? amt : finalTotal, {
+              member_id: member?.id || null,
+              redeem_points: Number(redeemPts || 0) || 0,
+              discount_reason: needReason ? discReason.trim() : null,
+            })}
             className="tap w-full h-13 py-3 rounded-xl bg-[#E63946] hover:bg-[#BE123C] text-white font-bold disabled:opacity-40 flex items-center justify-center gap-2"
           >
-            <CheckCircle2 size={18} /> Konfirmasi Bayar
+            <CheckCircle2 size={18} /> Konfirmasi Bayar {finalTotal !== total ? `· ${rupiah(finalTotal)}` : ""}
           </button>
         </DialogFooter>
       </DialogContent>

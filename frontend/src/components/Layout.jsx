@@ -10,6 +10,7 @@ import {
   LayoutDashboard, ShoppingCart, Package,
   Clock, FileSpreadsheet, LogOut, ShieldCheck, Menu, X, Printer,
   Wallet, Wifi, WifiOff, RefreshCw, CloudOff, Database, KeyRound, Settings, Bot, BarChart3,
+  Users, Tag,
 } from "lucide-react";
 
 function ChangePasswordDialog({ open, onClose }) {
@@ -55,6 +56,8 @@ const NAV = [
   { to: "/catalog", label: "Produk & Stok", icon: Package, roles: ["admin", "input"] },
   { to: "/laporan", label: "Laporan", icon: BarChart3, roles: ["admin", "kasir"] },
   { to: "/asisten-ai", label: "AI", icon: Bot, roles: ["admin", "kasir"] },
+  { to: "/members", label: "Member & Poin", icon: Users, roles: ["admin"] },
+  { to: "/promos", label: "Promo", icon: Tag, roles: ["admin"] },
   { to: "/orders", label: "Transaksi", icon: FileSpreadsheet, roles: ["admin"] },
   { to: "/device", label: "Perangkat", icon: Printer, roles: ["kasir", "input"] },
   { to: "/settings", label: "Pengaturan", icon: Settings, roles: ["admin"] },
@@ -174,7 +177,7 @@ export default function Layout({ children }) {
         <Menu size={20} />
       </button>
       {sidebarOpen && <div data-testid="sidebar-backdrop" onClick={() => setSidebarOpen(false)} className="lg:hidden fixed inset-0 bg-black/50 z-40" />}
-      <aside className={`fixed lg:static z-50 h-full w-[240px] shrink-0 bg-[#0A0A0A] text-white flex flex-col transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      <aside className={`fixed lg:static z-50 h-full w-[240px] shrink-0 bg-gradient-to-b from-[#450A0A] via-[#7F1D1D] to-[#B45309] text-white flex flex-col transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-lg bg-[#E63946] grid place-items-center font-heading font-extrabold">G</div>
@@ -194,8 +197,8 @@ export default function Layout({ children }) {
               data-testid={`nav-${n.to.slice(1)}`}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `tap flex items-center gap-3 px-3 h-12 rounded-lg font-medium text-sm ${
-                  isActive ? "bg-[#E63946] text-white" : "text-white/70 hover:bg-white/10"
+                `tap flex items-center gap-3 px-3 h-12 rounded-lg font-medium text-sm transition-colors ${
+                  isActive ? "bg-gradient-to-r from-[#E63946] to-[#F97316] text-white shadow-lg shadow-black/20" : "text-white/80 hover:bg-white/15 hover:text-white"
                 }`
               }
             >

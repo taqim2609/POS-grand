@@ -37,6 +37,17 @@ export default function Reports() {
   const [month, setMonth] = useState(wibToday().slice(0, 7));
   const [data, setData] = useState(null);
   const [trend, setTrend] = useState([]);
+  const [profit, setProfit] = useState(null);
+  const [pStart, setPStart] = useState(wibToday());
+  const [pEnd, setPEnd] = useState(wibToday());
+
+  const loadProfit = async () => {
+    if (!pStart || !pEnd) return toast.error("Pilih rentang tanggal");
+    try {
+      const { data } = await api.get("/reports/profit", { params: { start: pStart, end: pEnd } });
+      setProfit(data);
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+  };
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -204,13 +215,55 @@ export default function Reports() {
           </div>
         </>
       )}
+
+      {/* Laba Kotor per Produk */}
+      <div className="bg-white rounded-2xl border overflow-hidden" data-testid="profit-section">
+        <div className="flex items-center justify-between px-5 py-4 border-b flex-wrap gap-3">
+          <h3 className="font-extrabold flex items-center gap-2"><TrendingUp size={18} className="text-[#E63946]" /> Laba Kotor per Produk</h3>
+          <div className="flex items-center gap-2">
+            <input data-testid="profit-start" type="date" value={pStart} onChange={(e) => setPStart(e.target.value)} className="h-9 rounded-lg border px-2 font-num" />
+            <span className="text-[#a1a1aa]">–</span>
+            <input data-testid="profit-end" type="date" value={pEnd} onChange={(e) => setPEnd(e.target.value)} className="h-9 rounded-lg border px-2 font-num" />
+            <button data-testid="profit-load" onClick={loadProfit} className="tap h-9 px-3 rounded-lg bg-[#0A0A0A] text-white font-bold text-xs">Muat</button>
+          </div>
+        </div>
+        {profit ? (
+          <div>
+            <div className="flex flex-wrap gap-3 px-5 py-3 bg-[#FAFAFA] border-b text-sm">
+              <span className="font-bold">Total Pendapatan: <span className="text-[#E63946] font-num">{rupiah(profit.total_revenue)}</span></span>
+              <span className="font-bold">Modal/HPP: <span className="text-[#a1a1aa] font-num">{rupiah(profit.total_cost)}</span></span>
+              <span className="font-bold">Laba Kotor: <span className="text-[#047857] font-num">{rupiah(profit.total_profit)}</span></span>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-[#F4F5F7] text-[#52525B] text-xs uppercase tracking-wider">
+                <tr><th className="text-left p-3">Produk</th><th className="text-right p-3">Qty</th><th className="text-right p-3">Pendapatan</th><th className="text-right p-3">Modal</th><th className="text-right p-3">Laba</th><th className="text-right p-3">Margin</th></tr>
+              </thead>
+              <tbody>
+                {profit.rows.map((r) => (
+                  <tr key={r.product_id} className="border-t">
+                    <td className="p-3 font-bold">{r.name}</td>
+                    <td className="p-3 text-right font-num">{r.qty}</td>
+                    <td className="p-3 text-right font-num">{rupiah(r.revenue)}</td>
+                    <td className="p-3 text-right font-num text-[#52525B]">{rupiah(r.cost)}</td>
+                    <td className={`p-3 text-right font-num font-bold ${r.profit >= 0 ? "text-[#047857]" : "text-[#EF4444]"}`}>{rupiah(r.profit)}</td>
+                    <td className="p-3 text-right font-num text-[#52525B]">{r.margin}%</td>
+                  </tr>
+                ))}
+                {profit.rows.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-[#a1a1aa]">Tidak ada penjualan pada rentang ini.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="p-5 text-sm text-[#a1a1aa]">Pilih rentang tanggal lalu tekan <b>Muat</b> untuk melihat laba kotor per produk.</p>
+        )}
+      </div>
     </div>
   );
 }
 
 const Stat = ({ label, value, accent }) => (
-  <div className={`rounded-2xl border p-4 ${accent ? "bg-[#E63946] text-white border-[#E63946]" : "bg-white"}`}>
-    <div className={`text-xs uppercase tracking-wider font-bold ${accent ? "text-white/70" : "text-[#52525B]"}`}>{label}</div>
+  <div className={`rounded-2xl p-4 border ${accent ? "bg-gradient-to-br from-[#E63946] to-[#F97316] text-white border-transparent shadow-lg shadow-[#E63946]/20" : "bg-gradient-to-br from-white to-[#F5F3FF] border-[#E4E4E7]"}`}>
+    <div className={`text-xs uppercase tracking-wider font-bold ${accent ? "text-white/80" : "text-[#52525B]"}`}>{label}</div>
     <div className="text-2xl font-extrabold font-num mt-1">{value}</div>
   </div>
 );
