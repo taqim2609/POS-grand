@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError, getServerUrl, setServerUrl, discoverServer } from "@/lib/api";
 import { toast } from "sonner";
-import { Loader2, Lock, Mail, Server, Radar, Download, Globe, Smartphone } from "lucide-react";
+import { Loader2, Lock, Mail, Server, Radar, Download, Globe, Smartphone, Bug } from "lucide-react";
 import { collectVersions } from "@/lib/versions";
 
 const TAILSCALE_FUNNEL_URL = "https://grandpos.tailf3a839.ts.net";
@@ -24,12 +24,56 @@ export default function Login() {
   const [scanning, setScanning] = useState(false);
   const [testing, setTesting] = useState(false);
   const [version, setVersion] = useState(null);
+  const [loginDiagSending, setLoginDiagSending] = useState(false);
 
   useEffect(() => {
     let stop = false;
     collectVersions().then((v) => { if (!stop) setVersion(v); }).catch(() => {});
     return () => { stop = true; };
   }, []);
+
+  // Kirim laporan diagnostik TANPA login — langsung ke vibecoder.co.id (penerima rpt.php).
+  const sendLoginDiag = async () => {
+    setLoginDiagSending(true);
+    const t = toast.loading("Mengirim laporan diagnostik...");
+    try {
+      const v = await collectVersions();
+      const parts = [
+        "=== LAPORAN DIAGNOSTIK (dari layar login) ===",
+        `Waktu: ${new Date().toLocaleString("id-ID")}`,
+        `Bundle frontend: ${v.bundle}`,
+        `Platform: ${v.native ? `APK (Capacitor) v${v.apk}` : "Web"}`,
+        `URL server: ${v.serverUrl}`,
+        `OTA server: ${v.otaServer || "-"} | OTA lokal: ${v.otaLocal || "-"} | OTA terpasang: ${v.otaInstalled || "-"}`,
+        `User-Agent: ${navigator.userAgent || "-"}`,
+        `Layar: ${window.screen?.width || "-"}x${window.screen?.height || "-"} (dpr ${window.devicePixelRatio || 1})`,
+        `Online: ${navigator.onLine ? "ya" : "tidak"}`,
+      ];
+      // Probe koneksi ke server (biar laporan mencerminkan kondisi nyata)
+      const base = v.serverUrl;
+      if (base && base.startsWith("http")) {
+        try {
+          const r = await fetch(`${base}/api/health`, { cache: "no-store" });
+          const j = await r.json().catch(() => ({}));
+          parts.push(`Server /api/health: HTTP ${r.status} -> ${JSON.stringify(j)}`);
+        } catch (e) {
+          parts.push(`Server /api/health: GAGAL -> ${(e && e.message) || e}`);
+        }
+      }
+      const report = parts.join("\n");
+      const res = await fetch("https://taqim258.vibecoder.co.id/pos-grand-update/rpt.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Gak-Token": "gak_rpt_7f3c9e1b" },
+        body: JSON.stringify({ ts: new Date().toISOString(), report }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success("Laporan terkirim — sebutkan di chat bahwa Anda mengirimnya", { id: t, duration: 8000 });
+    } catch (e) {
+      toast.error(`Gagal mengirim: ${(e && e.message) || e}. Butuh internet server untuk mengirim.`, { id: t, duration: 9000 });
+    } finally {
+      setLoginDiagSending(false);
+    }
+  };
 
   const testConn = async () => {
     const base = (srv || getServerUrl()).replace(/\/+$/, "");
@@ -227,7 +271,7 @@ export default function Login() {
           {/* Baris 2: Unduh Aplikasi | Koneksi via Tailscale */}
           <div className="grid grid-cols-2 gap-3 mt-3">
             <a
-              href="https://taqim258.vibecoder.co.id/pos-grand-update/apk/Grand-Aceh-Kuliner-POS-v1.6.apk"
+              href="https://taqim258.vibecoder.co.id/pos-grand-update/apk/Grand-Aceh-Kuliner-POS-v1.7.apk"
               target="_blank" rel="noopener noreferrer" data-testid="download-app-btn"
               className="tap h-11 rounded-xl border-2 border-[#0A0A0A] text-[#0A0A0A] font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 text-center leading-tight hover:bg-[#0A0A0A] hover:text-white transition-colors"
             >
@@ -267,7 +311,7 @@ export default function Login() {
           )}
         </form>
 
-        {/* Footer versi — tampil di layar login (bertumpuk: APK di atas, OTA di bawah) */}
+        {/* Footer versi + Diagnostik — tampil di layar login (bertumpuk) */}
         <div className="mt-4 text-center text-[11px] text-[#8b87a8] font-mono" data-testid="login-version">
           <div className="flex items-center justify-center gap-1.5">
             <Smartphone size={11} />
@@ -279,6 +323,17 @@ export default function Login() {
           {version?.native && version.otaServer && version.otaInstalled && version.otaServer > version.otaInstalled && (
             <div className="mt-1 text-[10px] text-[#B45309]">Update OTA tersedia ({version.otaServer}) — buka aplikasi untuk memasang.</div>
           )}
+          {/* Diagnostik tanpa login */}
+          <button
+            type="button"
+            data-testid="login-diag-btn"
+            onClick={sendLoginDiag}
+            disabled={loginDiagSending}
+            className="tap mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#4F46E5] text-[#4F46E5] font-bold text-xs px-3 py-2 hover:bg-[#EEF2FF] disabled:opacity-50"
+          >
+            {loginDiagSending ? <Loader2 size={13} className="animate-spin" /> : <Bug size={13} />}
+            {loginDiagSending ? "Mengirim..." : "Kirim Laporan Diagnostik"}
+          </button>
         </div>
       </div>
     </div>
