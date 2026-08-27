@@ -15,9 +15,13 @@ async function localBundleVersion() {
   return "";
 }
 
-// OTA update via server Pi (LAN). Hanya berjalan di APK (native), diabaikan di web/PWA.
-// Cek /ota/version.json di server; jika versi beda, unduh bundle dari Pi & pasang live.
-export async function checkOtaUpdate() {
+/**
+ * OTA update via server Pi (LAN). Hanya berjalan di APK (native), diabaikan di web/PWA.
+ * Cek /ota/version.json di server; jika versi lebih baru, unduh bundle dari Pi & pasang live.
+ * Mengembalikan hasil {status, reason, serverVersion, installedVersion} untuk ditampilkan di UI.
+ * status: "updated" | "up-to-date" | "error" | "not-native" | "no-server" | "no-update"
+ */
+export async function checkOtaUpdate({ silent = false } = {}) {
   // Tampilkan notifikasi sekali setelah aplikasi reload akibat OTA berhasil.
   try {
     if (localStorage.getItem("gak_ota_just_updated")) {
@@ -29,26 +33,27 @@ export async function checkOtaUpdate() {
   let Capacitor, CapacitorUpdater;
   try {
     ({ Capacitor } = await import("@capacitor/core"));
-    if (!Capacitor?.isNativePlatform?.()) return;
+    if (!Capacitor?.isNativePlatform?.()) return { status: "not-native" };
     ({ CapacitorUpdater } = await import("@capgo/capacitor-updater"));
     await CapacitorUpdater.notifyAppReady();
   } catch {
-    return; // bukan native / plugin tak tersedia
+    return { status: "not-native" }; // bukan native / plugin tak tersedia
   }
   try {
     const base = getServerUrl();
-    if (!base) return;
+    if (!base) return { status: "no-server" };
     const res = await fetch(`${base}/ota/version.json`, { cache: "no-store" });
-    if (!res.ok) return;
+    if (!res.ok) return { status: "error", reason: `Server balas HTTP ${res.status}` };
     const { version, url } = await res.json();
-    if (!version) return;
+    if (!version) return { status: "error", reason: "version.json server kosong" };
     let current = localStorage.getItem("gak_ota_version") || "";
     if (!current) current = await localBundleVersion(); // seed dari versi bundle bawaan APK
     // Hanya update bila server BENAR-BENAR lebih baru. Mencegah APK baru menarik
     // bundle LAMA dari Pi (yang belum di-update) yang menyebabkan layar blank.
     if (current && version <= current) {
       if (!localStorage.getItem("gak_ota_version")) localStorage.setItem("gak_ota_version", current);
-      return;
+      if (!silent) toast.info(`Sudah versi terbaru (OTA ${current})`, { duration: 5000 });
+      return { status: "up-to-date", serverVersion: version, installedVersion: current };
     }
     const full = url?.startsWith("http") ? url : `${base}${url || "/ota/bundle.zip"}`;
     emitOta(true, 0); // tampilkan indikator + progres
@@ -62,9 +67,12 @@ export async function checkOtaUpdate() {
     localStorage.setItem("gak_ota_version", version);
     // Tandai agar setelah reload muncul toast "Tampilan diperbarui".
     try { localStorage.setItem("gak_ota_just_updated", version); } catch (e) {}
+    if (!silent) toast.success(`Update OTA ${version} diunduh — menerapkan...`, { duration: 5000 });
     await CapacitorUpdater.set(bundle); // beralih ke bundle baru & reload
-  } catch {
+    return { status: "updated", serverVersion: version, installedVersion: current };
+  } catch (e) {
     emitOta(false); // sembunyikan indikator bila gagal/offline
-    // gagal (server tak ada/offline) — biarkan pakai bundle sekarang
+    if (!silent) toast.error(`Update OTA gagal: ${(e && e.message) || e}`, { duration: 6000 });
+    return { status: "error", reason: (e && e.message) || String(e) };
   }
 }
