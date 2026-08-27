@@ -37,10 +37,17 @@ export default function Diagnostik() {
     setSending(true);
     const t = toast.loading("Mengirim laporan ke vibecoder.co.id...");
     try {
-      await api.post("/diag/send", { report });
+      // Kirim LANGSUNG ke vibecoder.co.id (internet biasa) — TIDAK perlu lewat server Pi,
+      // jadi tetap bisa melapor saat koneksi ke Pi sedang bermasalah.
+      const res = await fetch("https://taqim258.vibecoder.co.id/pos-grand-update/rpt.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Gak-Token": "gak_rpt_7f3c9e1b" },
+        body: JSON.stringify({ ts: new Date().toISOString(), report }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success("Laporan terkirim ke VibeCoder — sebutkan di chat bahwa Anda sudah mengirimnya", { id: t, duration: 8000 });
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Gagal mengirim (periksa internet server)", { id: t, duration: 10000 });
+      toast.error(`Gagal mengirim: ${(e && e.message) || e} (butuh internet untuk mengirim)`, { id: t, duration: 10000 });
     } finally {
       setSending(false);
     }
@@ -66,7 +73,7 @@ export default function Diagnostik() {
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Perbarui Info
             </button>
           </div>
-          <p className="text-xs text-[#52525B] mt-2">Kirim langsung mengunggah laporan ini ke vibecoder.co.id (butuh internet server). Sebutkan di chat bahwa Anda mengirimnya.</p>
+          <p className="text-xs text-[#52525B] mt-2">Kirim langsung mengunggah laporan ini ke vibecoder.co.id lewat internet — tidak perlu koneksi ke server Pi. Sebutkan di chat bahwa Anda mengirimnya.</p>
         </div>
         <pre data-testid="diag-report" className="bg-[#0A0A0A] text-[#E4E4E7] text-xs rounded-xl p-4 overflow-auto font-mono whitespace-pre-wrap max-h-[62vh]">
           {report || "Mengumpulkan informasi..."}
