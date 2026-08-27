@@ -4,7 +4,7 @@
    down. API calls are ALWAYS network-only (never intercepted/cached) so that
    downloads (project zip, backups) and live data are never buffered or stale.
    The offline sales queue is handled by the app's own localStorage. */
-const CACHE = "gak-pos-shell-v2";
+const CACHE = "gak-pos-shell-v3";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(

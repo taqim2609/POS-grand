@@ -14,6 +14,28 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
     <title>Grand Aceh Kuliner POS</title>
     <!-- Polyfill WebView lama (Android 7 / API 24): WAJIB di-load sebelum bundle utama -->
+    <script>
+      /* Overlay error: kalau ada error saat app dimuat (mis. WebView terlalu tua),
+         tampilkan pesan di layar — jangan blank diam-diam. ES5 murni. */
+      (function () {
+        function show(msg, extra) {
+          try {
+            var d = document.createElement("div");
+            d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#FEF2F2;color:#B91C1C;font:14px/1.5 system-ui,sans-serif;padding:24px;overflow:auto;white-space:pre-wrap";
+            d.textContent = "Terjadi kesalahan saat memuat aplikasi.\n" + msg + (extra ? "\n\n" + extra : "");
+            document.body.appendChild(d);
+          } catch (e) {}
+        }
+        window.addEventListener("error", function (e) {
+          show((e && e.message) || "Unknown error", (e && (e.filename + ":" + e.lineno)) || "");
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e && e.reason; var m = "";
+          try { m = (r && r.message) || String(r); } catch (x) {}
+          show("Promise rejected: " + m, "");
+        });
+      })();
+    </script>
     <script src="%PUBLIC_URL%/polyfills.js"></script>
   </head>
   <body>
