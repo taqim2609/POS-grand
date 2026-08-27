@@ -172,6 +172,15 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public boolean selfTest() {
+            try {
+                if (printerService == null) return false;
+                printerService.printerSelfChecking(resultCallback);
+                return true;
+            } catch (Exception e) { lastBindError = "selfTest: " + e; return false; }
+        }
+
+        @JavascriptInterface
         public boolean printQRCode(String data, int modulesize, int errorlevel) {
             try {
                 if (printerService == null) return false;

@@ -42,6 +42,27 @@ export default function DeviceSettings() {
     toast.message("Mengirim struk uji ke printer...");
   };
   const [btBusy, setBtBusy] = useState(false);
+  const [selftestBusy, setSelftestBusy] = useState(false);
+  const doSelfTest = () => {
+    try {
+      const sp = window.SunmiInnerPrinter || window.sunmiInnerPrinter || window.sunmi || window.SunmiPrinterBridge;
+      if (!sp || typeof sp.selfTest !== "function") {
+        toast.error("Tes mandiri hanya tersedia di APK dengan printer Sunmi");
+        return;
+      }
+      if (typeof sp.isConnected === "function" && !sp.isConnected()) {
+        toast.error("Printer Sunmi belum terhubung — cek status");
+        return;
+      }
+      setSelftestBusy(true);
+      const ok = sp.selfTest();
+      toast[ok ? "success" : "error"](ok ? "Tes mandiri dikirim — printer akan mencetak halaman uji" : "Gagal mengirim tes mandiri (cek status printer)");
+      setTimeout(() => setSelftestBusy(false), 1500);
+    } catch (e) {
+      toast.error("Gagal tes mandiri: " + (e.message || e));
+      setSelftestBusy(false);
+    }
+  };
   const pairBt = async () => {
     setBtBusy(true);
     const t = toast.loading("Memilih printer Bluetooth...");
@@ -175,6 +196,7 @@ export default function DeviceSettings() {
           <div className="flex gap-2 pt-1">
             <button data-testid="dev-save" onClick={save} className="tap h-11 px-5 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center gap-2"><Save size={16} /> Simpan</button>
             <button data-testid="dev-testprint" onClick={testPrint} className="tap h-11 px-5 rounded-xl bg-[#F4F5F7] border font-bold flex items-center gap-2"><Printer size={16} /> Cetak Struk Uji</button>
+            <button data-testid="dev-selftest" onClick={doSelfTest} disabled={selftestBusy} className="tap h-11 px-5 rounded-xl bg-[#F4F5F7] border font-bold flex items-center gap-2 disabled:opacity-50"><Loader2 size={16} className={selftestBusy ? "animate-spin" : ""} /> Tes Mandiri</button>
           </div>
         </Card>
 
