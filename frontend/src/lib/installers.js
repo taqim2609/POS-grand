@@ -30,7 +30,7 @@ rm -f /tmp/pos-grand.tar.gz
 
 # 3. Jalankan installer
 cd "$APP_DIR"
-chmod +x install-pi.sh update-pi.sh update-vibecoder-pi.sh restart-pi.sh backup-pi.sh restore-pi.sh setup-autobackup-pi.sh 2>/dev/null || true
+chmod +x install-pi.sh update-vibecoder-pi.sh restart-pi.sh backup-pi.sh restore-pi.sh setup-autobackup-pi.sh 2>/dev/null || true
 echo "Menjalankan installer..."
 sudo ./install-pi.sh
 `;
