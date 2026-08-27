@@ -64,9 +64,15 @@ export async function buildDiagReport() {
   out.push(`Waktu: ${ts.toLocaleString("id-ID")} (${ts.toISOString()})`);
   out.push(`Bundle frontend: ${getBundleVersion()}`);
   try {
-    const j = await (await fetch("ota/version.json", { cache: "no-store" })).json();
+    const base = getServerUrl();
+    const url = base ? `${base}/ota/version.json` : "ota/version.json";
+    const j = await (await fetch(url, { cache: "no-store" })).json();
     out.push(`OTA version (server): ${j.version || "-"}`);
   } catch (_) { out.push("OTA version (server): (tidak terbaca)"); }
+  try {
+    const j = await (await fetch("ota/version.json", { cache: "no-store" })).json();
+    out.push(`OTA bawaan APK (lokal): ${j.version || "-"}`);
+  } catch (_) { out.push("OTA bawaan APK (lokal): (tidak terbaca)"); }
   try { out.push(`OTA terpasang (APK): ${localStorage.getItem("gak_ota_version") || "-"}`); } catch (_) {}
   out.push(`URL server: ${getServerUrl() || "(kosong - pakai origin web)"}`);
 

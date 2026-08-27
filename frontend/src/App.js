@@ -38,7 +38,15 @@ const wrap = (el, roles) => (
 );
 
 function App() {
-  useEffect(() => { checkOtaUpdate(); installDiag(); }, []);
+  useEffect(() => {
+    checkOtaUpdate();
+    installDiag();
+    // Cek ulang OTA setiap kali app kembali aktif (Android: kembali dari background),
+    // supaya update terpasang tanpa perlu restart penuh.
+    const onVis = () => { if (document.visibilityState === "visible") checkOtaUpdate(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   return (
     <div className="App">
       <AuthProvider>
