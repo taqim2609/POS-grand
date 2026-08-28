@@ -150,7 +150,7 @@ export default function Shift() {
               <span className="font-extrabold text-base">Uang Bersih (setelah bagi hasil vendor)</span>
               <span className="font-num font-extrabold text-lg text-[#047857]">{rupiah(report.net_cash)}</span>
             </div>
-            <div className="text-[11px] text-[#52525B] mt-1">Perkiraan kas {rupiah(report.expected_cash)} − diberikan ke vendor {rupiah(report.vendor_total_paid)}</div>
+            <div className="text-[11px] text-[#52525B] mt-1">Perkiraan kas {rupiah(report.expected_cash)} − diberikan ke vendor {rupiah(report.vendor_total_paid)} − uang keluar kas {rupiah(report.cash_out)}</div>
           </div>
         </div>
       )}
