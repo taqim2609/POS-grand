@@ -128,21 +128,25 @@ export default function Shift() {
           <Row l="Uang Keluar (pengambilan)" v={rupiah(report.cash_out)} />
           <Row l="Selisih Kas" v={rupiah(report.cash_net)} />
           <div className="pt-2"><div className="text-xs font-extrabold text-[#52525B] uppercase tracking-wider mb-1">Perkiraan Kas</div></div>
-          <Row l="Perkiraan Kas" v={rupiah(report.expected_cash)} />
+          <Row l="Perkiraan Kas (awal + tunai − keluar)" v={rupiah(report.expected_cash)} />
           {(report.vendor_share || []).length > 0 && (
             <>
               <div className="pt-2"><div className="text-xs font-extrabold text-[#52525B] uppercase tracking-wider mb-1">Bagi Hasil Vendor</div></div>
               {(report.vendor_share || []).map((v) => (
                 <div key={v.vendor_id} className="rounded-lg bg-[#FAFAFA] border border-[#E4E4E7] px-3 py-2 my-1.5">
                   <div className="font-bold text-sm">{v.vendor_name}</div>
-                  <Row l="Bagian vendor (seharusnya)" v={rupiah(v.share)} />
-                  <Row l="Diberikan" v={rupiah(v.paid)} />
+                  <Row l="Omzet vendor" v={rupiah(v.gross)} />
+                  <Row l="Bagi hasil (expected)" v={rupiah(v.share)} />
+                  <Row l="Bagi hasil (real, diberikan)" v={rupiah(v.paid)} />
                   <Row l="Selisih" v={`${v.difference >= 0 ? "" : "-"}${rupiah(Math.abs(v.difference))}`} warn={v.difference !== 0} />
+                  <Row l="Bagian outlet (omzet − real)" v={rupiah(v.outlet_share ?? 0)} />
                 </div>
               ))}
-              <Row l="Total Bagian Vendor" v={rupiah(report.vendor_total_share)} />
-              <Row l="Total Diberikan" v={rupiah(report.vendor_total_paid)} />
+              <Row l="Total Omzet Vendor" v={rupiah((report.vendor_share || []).reduce((a, v) => a + (v.gross || 0), 0))} />
+              <Row l="Total Bagi Hasil (expected)" v={rupiah(report.vendor_total_share)} />
+              <Row l="Total Diberikan (real)" v={rupiah(report.vendor_total_paid)} />
               <Row l="Total Selisih" v={`${report.vendor_total_difference >= 0 ? "" : "-"}${rupiah(Math.abs(report.vendor_total_difference))}`} warn={report.vendor_total_difference !== 0} />
+              <Row l="Total Bagian Outlet" v={rupiah(report.vendor_total_outlet ?? 0)} />
             </>
           )}
           <div className="pt-3 mt-1 border-t-2 border-dashed">
@@ -150,7 +154,7 @@ export default function Shift() {
               <span className="font-extrabold text-base">Uang Bersih (setelah bagi hasil vendor)</span>
               <span className="font-num font-extrabold text-lg text-[#047857]">{rupiah(report.net_cash)}</span>
             </div>
-            <div className="text-[11px] text-[#52525B] mt-1">Perkiraan kas {rupiah(report.expected_cash)} − diberikan ke vendor {rupiah(report.vendor_total_paid)} − uang keluar kas {rupiah(report.cash_out)}</div>
+            <div className="text-[11px] text-[#52525B] mt-1">Perkiraan kas {rupiah(report.expected_cash)} − diberikan ke vendor {rupiah(report.vendor_total_paid)}</div>
           </div>
         </div>
       )}

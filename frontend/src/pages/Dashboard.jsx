@@ -254,9 +254,9 @@ export default function Dashboard() {
         </div>
         <div className="rounded-2xl border-2 border-[#0A0A0A] bg-[#0A0A0A] text-white p-5" data-testid="stat-cash-net">
           <Wallet size={20} className="text-white/80" />
-          <div className="text-xs font-bold uppercase tracking-wider mt-3 text-white/70">Kas Bersih Harian</div>
+          <div className="text-xs font-bold uppercase tracking-wider mt-3 text-white/70">Kas Bersih Harian (laci)</div>
           <div className="font-num text-2xl font-extrabold mt-1">{rupiah(data.cash_net || 0)}</div>
-          <div className="text-[11px] text-white/50 mt-1">Masuk {rupiah(data.cash_in || 0)} · Keluar {rupiah(data.cash_out || 0)}</div>
+          <div className="text-[11px] text-white/50 mt-1">Tunai {rupiah(data.cash_sales || 0)} · Masuk {rupiah(data.cash_in || 0)} · Keluar {rupiah(data.cash_out || 0)}</div>
         </div>
         <div className="rounded-2xl border-2 border-[#0D9488] bg-[#F0FDFA] p-5" data-testid="stat-vendor-share">
           <Store size={20} className="text-[#0F766E]" />

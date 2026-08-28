@@ -883,12 +883,17 @@ async def close_shift(body: ShiftCloseIn, user: dict = Depends(get_current_user)
         total_share += v["share"]
         total_paid += v["paid"]
     total_diff = round(total_share - total_paid, 2)
+    # Bagian outlet per vendor = omzet - bagi hasil REAL (yang diberikan)
+    for v in vendor_rows:
+        v["outlet_share"] = round(v["gross"] - v["paid"], 2)
+    total_outlet = round(sum(v.get("outlet_share", 0) for v in vendor_rows), 2)
     # Uang bersih = perkiraan kas − dibayar ke vendor − uang KELUAR kas manual (pengambilan/setoran ke pemilik)
-    net_cash = round(report["expected_cash"] - total_paid - report.get("cash_out", 0.0), 2)
+    net_cash = round(report["expected_cash"] - total_paid, 2)
     report["vendor_share"] = vendor_rows
     report["vendor_total_share"] = round(total_share, 2)
     report["vendor_total_paid"] = round(total_paid, 2)
     report["vendor_total_difference"] = total_diff
+    report["vendor_total_outlet"] = total_outlet
     report["net_cash"] = net_cash
     await db.shifts.update_one({"id": shift["id"]}, {"$set": {
         "status": "closed", "closed_at": now_utc().isoformat(),
@@ -932,7 +937,9 @@ async def _shift_report(shift):
     cash_out = sum(m["amount"] for m in moves if m["type"] == "out")
     vendor_rows = await _vendor_share_from_orders(orders)
     return {"order_count": len(orders), "total_sales": round(total, 2), "by_type": by_type,
-            "by_payment": by_pm, "expected_cash": round(shift["opening_cash"] + cash, 2),
+            "by_payment": by_pm,
+            # Perkiraan kas = kas awal + penjualan tunai − uang KELUAR kas manual (kas keluar mengurangi kas awal)
+            "expected_cash": round(shift["opening_cash"] + cash - cash_out, 2),
             "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2),
             "cash_net": round(cash_in - cash_out, 2),
             "vendor_share": vendor_rows,
@@ -1024,13 +1031,17 @@ async def report_summary(date_str: Optional[str] = Query(None, alias="date"),
     cash_moves = await db.cash_movements.find({"created_at": {"$gte": start, "$lt": end}}, {"_id": 0}).to_list(2000)
     cash_in = sum(m["amount"] for m in cash_moves if m["type"] == "in")
     cash_out = sum(m["amount"] for m in cash_moves if m["type"] == "out")
+    cash_sales = sum(o["total"] for o in orders if o.get("payment_method_type") == "cash")
     vendor_summary = await _vendor_report(date_str=d)
     return {"date": d, "vendor_summary": vendor_summary, "total_sales": round(total, 2), "order_count": len(orders),
             "total_discount": round(total_discount, 2), "by_type": by_type, "by_payment": by_pm,
             "fnb_total": round(fnb_total, 2), "retail_total": round(by_type["retail"]["total"], 2),
             "top_products": top, "low_stock": low_stock, "low_stock_threshold": LOW_STOCK_THRESHOLD,
             "total_cost": round(total_cost, 2), "gross_profit": round(total - total_cost, 2),
-            "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2), "cash_net": round(cash_in - cash_out, 2),
+            "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2),
+            "cash_sales": round(cash_sales, 2),
+            # Kas bersih laci harian = penjualan TUNAI + setoran masuk − pengambilan keluar
+            "cash_net": round(cash_sales + cash_in - cash_out, 2),
             "category_report": category_report}
 
 @api.get("/reports/range")
