@@ -18,6 +18,9 @@ const FEATURE_META = {
 export default function SettingsAI() {
   const [features, setFeatures] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [gemKeys, setGemKeys] = useState([]);
+  const [gemKeysText, setGemKeysText] = useState("");
+  const [savingKeys, setSavingKeys] = useState(false);
 
   const load = () =>
     api.get("/settings/ai")
@@ -25,8 +28,28 @@ export default function SettingsAI() {
       .catch((e) => toast.error(apiError(e.response?.data?.detail)))
       .finally(() => setLoading(false));
 
+  const loadGemKeys = () =>
+    api.get("/settings/ai/gemini-keys").then((r) => {
+      setGemKeys(r.data.keys || []);
+      // isi textarea hanya dari key yang tersimpan DB (masked tak bisa dipakai ulang — tampilkan jumlah)
+      setGemKeysText("");
+    }).catch(() => {});
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once on mount
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadGemKeys(); }, []);
+
+  const saveGemKeys = async () => {
+    const lines = gemKeysText.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (!lines.length) return toast.error("Isi minimal 1 API key Gemini (satu per baris)");
+    setSavingKeys(true);
+    try {
+      await api.put("/settings/ai/gemini-keys", { keys: lines });
+      toast.success(`${lines.length} API key Gemini disimpan — rotasi otomatis aktif`);
+      setGemKeysText("");
+      loadGemKeys();
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+    finally { setSavingKeys(false); }
+  };
 
   if (loading || !features) return <div className="h-full grid place-items-center"><Loader2 className="animate-spin text-[#E63946]" /></div>;
 
@@ -46,6 +69,30 @@ export default function SettingsAI() {
       </div>
 
       <div className="grid gap-5 max-w-3xl">
+        {/* Kartu rotasi API key Gemini */}
+        <div className="bg-white rounded-2xl border p-6" data-testid="gemini-keys-card">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h3 className="font-extrabold text-lg flex items-center gap-2"><KeyRound size={18} className="text-[#2563EB]" /> Gemini API Keys (Rotasi Otomatis)</h3>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#EFF6FF] text-[#1D4ED8]">{gemKeys.length} key tersimpan</span>
+          </div>
+          <p className="text-xs text-[#52525B] mb-3">
+            Simpan <b>beberapa API key Gemini</b> (satu per baris). Bila satu key kena limit harian (429), aplikasi
+            <b> otomatis beralih ke key berikutnya</b>. Buat key di{" "}
+            <a href="https://aistudio.google.com/docs/api-key" target="_blank" rel="noopener noreferrer" className="text-[#2563EB] font-bold underline">aistudio.google.com/docs/api-key</a>.
+          </p>
+          {gemKeys.length > 0 && (
+            <div className="mb-2 text-xs text-[#047857] font-mono bg-[#ECFDF5] border border-[#A7F3D0] rounded-lg px-3 py-2">
+              {gemKeys.map((k, i) => <div key={i}>#{i + 1}: {k}</div>)}
+            </div>
+          )}
+          <textarea data-testid="gemini-keys-input" value={gemKeysText} onChange={(e) => setGemKeysText(e.target.value)} rows={4}
+            placeholder={"AIzaSy...\nAIzaSy...\n(dst, satu per baris)"}
+            className="w-full rounded-xl border px-3 py-2.5 text-sm font-mono outline-none focus:border-[#2563EB] resize-y" />
+          <button data-testid="save-gemini-keys" onClick={saveGemKeys} disabled={savingKeys || !gemKeysText.trim()}
+            className="tap mt-2 h-11 px-5 rounded-xl bg-[#2563EB] text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50">
+            {savingKeys ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Simpan Key &amp; Aktifkan Rotasi
+          </button>
+        </div>
         {Object.keys(FEATURE_META).map((key) => (
           <FeatureCard key={key} featKey={key} data={features[key]} onSaved={load} />
         ))}

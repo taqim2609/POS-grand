@@ -37,6 +37,32 @@ OPENAI_COMPAT_MODEL = os.environ.get('OPENAI_COMPAT_MODEL') or 'gpt-4o-mini'
 CHENZK_BASE_URL = "https://chenzk.top/v1"  # default base url provider "chenzk" (ezkielyna.store)
 GEMINI_REST_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
+# ---- Rotasi otomatis API key Gemini ----
+# Daftar key dari DB (settings.ai.gemini_keys) + env GEMINI_API_KEY sebagai cadangan.
+# Bila satu key kena limit harian (429/403/quota), otomatis coba key berikutnya.
+_gemini_cursor = {"i": 0}
+
+async def _gemini_keys(extra=None):
+    doc = await db.settings.find_one({"_id": "ai"}) or {}
+    keys = []
+    seen = set()
+    if extra:
+        e = (extra or "").strip()
+        if e:
+            keys.append(e); seen.add(e)
+    for k in (doc.get("gemini_keys") or []):
+        k = (k or "").strip()
+        if k and k not in seen:
+            keys.append(k); seen.add(k)
+    if GEMINI_API_KEY and GEMINI_API_KEY not in seen:
+        keys.append(GEMINI_API_KEY)
+    return keys
+
+def _rotate_quota(status, text):
+    t = (text or "").lower()
+    return status in (429, 403) or (status == 400 and any(
+        w in t for w in ("quota", "limit", "api key", "permission", "invalid key", "resource exhausted")))
+
 app = FastAPI(title="Grand Aceh Kuliner POS")
 api = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO)
@@ -1394,8 +1420,11 @@ async def _ai_chat(messages, system="", feature="description", temperature=0.5, 
     """Unified text chat across providers. `messages`=[{role:'user'|'assistant',content:str}].
     Routes to Gemini REST (X-goog-api-key) or chenzk (OpenAI-compatible), else Emergent fallback."""
     cfg = await _ai_provider_cfg(feature)
-    if cfg["provider"] == "gemini" and cfg.get("api_key"):
+    if cfg["provider"] == "gemini":
         import httpx
+        keys = await _gemini_keys(cfg.get("api_key"))
+        if not keys:
+            raise HTTPException(400, "Gemini API key belum diatur. Tambahkan di Pengaturan AI.")
         model = cfg["model"] or GEMINI_TEXT_MODEL
         contents = []
         for m in messages:
@@ -1406,19 +1435,31 @@ async def _ai_chat(messages, system="", feature="description", temperature=0.5, 
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
         url = f"{GEMINI_REST_URL}/{model}:generateContent"
-        try:
-            async with httpx.AsyncClient(timeout=60) as c:
-                r = await c.post(url, headers={"Content-Type": "application/json", "X-goog-api-key": cfg["api_key"]}, json=payload)
-        except Exception as e:
-            raise HTTPException(400, f"Gagal menghubungi Gemini: {e}")
-        if r.status_code != 200:
-            raise HTTPException(400, f"Gemini menolak permintaan (HTTP {r.status_code}): {r.text[:200]}")
-        data = r.json()
-        try:
-            parts = data["candidates"][0]["content"]["parts"]
-            return "".join(p.get("text", "") for p in parts).strip()
-        except Exception:
-            raise HTTPException(400, "Gemini tidak mengembalikan teks. Coba lagi atau ganti model.")
+        # Rotasi: mulai dari kursor, coba tiap key; lanjut ke berikutnya bila kena limit
+        start = (_gemini_cursor["i"] % len(keys))
+        order = keys[start:] + keys[:start]
+        last_err = None
+        for i, key in enumerate(order):
+            try:
+                async with httpx.AsyncClient(timeout=60) as c:
+                    r = await c.post(url, headers={"Content-Type": "application/json", "X-goog-api-key": key}, json=payload)
+            except Exception as e:
+                last_err = HTTPException(400, f"Gagal menghubungi Gemini: {e}")
+                continue
+            if r.status_code == 200:
+                _gemini_cursor["i"] = (start + i) % len(keys)  # ingat key yang berhasil
+                data = r.json()
+                try:
+                    parts = data["candidates"][0]["content"]["parts"]
+                    return "".join(p.get("text", "") for p in parts).strip()
+                except Exception:
+                    raise HTTPException(400, "Gemini tidak mengembalikan teks. Coba lagi atau ganti model.")
+            txt = r.text[:200]
+            if _rotate_quota(r.status_code, txt):
+                last_err = HTTPException(400, f"Gemini key #{i + 1} kena limit/gagal (HTTP {r.status_code}): {txt}")
+                continue
+            raise HTTPException(400, f"Gemini menolak permintaan (HTTP {r.status_code}): {txt}")
+        raise last_err or HTTPException(400, "Semua Gemini API key gagal")
     if cfg["provider"] == "chenzk" and cfg.get("api_key") and cfg.get("base_url"):
         from openai import OpenAI
         msgs = ([{"role": "system", "content": system}] if system else []) + \
@@ -1464,26 +1505,38 @@ async def _gemini_image(prompt):
                 return f"data:image/png;base64,{b64}"
             return getattr(d, "url", None)
         return await asyncio.to_thread(run)
-    if GEMINI_API_KEY:
+    if GEMINI_API_KEY or await _gemini_keys():
         from google import genai
         from google.genai import types
         import base64
-
-        def run():
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            r = client.models.generate_content(
-                model=GEMINI_IMAGE_MODEL, contents=prompt,
-                config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
-            )
-            for cand in (r.candidates or []):
-                for part in (cand.content.parts or []):
-                    inline = getattr(part, "inline_data", None)
-                    if inline and inline.data:
-                        data = inline.data
-                        b64 = base64.b64encode(data).decode() if isinstance(data, (bytes, bytearray)) else data
-                        return f"data:{inline.mime_type or 'image/png'};base64,{b64}"
-            return None
-        return await asyncio.to_thread(run)
+        keys = await _gemini_keys()
+        last_err = None
+        for key in keys:
+            def run(k=key):
+                client = genai.Client(api_key=k)
+                r = client.models.generate_content(
+                    model=GEMINI_IMAGE_MODEL, contents=prompt,
+                    config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
+                )
+                for cand in (r.candidates or []):
+                    for part in (cand.content.parts or []):
+                        inline = getattr(part, "inline_data", None)
+                if inline and inline.data:
+                    data = inline.data
+                    b64 = base64.b64encode(data).decode() if isinstance(data, (bytes, bytearray)) else data
+                    return f"data:{inline.mime_type or 'image/png'};base64,{b64}"
+                return None
+            try:
+                return await asyncio.to_thread(run)
+            except Exception as e:
+                msg = str(e).lower()
+                if any(w in msg for w in ("quota", "limit", "429", "resource exhausted", "permission", "api key")):
+                    last_err = e
+                    continue
+                raise
+        if last_err:
+            raise HTTPException(400, f"Semua Gemini API key gagal untuk gambar: {last_err}")
+        return None
     if not EMERGENT_LLM_KEY:
         raise HTTPException(400, "Generator gambar AI belum dikonfigurasi. Isi provider gambar Anda di Pengaturan AI, atau unggah gambar manual.")
     from emergentintegrations.llm.chat import UserMessage
@@ -1832,6 +1885,9 @@ class AISettingsIn(BaseModel):
     api_key: Optional[str] = None
     model: Optional[str] = None
 
+class GeminiKeysIn(BaseModel):
+    keys: List[str] = []
+
 def _mask_key(k):
     if not k:
         return ""
@@ -1878,6 +1934,19 @@ async def put_ai_settings(body: AISettingsIn, admin: dict = Depends(require_admi
     if upd:
         await db.settings.update_one({"_id": "ai"}, {"$set": upd}, upsert=True)
     return {"ok": True}
+
+@api.get("/settings/ai/gemini-keys")
+async def get_gemini_keys(admin: dict = Depends(require_admin)):
+    keys = await _gemini_keys()
+    masked = [_mask_key(k) for k in keys]
+    return {"keys": masked, "count": len(keys), "hasEnv": bool(GEMINI_API_KEY)}
+
+@api.put("/settings/ai/gemini-keys")
+async def put_gemini_keys(body: GeminiKeysIn, admin: dict = Depends(require_admin)):
+    clean = [k.strip() for k in body.keys if k and k.strip()]
+    await db.settings.update_one({"_id": "ai"}, {"$set": {"gemini_keys": clean}}, upsert=True)
+    _gemini_cursor["i"] = 0
+    return {"ok": True, "count": len(clean)}
 
 def _model_price_rank(mid):
     m = (mid or "").lower()
