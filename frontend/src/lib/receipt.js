@@ -42,6 +42,11 @@ const esc = (v) =>
 
 // Attempt native Sunmi built-in printer (80mm) via its WebView JS bridge.
 // Works on Sunmi T2/T2+ when the app runs inside a Sunmi WebView exposing the printer interface.
+// Map alignment label -> kode setAlignment Sunmi (0=kiri,1=tengah,2=kanan)
+function alignCode(a) { return a === "left" ? 0 : a === "right" ? 2 : 1; }
+// Map alignment label -> CSS text-align
+function alignCss(a) { return a === "left" ? "left" : a === "right" ? "right" : "center"; }
+
 function trySunmiPrinter(order, cfg, logoB64) {
   try {
     // Bridge Sunmi: (a) bawaan WebView Sunmi (SunmiInnerPrinter), atau
@@ -57,7 +62,8 @@ function trySunmiPrinter(order, cfg, logoB64) {
       try { sp.printBitmap(logoB64); } catch (e) {}
       if (sp.lineWrap) sp.lineWrap(1);
     }
-    if (sp.setAlignment) sp.setAlignment(1);
+    // Header — posisi sesuai pengaturan (kiri/tengah/kanan)
+    if (sp.setAlignment) sp.setAlignment(alignCode(cfg.headerAlign));
     sp.printText(`${cfg.outletName}\n`);
     if (cfg.outletAddress) sp.printText(`${cfg.outletAddress}\n`);
     if (sp.setAlignment) sp.setAlignment(0);
@@ -83,7 +89,9 @@ function trySunmiPrinter(order, cfg, logoB64) {
       if (sp.lineWrap) sp.lineWrap(1);
       try { sp.printQRCode(order.qr_content, 8, 2); } catch (e) {}
     }
-    sp.printText(`\n${cfg.footerText || "Terima kasih"}\n`);
+    if (sp.lineWrap) sp.lineWrap(1);
+    if (sp.setAlignment) sp.setAlignment(alignCode(cfg.footerAlign));
+    sp.printText(`${cfg.footerText || "Terima kasih"}\n`);
     if (sp.lineWrap) sp.lineWrap(3);
     if (sp.cutPaper) sp.cutPaper(); // auto-cut
     if (cfg.cashDrawer && sp.openDrawer) sp.openDrawer(); // buka laci kasir
@@ -116,8 +124,8 @@ function browserPrint(order, cfg, logoB64) {
     .logo{max-width:60mm;max-height:20mm;object-fit:contain}
   </style></head><body>
     ${logoB64 ? `<div class="c"><img class="logo" src="${logoB64}" alt="logo" /></div>` : ""}
-    <h1>${esc(cfg.outletName)}</h1>
-    <div class="c s">${esc(cfg.outletAddress || "")}</div>
+    <h1 style="text-align:${alignCss(cfg.headerAlign)}">${esc(cfg.outletName)}</h1>
+    <div class="s" style="text-align:${alignCss(cfg.headerAlign)}">${esc(cfg.outletAddress || "")}</div>
     ${order.offline ? '<div class="off">STRUK OFFLINE — BELUM DISINKRON</div>' : ""}
     <div class="hr"></div>
     <div>No: ${esc(order.order_number)}</div>
@@ -137,7 +145,7 @@ function browserPrint(order, cfg, logoB64) {
       ${order.change ? `<tr><td>Kembali</td><td class="r">${rupiah(order.change)}</td></tr>` : ""}
     </table>
     <div class="hr"></div>
-    <div class="c s">${esc(cfg.footerText || "Terima kasih")}</div>
+    <div class="s" style="text-align:${alignCss(cfg.footerAlign)}">${esc(cfg.footerText || "Terima kasih")}</div>
     <script>window.onload=function(){window.print();setTimeout(function(){window.close()},400)}</script>
   </body></html>`;
   const w = window.open("", "_blank", "width=360,height=640");

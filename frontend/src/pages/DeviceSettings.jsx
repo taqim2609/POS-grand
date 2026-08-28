@@ -139,6 +139,18 @@ export default function DeviceSettings() {
           <Field label="Alamat Header">
             <input data-testid="dev-outlet-address" value={cfg.outletAddress} onChange={(e) => upd({ outletAddress: e.target.value })} className={inp} />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Posisi Header (nama/alamat)">
+              <select data-testid="dev-header-align" value={cfg.headerAlign} onChange={(e) => upd({ headerAlign: e.target.value })} className={`${inp} bg-white`}>
+                <option value="left">Kiri</option><option value="center">Tengah</option><option value="right">Kanan</option>
+              </select>
+            </Field>
+            <Field label="Posisi Footer">
+              <select data-testid="dev-footer-align" value={cfg.footerAlign} onChange={(e) => upd({ footerAlign: e.target.value })} className={`${inp} bg-white`}>
+                <option value="left">Kiri</option><option value="center">Tengah</option><option value="right">Kanan</option>
+              </select>
+            </Field>
+          </div>
           <Field label="Teks Penutup Struk">
             <input data-testid="dev-footer" value={cfg.footerText} onChange={(e) => upd({ footerText: e.target.value })} className={inp} />
           </Field>

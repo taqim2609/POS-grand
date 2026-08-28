@@ -218,6 +218,7 @@ class ShiftOpenIn(BaseModel):
 
 class ShiftCloseIn(BaseModel):
     closing_cash: float = 0
+    vendor_payments: Optional[List[dict]] = None  # [{vendor_id, paid}]
 
 class AIDescIn(BaseModel):
     name: str
@@ -871,10 +872,48 @@ async def close_shift(body: ShiftCloseIn, user: dict = Depends(get_current_user)
     if not shift:
         raise HTTPException(400, "Tidak ada shift terbuka")
     report = await _shift_report(shift)
+    # Hitung bagian vendor (yang seharusnya) & yang diberikan dari input
+    vendor_rows = report.get("vendor_share", [])
+    paid_map = {str(v.get("vendor_id")): float(v.get("paid") or 0) for v in (body.vendor_payments or [])}
+    total_share = 0.0
+    total_paid = 0.0
+    for v in vendor_rows:
+        v["paid"] = paid_map.get(str(v["vendor_id"]), 0.0)
+        v["difference"] = round(v["share"] - v["paid"], 2)
+        total_share += v["share"]
+        total_paid += v["paid"]
+    total_diff = round(total_share - total_paid, 2)
+    net_cash = round(report["expected_cash"] - total_paid, 2)  # uang bersih setelah bayar bagian vendor
+    report["vendor_share"] = vendor_rows
+    report["vendor_total_share"] = round(total_share, 2)
+    report["vendor_total_paid"] = round(total_paid, 2)
+    report["vendor_total_difference"] = total_diff
+    report["net_cash"] = net_cash
     await db.shifts.update_one({"id": shift["id"]}, {"$set": {
         "status": "closed", "closed_at": now_utc().isoformat(),
         "closing_cash": body.closing_cash, "report": report}})
     return {**shift, "closing_cash": body.closing_cash, "report": report, "status": "closed"}
+
+async def _vendor_share_from_orders(orders):
+    """Kumpulkan bagian vendor dari order (per vendor): gross & share (yang seharusnya)."""
+    per = {}
+    for o in orders:
+        for it in o.get("items", []):
+            if it.get("type") == "vendor" and it.get("vendor_id"):
+                vid = it["vendor_id"]
+                v = per.get(vid)
+                if not v:
+                    v = {"vendor_id": vid, "vendor_name": it.get("vendor_name") or "Vendor", "gross": 0.0, "share": 0.0}
+                    per[vid] = v
+                v["gross"] = round(v["gross"] + it["price"] * it["qty"], 2)
+                v["share"] = round(v["share"] + (it.get("vendor_total") or 0), 2)
+    # isi nama vendor dari koleksi bila belum ada di item
+    for vid in list(per.keys()):
+        if per[vid]["vendor_name"] == "Vendor":
+            vd = await db.vendors.find_one({"id": vid}, {"_id": 0, "name": 1})
+            if vd:
+                per[vid]["vendor_name"] = vd["name"]
+    return list(per.values())
 
 async def _shift_report(shift):
     orders = await db.orders.find({"shift_id": shift["id"], "status": "paid"}, {"_id": 0}).to_list(5000)
@@ -886,8 +925,26 @@ async def _shift_report(shift):
         by_pm[o.get("payment_method_name", "?")] = by_pm.get(o.get("payment_method_name", "?"), 0) + o["total"]
         total += o["total"]
     cash = sum(o["total"] for o in orders if o.get("payment_method_type") == "cash")
+    # Kas harian dalam shift (setoran/pengambilan) — digabung ke laporan shift
+    moves = await db.cash_movements.find({"shift_id": shift["id"]}, {"_id": 0}).to_list(2000)
+    cash_in = sum(m["amount"] for m in moves if m["type"] == "in")
+    cash_out = sum(m["amount"] for m in moves if m["type"] == "out")
+    vendor_rows = await _vendor_share_from_orders(orders)
     return {"order_count": len(orders), "total_sales": round(total, 2), "by_type": by_type,
-            "by_payment": by_pm, "expected_cash": round(shift["opening_cash"] + cash, 2)}
+            "by_payment": by_pm, "expected_cash": round(shift["opening_cash"] + cash, 2),
+            "cash_in": round(cash_in, 2), "cash_out": round(cash_out, 2),
+            "cash_net": round(cash_in - cash_out, 2),
+            "vendor_share": vendor_rows,
+            "vendor_total_share": round(sum(v["share"] for v in vendor_rows), 2)}
+
+@api.get("/shifts/current/vendor")
+async def shift_vendor_preview(user: dict = Depends(get_current_user)):
+    """Preview bagian vendor dari shift yang sedang berjalan (untuk form penutupan)."""
+    shift = await _current_shift(user)
+    if not shift:
+        raise HTTPException(400, "Tidak ada shift terbuka")
+    orders = await db.orders.find({"shift_id": shift["id"], "status": "paid"}, {"_id": 0}).to_list(5000)
+    return {"vendors": await _vendor_share_from_orders(orders)}
 
 @api.get("/shifts")
 async def list_shifts(admin: dict = Depends(require_admin)):

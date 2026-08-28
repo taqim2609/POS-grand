@@ -15,6 +15,8 @@ export const DEVICE_DEFAULTS = {
   outletName: "GRAND ACEH KULINER",
   outletAddress: "Jl. Contoh No. 1, Banda Aceh",
   footerText: "Terima kasih & selamat menikmati",
+  headerAlign: "center", // posisi nama outlet di struk: left | center | right
+  footerAlign: "center", // posisi footer struk: left | center | right
 };
 
 export function getDeviceConfig() {
