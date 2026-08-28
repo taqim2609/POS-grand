@@ -3016,13 +3016,67 @@ IMPORT_COLUMNS = ["nama_produk", "sku", "kategori", "tipe_produk", "harga", "har
 @api.get("/products/template")
 async def download_template(user: dict = Depends(get_current_user)):
     import openpyxl
+    from openpyxl.styles import Font, PatternFill
+    cats = await db.categories.find({}, {"_id": 0, "name": 1, "type": 1}).to_list(500)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Produk"
     ws.append(IMPORT_COLUMNS)
-    ws.append(["Nasi Goreng Aceh", "FD-001", "Makanan Utama", "makanan", 25000, 12000, "aktif", "tidak", "Nasi goreng khas Aceh", 0])
-    ws.append(["Kopi Sanger", "DR-001", "Minuman", "minuman", 15000, 6000, "aktif", "tidak", "Kopi susu khas Aceh", 0])
-    ws.append(["Keripik Pisang", "RT-001", "Snack Retail", "retail", 12000, 8000, "aktif", "tidak", "Keripik pisang kemasan", 50])
+    # Contoh memakai KATEGORI NYATA dari database supaya langsung valid
+    ex = []
+    by_type = {}
+    for c in cats:
+        by_type.setdefault(c["type"], []).append(c["name"])
+    if by_type.get("makanan"):
+        ex.append(["Nasi Goreng Aceh", "FD-001", by_type["makanan"][0], "makanan", 25000, 12000, "aktif", "tidak", "Nasi goreng khas Aceh", 0])
+    if by_type.get("minuman"):
+        ex.append(["Kopi Sanger", "DR-001", by_type["minuman"][0], "minuman", 15000, 6000, "aktif", "tidak", "Kopi susu khas Aceh", 0])
+    if by_type.get("retail"):
+        ex.append(["Keripik Pisang", "RT-001", by_type["retail"][0], "retail", 12000, 8000, "aktif", "tidak", "Keripik pisang kemasan", 50])
+    if not ex:
+        ex = [["Nasi Goreng Aceh", "FD-001", "", "makanan", 25000, 12000, "aktif", "tidak", "Nasi goreng khas Aceh", 0]]
+    for row in ex:
+        ws.append(row)
+    # Styling header
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="E63946")
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 10
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 12
+    ws.column_dimensions["E"].width = 10
+    ws.column_dimensions["F"].width = 12
+    ws.column_dimensions["G"].width = 13
+    ws.column_dimensions["H"].width = 10
+    ws.column_dimensions["I"].width = 30
+    ws.column_dimensions["J"].width = 10
+
+    # Lembar Petunjuk
+    guide = wb.create_sheet("Petunjuk")
+    guide.column_dimensions["A"].width = 26
+    guide.column_dimensions["B"].width = 60
+    guide.append(["Kolom", "Keterangan & Nilai yang Diterima"])
+    guide.append(["nama_produk", "Nama produk (wajib)"])
+    guide.append(["sku", "Kode SKU unik (wajib)"])
+    guide.append(["kategori", "Nama kategori — harus SAMA dengan kategori yang ada di aplikasi. Kategori valid:"])
+    for c in cats:
+        guide.append(["", f"- {c['name']}  (tipe: {c['type']})"])
+    if not cats:
+        guide.append(["", "(belum ada kategori — buat dulu di menu Produk & Stok > Kategori)"])
+    guide.append(["tipe_produk", "makanan | minuman | retail (harus sesuai tipe kategori)"])
+    guide.append(["harga", "Angka (rupiah), contoh: 25000"])
+    guide.append(["harga_beli", "Angka HPP/modal (0 untuk produk tanpa HPP)"])
+    guide.append(["status_aktif", "aktif | nonaktif (juga diterima: ya/tidak/true/false/1/0)"])
+    guide.append(["sold_out", "tidak | ya (tandai produk habis)"])
+    guide.append(["deskripsi", "Teks deskripsi (opsional)"])
+    guide.append(["stok_awal", "Angka stok (hanya dipakai untuk produk retail)"])
+    guide.append([])
+    guide.append(["CATATAN", "Hapus baris contoh sebelum mengisi data Anda. Baris yang error tidak akan diimpor; perbaiki lalu ulangi."])
+    for cell in guide[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="4F46E5")
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
