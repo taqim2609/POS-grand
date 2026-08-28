@@ -92,9 +92,10 @@ function trySunmiPrinter(order, cfg, logoB64) {
     if (sp.lineWrap) sp.lineWrap(1);
     if (sp.setAlignment) sp.setAlignment(alignCode(cfg.footerAlign));
     sp.printText(`${cfg.footerText || "Terima kasih"}\n`);
+    // Buka laci kasir SEBELUM potong kertas — lebih andal di Sunmi.
+    if (cfg.cashDrawer && sp.openDrawer) { try { sp.openDrawer(); } catch (e) {} }
     if (sp.lineWrap) sp.lineWrap(3);
     if (sp.cutPaper) sp.cutPaper(); // auto-cut
-    if (cfg.cashDrawer && sp.openDrawer) sp.openDrawer(); // buka laci kasir
     return true;
   } catch (e) {
     return false;

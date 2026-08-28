@@ -205,6 +205,10 @@ export default function DeviceSettings() {
             <input type="checkbox" checked={cfg.cashDrawer} onChange={(e) => upd({ cashDrawer: e.target.checked })} className="h-4 w-4 accent-[#E63946]" />
             <span className="text-sm font-bold">Buka laci kasir otomatis saat transaksi tunai</span>
           </label>
+          <label className="flex items-center gap-2.5 cursor-pointer" data-testid="dev-autoprint">
+            <input type="checkbox" checked={cfg.autoPrint} onChange={(e) => upd({ autoPrint: e.target.checked })} className="h-4 w-4 accent-[#E63946]" />
+            <span className="text-sm font-bold">Cetak struk otomatis saat pembayaran selesai</span>
+          </label>
           <div className="flex gap-2 pt-1">
             <button data-testid="dev-save" onClick={save} className="tap h-11 px-5 rounded-xl bg-[#0A0A0A] text-white font-bold flex items-center gap-2"><Save size={16} /> Simpan</button>
             <button data-testid="dev-testprint" onClick={testPrint} className="tap h-11 px-5 rounded-xl bg-[#F4F5F7] border font-bold flex items-center gap-2"><Printer size={16} /> Cetak Struk Uji</button>

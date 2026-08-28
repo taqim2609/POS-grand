@@ -12,6 +12,7 @@ export const DEVICE_DEFAULTS = {
   epsonPort: "80", // Epson ePOS-Print over HTTP
   bluetoothDevice: "", // nama printer Bluetooth yang dipasang
   cashDrawer: true,
+  autoPrint: true, // cetak struk otomatis saat pembayaran (buka laci juga)
   outletName: "GRAND ACEH KULINER",
   outletAddress: "Jl. Contoh No. 1, Banda Aceh",
   footerText: "Terima kasih & selamat menikmati",

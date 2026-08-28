@@ -233,6 +233,10 @@ export default function POS() {
       };
       setPayOpen(false);
       setReceipt(offlineReceipt);
+      // Auto-print struk (buka laci juga) bila diaktifkan
+      if (getDeviceConfig().autoPrint) {
+        try { printReceipt(offlineReceipt); } catch (e) {}
+      }
       resetSale();
       toast.success("Disimpan offline. Otomatis disinkron saat online kembali.");
       return;
@@ -247,6 +251,10 @@ export default function POS() {
       });
       setPayOpen(false);
       setReceipt(data);
+      // Auto-print struk (buka laci juga) bila diaktifkan
+      if (getDeviceConfig().autoPrint) {
+        try { printReceipt(data); } catch (e) {}
+      }
       resetSale();
       load();
       toast.success("Pembayaran berhasil");
