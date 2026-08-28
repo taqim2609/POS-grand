@@ -51,6 +51,19 @@ export default function SettingsAI() {
     finally { setSavingKeys(false); }
   };
 
+  const setAllGemini = async () => {
+    if (!window.confirm("Set SEMUA fitur AI (deskripsi, gambar, analisis laporan, vision, asisten) ke provider Gemini? Key chenzk lama akan diabaikan.")) return;
+    setSavingKeys(true);
+    try {
+      for (const f of ["description", "image", "summary", "vision", "assistant"]) {
+        await api.put("/settings/ai", { feature: f, provider: "gemini" });
+      }
+      toast.success("Semua fitur AI kini memakai Gemini");
+      load();
+    } catch (e) { toast.error(apiError(e.response?.data?.detail)); }
+    finally { setSavingKeys(false); }
+  };
+
   if (loading || !features) return <div className="h-full grid place-items-center"><Loader2 className="animate-spin text-[#E63946]" /></div>;
 
   return (
@@ -91,6 +104,10 @@ export default function SettingsAI() {
           <button data-testid="save-gemini-keys" onClick={saveGemKeys} disabled={savingKeys || !gemKeysText.trim()}
             className="tap mt-2 h-11 px-5 rounded-xl bg-[#2563EB] text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50">
             {savingKeys ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Simpan Key &amp; Aktifkan Rotasi
+          </button>
+          <button data-testid="set-all-gemini" onClick={setAllGemini} disabled={savingKeys}
+            className="tap mt-2 h-11 px-5 rounded-xl bg-[#4F46E5] text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50">
+            <Sparkles size={15} /> Pakai Gemini untuk Semua Fitur
           </button>
         </div>
         {Object.keys(FEATURE_META).map((key) => (
