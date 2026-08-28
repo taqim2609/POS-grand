@@ -47,6 +47,19 @@ function alignCode(a) { return a === "left" ? 0 : a === "right" ? 2 : 1; }
 // Map alignment label -> CSS text-align
 function alignCss(a) { return a === "left" ? "left" : a === "right" ? "right" : "center"; }
 
+// Satu baris item di struk: NAMA (kiri) .... QTY x HARGA + TOTAL (kanan) — sejajar, bukan atas-bawah.
+function itemLine(name, qty, price, width) {
+  const W = width || 31; // lebar baris (80mm font default ~32 char)
+  const qp = `${qty}x${Math.round(Number(price || 0)).toLocaleString("id-ID")}`;
+  const tot = Math.round(Number(price || 0) * Number(qty || 0)).toLocaleString("id-ID");
+  const right = `${qp} ${tot}`;
+  const nameW = W - right.length - 1;
+  let n = String(name || "");
+  if (n.length > nameW) n = n.slice(0, Math.max(0, nameW - 1)) + "~";
+  const pad = Math.max(1, W - n.length - right.length);
+  return n + " ".repeat(pad) + right;
+}
+
 function trySunmiPrinter(order, cfg, logoB64) {
   try {
     // Bridge Sunmi: (a) bawaan WebView Sunmi (SunmiInnerPrinter), atau
@@ -73,7 +86,7 @@ function trySunmiPrinter(order, cfg, logoB64) {
     sp.printText(`${ORDER_TYPE_LABEL[order.order_type] || order.order_type}\n`);
     sp.printText("--------------------------------\n");
     order.items.forEach((i) => {
-      sp.printText(`${i.name}\n  ${i.qty} x ${rupiah(i.price)}  ${rupiah(i.price * i.qty)}\n`);
+      sp.printText(`${itemLine(i.name, i.qty, i.price)}\n`);
     });
     sp.printText("--------------------------------\n");
     sp.printText(`Subtotal: ${rupiah(order.subtotal)}\n`);
@@ -107,7 +120,7 @@ function browserPrint(order, cfg, logoB64) {
   const rows = order.items
     .map(
       (i) =>
-        `<tr><td>${esc(i.name)}<br><span class="s">${i.qty} x ${rupiah(i.price)}</span></td>
+        `<tr><td>${esc(i.name)} <span class="s">${i.qty} x ${rupiah(i.price)}</span></td>
          <td class="r">${rupiah(i.price * i.qty)}</td></tr>`
     )
     .join("");

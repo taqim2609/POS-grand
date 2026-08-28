@@ -113,8 +113,14 @@ function buildEscPos(order, cfg) {
   L.push(text(`${LABEL[order.order_type] || order.order_type || ""}\n`));
   L.push(text("--------------------------------\n"));
   (order.items || []).forEach((i) => {
-    L.push(text(`${i.name}\n`));
-    L.push(text(`  ${i.qty} x ${rupiah(i.price)}   ${rupiah(i.price * i.qty)}\n`));
+    const qp = `${i.qty}x${Math.round(Number(i.price || 0)).toLocaleString("id-ID")}`;
+    const tot = Math.round(Number(i.price || 0) * Number(i.qty || 0)).toLocaleString("id-ID");
+    const right = `${qp} ${tot}`;
+    const nameW = 30 - right.length - 1;
+    let nm = String(i.name || "");
+    if (nm.length > nameW) nm = nm.slice(0, Math.max(0, nameW - 1)) + "~";
+    const pad = Math.max(1, 31 - nm.length - right.length);
+    L.push(text(`${nm}${" ".repeat(pad)}${right}\n`));
   });
   L.push(text("--------------------------------\n"));
   L.push(text(`Subtotal: ${rupiah(order.subtotal)}\n`));
