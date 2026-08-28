@@ -49,9 +49,11 @@ function alignCss(a) { return a === "left" ? "left" : a === "right" ? "right" : 
 
 // Satu baris item di struk: NAMA (kiri) .... QTY x HARGA + TOTAL (kanan) — sejajar, bukan atas-bawah.
 function itemLine(name, qty, price, width) {
-  const W = width || 31; // lebar baris (80mm font default ~32 char)
-  const qp = `${qty}x${Math.round(Number(price || 0)).toLocaleString("id-ID")}`;
-  const tot = Math.round(Number(price || 0) * Number(qty || 0)).toLocaleString("id-ID");
+  // Lebar 80mm (font 12px monospace) ~ 42-44 karakter; pakai 42 agar aman & maksimal.
+  const W = width || 42;
+  const rp = (n) => "Rp" + Math.round(Number(n || 0)).toLocaleString("id-ID");
+  const qp = `${qty}x${rp(price)}`;
+  const tot = rp(price * qty);
   const right = `${qp} ${tot}`;
   const nameW = W - right.length - 1;
   let n = String(name || "");
@@ -127,7 +129,7 @@ function browserPrint(order, cfg, logoB64) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Struk ${esc(order.order_number)}</title>
   <style>
     @page { size: 80mm auto; margin: 0; }
-    body{font-family:'JetBrains Mono',monospace;width:80mm;margin:0;padding:6px 8px;color:#000;font-size:12px}
+    body{font-family:'JetBrains Mono',monospace;width:80mm;margin:0;padding:2px 4px;color:#000;font-size:12px}
     h1{font-size:16px;text-align:center;margin:0}
     .c{text-align:center}.r{text-align:right}.s{color:#555;font-size:10px}
     table{width:100%;border-collapse:collapse}td{padding:2px 0;vertical-align:top}
