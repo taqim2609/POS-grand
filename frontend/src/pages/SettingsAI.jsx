@@ -185,22 +185,24 @@ function FeatureCard({ featKey, data, onSaved }) {
         )}
         {isGemini && (
           <p className="text-[11px] text-[#2563EB] bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg px-3 py-2">
-            Mode Gemini memakai kunci Gemini bawaan server (endpoint resmi Google). Kosongkan API Key untuk memakai kunci default, atau isi untuk memakai kunci Gemini Anda sendiri.
+            Mode Gemini memakai <b>default otomatis</b> (model &amp; kunci) atau <b>rotasi key</b> dari kartu "Gemini API Keys" di atas — tidak perlu memilih model/API key di sini.
           </p>
         )}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Model" icon={Cpu}>
-            <input data-testid={`ai-model-${featKey}`} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}
-              list={`models-${featKey}`} placeholder={isGemini ? "gemini-flash-latest" : meta.modelPh} className="w-full h-11 rounded-xl border px-3 font-num" />
-            <datalist id={`models-${featKey}`}>
-              {models.map((m) => <option key={m} value={m} />)}
-            </datalist>
-          </Field>
-          <Field label={data.api_key_set ? "API Key (isi untuk ganti)" : "API Key"} icon={KeyRound}>
-            <input data-testid={`ai-api-key-${featKey}`} type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-              placeholder={data.api_key_set ? "••••••••••••" : "Masukkan API Key"} className="w-full h-11 rounded-xl border px-3 font-num" />
-          </Field>
-        </div>
+        {!isGemini && (
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Model" icon={Cpu}>
+              <input data-testid={`ai-model-${featKey}`} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}
+                list={`models-${featKey}`} placeholder={meta.modelPh} className="w-full h-11 rounded-xl border px-3 font-num" />
+              <datalist id={`models-${featKey}`}>
+                {models.map((m) => <option key={m} value={m} />)}
+              </datalist>
+            </Field>
+            <Field label={data.api_key_set ? "API Key (isi untuk ganti)" : "API Key"} icon={KeyRound}>
+              <input data-testid={`ai-api-key-${featKey}`} type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+                placeholder={data.api_key_set ? "••••••••••••" : "Masukkan API Key"} className="w-full h-11 rounded-xl border px-3 font-num" />
+            </Field>
+          </div>
+        )}
       </div>
 
       {credit && credit.available && (
