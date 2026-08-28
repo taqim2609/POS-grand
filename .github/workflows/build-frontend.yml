@@ -1,28 +1,14 @@
 name: Build Frontend untuk Raspberry Pi
 
-# Robot ini otomatis menjalankan "yarn build" di cloud GitHub setiap kali
-# kode frontend berubah, lalu commit hasil folder frontend/build kembali ke
-# repo. Dengan begitu Anda TIDAK perlu lagi menjalankan "yarn build" manual
-# sebelum push — cukup edit kode lalu "Save to Github".
+# ⛔ DIMATIKAN (2026-08-28): auto-rebuild frontend di GitHub dinonaktifkan
+# karena meng-commit folder frontend/build yang sering konflik dengan build
+# lokal (OTA). Build sekarang dilakukan oleh VibeCoder di workspace, dan
+# frontend/build di-track manual (sudah up-to-date di repo).
 #
-# Raspberry Pi tetap memakai frontend/build yang sudah jadi (tanpa build berat).
+# Masih bisa dijalankan MANUAL kapan pun lewat tab "Actions" -> "Run workflow".
 
 on:
-  push:
-    branches: [ main, master ]
-    paths:
-      # Hanya jalan bila SUMBER frontend berubah (BUKAN saat folder build
-      # diperbarui) supaya tidak terjadi loop tak berujung.
-      - 'frontend/src/**'
-      - 'frontend/public/**'
-      - 'frontend/scripts/**'
-      - 'frontend/package.json'
-      - 'frontend/yarn.lock'
-      - 'frontend/craco.config.js'
-      - 'frontend/tailwind.config.js'
-      - 'frontend/postcss.config.js'
-      - 'frontend/jsconfig.json'
-      - 'frontend/components.json'
+  # push:  ← pemicu otomatis DI-NONAKTIFKAN
   workflow_dispatch: {}
 
 permissions:
